@@ -23,6 +23,8 @@ DEFAULT_COLUMNS = {
     "bjd": {"code": "법정동코드", "name": "법정동명", "status": "폐지여부", "sido": "", "sigungu": "", "emd": ""},
     # 법정동 중심점(QGIS 에서 법정동 경계 → 중심점 → CSV). CAN·KEP_007 좌표를 법정동으로 보낼 때만 쓴다.
     "centroid": {"code": "법정동코드", "lat": "위도", "lon": "경도"},
+    # 법정동 코드대응(tools/build_reference_files.py 산출). 코드 → 분석기준일에 유효한 기준코드
+    "crosswalk": {"code": "코드", "canonical": "기준코드"},
     "shc001": {"ym": "STD_YM", "sido_cd": "WIAR_SIDO_CD", "sgg_cd": "SGNG_CD", "umd_cd": "UMD_CD",
                "bidvs": "TOBU_BIDVS_CD", "medvs": "TOBU_MEDVS_CD", "status": "FRNC_STAT_CD",
                "oper": "OPER_CD", "cnt": "FRNC_CNT"},
@@ -130,7 +132,7 @@ DEFAULT_INDUSTRY = {
     "labels": {},
 }
 
-PATH_KEYS = ("bjd_master", "emd_centroids", "kepco_001", "kepco_002", "shc001", "shc002",
+PATH_KEYS = ("bjd_master", "bjd_crosswalk", "emd_centroids", "kepco_001", "kepco_002", "shc001", "shc002",
              "can_m", "kep007", "industry_codes", "out_dir")
 
 

@@ -271,6 +271,37 @@ def test_bjd_matching_rules(mock_env, caplog):
     assert any("행정동 기준" in r.message for r in caplog.records)
 
 
+def test_crosswalk_load_and_canonicalize(tmp_path):
+    from bjd_mapping import canonicalize, load_crosswalk
+    p = tmp_path / "cw.csv"
+    p.write_text("코드,기준코드\n1211010100,4611010100\n4611010100,4611010100\n", encoding="utf-8-sig")
+    cw = load_crosswalk(p, DEFAULT_COLUMNS["crosswalk"])
+    assert cw == {"1211010100": "4611010100"}
+    s = canonicalize(pd.Series(["1211010100", "1111010100", None], dtype=object), cw)
+    assert s.tolist()[:2] == ["4611010100", "1111010100"] and pd.isna(s.iloc[2])
+    chained = tmp_path / "chain.csv"
+    chained.write_text("코드,기준코드\n1111010100,2222010100\n2222010100,3333010100\n", encoding="utf-8-sig")
+    with pytest.raises(ValueError, match="연쇄"):
+        load_crosswalk(chained, DEFAULT_COLUMNS["crosswalk"])
+
+
+def test_attach_bjd_merges_renamed_region(tmp_path):
+    """개편 전/후 명칭(전라남도 목포시 ↔ 전남광주통합특별시 목포시)이 기준코드 하나로 합쳐진다."""
+    master_path = tmp_path / "master.txt"
+    master_path.write_text(
+        "법정동코드\t법정동명\t폐지여부\n"
+        "4600000000\t전라남도\t존재\n4611000000\t전라남도 목포시\t존재\n4611010100\t전라남도 목포시 용당동\t존재\n"
+        "1200000000\t전남광주통합특별시\t존재\n1211000000\t전남광주통합특별시 목포시\t존재\n"
+        "1211010100\t전남광주통합특별시 목포시 용당동\t존재\n", encoding="utf-8-sig")
+    master = load_bjd_master(master_path, DEFAULT_COLUMNS["bjd"])
+    agg = pd.DataFrame({"sido": ["전라남도", "전남광주통합특별시"], "sigungu": ["목포시", "목포시"],
+                        "emd": ["용당동", "용당동"], "mi": [24299, 24318], "hour": [0, 0],
+                        "kwh": [10.0, 12.0], "n_days": [1.0, 1.0], "cust_sum": [1.0, 1.0]})
+    out, _, unmatched, fail = kepco_loader.attach_bjd(agg, master, 0.3, {"1211010100": "4611010100"})
+    assert fail == 0 and unmatched.empty
+    assert out["bjd_code"].unique().tolist() == ["4611010100"] and len(out) == 2
+
+
 def test_shc_code_variants():
     s = shc_bjd_code(pd.Series(["11", "11", "11", "11"]), pd.Series(["11710", "710", "11710", ""]),
                      pd.Series(["1171010100", "101", "101", "11710101"]))

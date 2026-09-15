@@ -90,12 +90,14 @@ def run(config_path, params_override=None, paths_override=None):
         # ------------------------------------------------ 0·1단계
         def stage01():
             master = bjd_mapping.load_bjd_master(paths["bjd_master"], C["bjd"])
+            S["crosswalk"] = bjd_mapping.load_crosswalk(paths["bjd_crosswalk"], C["crosswalk"]) \
+                if paths["bjd_crosswalk"] else None
             src = str(P["kepco"]["source"])
             if src not in ("001", "002"):
                 raise ValueError("params.kepco.source 는 '001' 또는 '002' — 둘을 합산하지 않는다")
             raw = kepco_loader.load_kepco_monthly_hour(paths[f"kepco_{src}"], C["kepco" if src == "001" else "kepco_cpo"],
                                                        P["kepco"], f"KEPCO_{src}")
-            mh, rate, unmatched, fail = kepco_loader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
+            mh, rate, unmatched, fail = kepco_loader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"], S["crosswalk"])
             writer.table(rate, "s0_bjd_match_rate", "0단계 법정동 매칭률 (시도+시군구+읍면동 3단 매칭)",
                          note=f"실패율 {fail:.1%} — {P['bjd']['fail_warn_rate']:.0%} 이상이면 행정동 기준 의심")
             writer.table(unmatched, "s0_bjd_unmatched", "0단계 미매칭 목록 (사람 검토 필요)")
@@ -128,7 +130,9 @@ def run(config_path, params_override=None, paths_override=None):
         def stage3_centroids():
             if not paths["emd_centroids"]:
                 raise FileNotFoundError("paths.emd_centroids 없음 — CAN·KEP_007 좌표를 법정동으로 보낼 수 없음")
-            S["centroids"] = bjd_mapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
+            cent = bjd_mapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
+            cent["bjd_code"] = bjd_mapping.canonicalize(cent["bjd_code"], S.get("crosswalk"))
+            S["centroids"] = cent.drop_duplicates("bjd_code")
         runner.run("3", "법정동 중심점", stage3_centroids, ISOLATED)
 
         def stage3_kep007():
@@ -170,7 +174,8 @@ def run(config_path, params_override=None, paths_override=None):
         # ------------------------------------------------ 4단계
         def stage4():
             scan = identification.scan_shc002(paths["shc002"], C, ind, P["shc"],
-                                              snapshot_months=P["heterogeneity"]["snapshot_months"])
+                                              snapshot_months=P["heterogeneity"]["snapshot_months"],
+                                              crosswalk=S.get("crosswalk"))
             panel, skipped = identification.build_ydd(scan["cells"], ind, P["identification"]["use_log1p"])
             writer.table(_ym_col(panel), "s4_ydd_panel", f"4단계 Y_ddd 패널 (위약: {panel.attrs['placebo_mode']})")
             if len(skipped):
@@ -244,7 +249,8 @@ def run(config_path, params_override=None, paths_override=None):
         def stage65():
             if not paths["shc001"]:
                 raise FileNotFoundError("paths.shc001 없음")
-            m = diagnostics.load_shc001_monthly(paths["shc001"], C, ind["shc001"], P["shc"]["chunksize"])
+            m = diagnostics.load_shc001_monthly(paths["shc001"], C, ind["shc001"], P["shc"]["chunksize"],
+                                                crosswalk=S.get("crosswalk"))
             cont = diagnostics.contamination_check(m, S["activation"], P["diagnostics"])
             writer.table(cont, "s65_contamination", "6.5단계 처치오염 진단 — T_r 전후 가맹점 개설률",
                          note="유보 = 상권 자체 성장 가능성. 제외하지 않고 CATE·처방에 표시만 한다")

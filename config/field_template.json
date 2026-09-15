@@ -1,8 +1,10 @@
 {
   "_설명": "현장(안심구역)용 — field.json 으로 복사해 paths 만 실제 경로로 바꾼다. 헤더가 다르면 columns 에 그 항목만 적는다(접두 일치 허용).",
+  "_참고자료": "bjd_master · bjd_crosswalk · emd_centroids 는 ev-ripplemap_참고자료_반입.zip 의 파일 (tools/build_reference_files.py 산출)",
   "paths": {
-    "bjd_master": "../data/field/법정동코드_전체자료.txt",
-    "emd_centroids": "../data/field/법정동_중심점_QGIS.csv",
+    "bjd_master": "../data/field/법정동코드_마스터_20260729.txt",
+    "bjd_crosswalk": "../data/field/법정동_코드대응_기준20251231.csv",
+    "emd_centroids": "../data/field/법정동_중심점_20230729.csv",
     "kepco_001": "../data/field/KEPCO_001.csv",
     "kepco_002": "../data/field/KEPCO_002.csv",
     "shc001": "../data/field/SHC001.csv",

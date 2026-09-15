@@ -17,11 +17,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from bjd_mapping import shc_bjd_code
+from bjd_mapping import canonicalize, shc_bjd_code
 from common import clean_label, log, mi_to_ym, parse_mi, read_columns, to_num
 
 
-def load_shc001_monthly(path, columns, shc001_codes, chunksize=2_000_000):
+def load_shc001_monthly(path, columns, shc001_codes, chunksize=2_000_000, crosswalk=None):
     """SHC001 → 법정동×월 (new, closed, stock, open_rate, close_rate)."""
     new_codes = {str(c) for c in shc001_codes.get("new_status_codes", [])}
     close_codes = {str(c) for c in shc001_codes.get("close_status_codes", [])}
@@ -37,7 +37,7 @@ def load_shc001_monthly(path, columns, shc001_codes, chunksize=2_000_000):
         cnt = to_num(chunk["cnt"]).fillna(0)
         stock_mask = status.isin(stock_codes) & (oper.isin(oper_codes) if oper_codes else True)
         df = pd.DataFrame({
-            "bjd_code": shc_bjd_code(chunk["sido_cd"], chunk["sgg_cd"], chunk["umd_cd"]),
+            "bjd_code": canonicalize(shc_bjd_code(chunk["sido_cd"], chunk["sgg_cd"], chunk["umd_cd"]), crosswalk),
             "mi": parse_mi(chunk["ym"]),
             "new": cnt.where(status.isin(new_codes), 0),
             "closed": cnt.where(status.isin(close_codes), 0),

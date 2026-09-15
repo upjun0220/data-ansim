@@ -6,3 +6,5 @@ data/mock/
 data/field/
 config/field.json
 config/industry_codes.json
+dist/
+data/ref/

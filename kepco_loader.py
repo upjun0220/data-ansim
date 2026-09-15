@@ -21,7 +21,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from bjd_mapping import match_regions, sido_short
+from bjd_mapping import canonicalize, match_regions, sido_short
 from common import log, mi_to_ym, norm_text, optional_import, read_columns, read_header, to_num, ym_to_mi
 
 KEYS = ["sido", "sigungu", "emd"]
@@ -143,14 +143,18 @@ def load_kepco_monthly_hour(path, columns, params, source="KEPCO_001", max_chunk
     return agg
 
 
-def attach_bjd(agg, master, fail_warn_rate):
-    """고유 지역만 매칭한 뒤 붙인다(수천만 행에 문자열 연산을 반복하지 않기 위해)."""
+def attach_bjd(agg, master, fail_warn_rate, crosswalk=None):
+    """고유 지역만 매칭한 뒤 붙인다(수천만 행에 문자열 연산을 반복하지 않기 위해).
+
+    crosswalk 가 있으면 기간 중 개편 전/후 명칭으로 매칭된 코드를 기준코드 하나로 묶는다.
+    """
     regions = agg.groupby(KEYS, observed=True)["kwh"].sum().reset_index()
     matched, rate_table, unmatched, fail_rate = match_regions(regions, master, weight_col="kwh",
                                                               fail_warn_rate=fail_warn_rate)
+    matched["bjd_code"] = canonicalize(matched["bjd_code"], crosswalk)
     out = agg.merge(matched[KEYS + ["bjd_code", "region_name"]], on=KEYS, how="left")
     out = out[out["bjd_code"].notna()]
-    # 서로 다른 텍스트가 같은 법정동으로 정규화된 경우(예: '가람제1동'·'가람1동' 이 둘 다 원천에 있음) 합친다
+    # 서로 다른 텍스트가 같은 법정동으로 모인 경우('가람제1동'·'가람1동', 개편 전/후 명칭) 합친다
     out = out.groupby(["bjd_code", "mi", "hour"], sort=True).agg(
         kwh=("kwh", "sum"), n_days=("n_days", "max"), cust_sum=("cust_sum", "sum"), region_name=("region_name", "first")
     ).reset_index()

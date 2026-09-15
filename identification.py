@@ -21,7 +21,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from bjd_mapping import shc_bjd_code
+from bjd_mapping import canonicalize, shc_bjd_code
 from common import clean_label, f_sf, log, mi_to_ym, norm_sf2, parse_mi, read_columns, to_num, wald_test
 
 GROUPS = ("wait", "placebo", "control_ref")
@@ -48,7 +48,7 @@ def _value_with_mask(raw, markers):
     return to_num(raw).where(~masked), masked
 
 
-def scan_shc002(path, columns, industry, shc_params, snapshot_months=(), nrows=None, extra_stats=False):
+def scan_shc002(path, columns, industry, shc_params, snapshot_months=(), nrows=None, extra_stats=False, crosswalk=None):
     """SHC002 를 청크로 한 번만 읽어 (1) Y 계산용 셀 합계 (2) 이질성 변수 스냅샷 (3) 품질 통계를 만든다.
 
     3.13GB 를 두 번 읽지 않기 위해 한 패스에서 모두 집계한다.
@@ -72,7 +72,7 @@ def scan_shc002(path, columns, industry, shc_params, snapshot_months=(), nrows=N
     reader = read_columns(path, mapping, "SHC002", chunksize=shc_params["chunksize"], nrows=nrows)
     for chunk in reader:
         stats["rows"] += len(chunk)
-        bjd = shc_bjd_code(chunk["sido_cd"], chunk["sgg_cd"], chunk["umd_cd"])
+        bjd = canonicalize(shc_bjd_code(chunk["sido_cd"], chunk["sgg_cd"], chunk["umd_cd"]), crosswalk)
         mi = parse_mi(chunk["ym"])
         value, masked = _value_with_mask(chunk[metric], shc_params["masked_markers"])
         stats["masked_rows"] += int(masked.sum())

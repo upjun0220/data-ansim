@@ -26,6 +26,8 @@ _SIDO_FULL_TO_SHORT = {
     "경기도": "경기", "강원도": "강원", "강원특별자치도": "강원", "충청북도": "충북", "충청남도": "충남",
     "전라북도": "전북", "전북특별자치도": "전북", "전라남도": "전남", "경상북도": "경북", "경상남도": "경남",
     "제주특별자치도": "제주", "제주도": "제주",
+    # ⚠ [9/16 확인] 2026-06-30 광주(29)·전남(46) → 전남광주통합특별시(12). 분석기간 데이터는 옛 명칭일 가능성이 높다
+    "전남광주통합특별시": "전남광주",
 }
 SIDO_LOOKUP = dict(_SIDO_FULL_TO_SHORT)
 for _short in set(_SIDO_FULL_TO_SHORT.values()):
@@ -200,6 +202,30 @@ def shc_bjd_code(sido_cd, sgg_cd, umd_cd):
     out[rest] = sg5[rest] + um3[rest] + "00"
     bad = out.isna() | (out.astype(str).str.len() != 10)
     return out.where(~bad, pd.NA)
+
+
+def load_crosswalk(path, columns):
+    """법정동 코드대응표 → {코드: 기준코드}.
+
+    분석기간 중 개편된 법정동(예: 2023-12 부천 3구 신설)은 같은 동이 기간에 따라 다른 코드·명칭으로 나온다.
+    한 기준코드로 묶지 않으면 KEPCO 시계열이 두 법정동으로 쪼개지고 SHC 와 조인이 끊긴다.
+    """
+    df = read_columns(path, columns, "법정동코드대응")
+    code, canon = clean_code(df["code"], 10), clean_code(df["canonical"], 10)
+    ok = code.notna() & canon.notna() & (code != canon)
+    mapping = dict(zip(code[ok], canon[ok]))
+    chained = sorted(c for c in set(mapping.values()) if c in mapping)
+    if chained:
+        raise ValueError(f"코드대응이 연쇄됨(기준코드가 다시 다른 코드로 대응): {chained[:5]} — 대응표를 한 단계로 정리할 것")
+    log.info("법정동 코드대응: %d개 코드 → 기준코드", len(mapping))
+    return mapping
+
+
+def canonicalize(codes, mapping):
+    """법정동코드 시리즈를 기준코드로 바꾼다. 대응표에 없는 코드·결측은 그대로."""
+    if not mapping:
+        return codes
+    return codes.map(mapping).fillna(codes)
 
 
 def load_emd_centroids(path, columns):
