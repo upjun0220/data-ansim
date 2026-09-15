@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+.pytest_cache/
+out/
+data/mock/
+data/field/
+config/field.json
+config/industry_codes.json

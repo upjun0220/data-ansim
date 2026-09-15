@@ -1,0 +1,26 @@
+{
+  "_설명": "현장(안심구역)용 — field.json 으로 복사해 paths 만 실제 경로로 바꾼다. 헤더가 다르면 columns 에 그 항목만 적는다(접두 일치 허용).",
+  "paths": {
+    "bjd_master": "../data/field/법정동코드_전체자료.txt",
+    "emd_centroids": "../data/field/법정동_중심점_QGIS.csv",
+    "kepco_001": "../data/field/KEPCO_001.csv",
+    "kepco_002": "../data/field/KEPCO_002.csv",
+    "shc001": "../data/field/SHC001.csv",
+    "shc002": "../data/field/SHC002.csv",
+    "can_m": "../data/field/CAN_M.csv",
+    "kep007": "../data/field/KEP_007.csv",
+    "industry_codes": "industry_codes.json",
+    "out_dir": "../out/field"
+  },
+  "columns": {
+    "_kepco": "시각이 별도 열이면 \"hour\": \"시간대\" 처럼 지정. 시간대별 가로 열이면 params.kepco.layout=wide",
+    "kepco": {},
+    "kepco_cpo": {}
+  },
+  "params": {
+    "kepco": {"layout": "auto", "chunksize": 2000000, "sido": null},
+    "_kepco_sido": "메모리 부족 시 [\"서울\"] 처럼 시도별로 나눠 실행",
+    "identification": {"n_boot": 499, "use_log1p": false, "control_group": "never_treated"},
+    "kill": {"sample_rows": 2000000, "compare_rows": 1000000, "kepco_max_chunks": 3}
+  }
+}

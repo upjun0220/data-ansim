@@ -1,0 +1,19 @@
+{
+  "_설명": "mock 데이터 실행용. 상대경로는 이 파일 위치 기준.",
+  "paths": {
+    "bjd_master": "../data/mock/bjd_master.txt",
+    "emd_centroids": "../data/mock/bjd_centroids.csv",
+    "kepco_001": "../data/mock/kepco_001.csv",
+    "kepco_002": "../data/mock/kepco_002.csv",
+    "shc001": "../data/mock/shc001.csv",
+    "shc002": "../data/mock/shc002.csv",
+    "can_m": "../data/mock/can_m_individual.csv",
+    "kep007": "../data/mock/kep007.csv",
+    "industry_codes": "industry_codes_mock.json",
+    "out_dir": "../out/mock"
+  },
+  "params": {
+    "identification": {"n_boot": 199},
+    "kill": {"sample_rows": 500000, "compare_rows": 200000}
+  }
+}

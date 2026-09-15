@@ -1,0 +1,17 @@
+{
+  "_설명": "mock 전용 가상 코드. 현장에서는 industry_codes_template.json 을 복사해 TB_SHC_TOBU_CODE.csv · TB_SHC_CODE.csv 의 실제 코드로 채운다.",
+  "wait": ["FD", "RT"],
+  "control": ["MD", "ED", "PS"],
+  "placebo": ["MD"],
+  "resident_dist_codes": ["1"],
+  "unknown_dist_codes": ["9"],
+  "tizo_bands": {"1": [0, 1, 2, 3, 4, 5], "2": [6, 7, 8, 9, 10], "3": [11, 12, 13], "4": [14, 15, 16], "5": [17, 18, 19, 20], "6": [21, 22, 23]},
+  "shc001": {
+    "open_mode": "stock_diff",
+    "new_status_codes": [],
+    "close_status_codes": ["2"],
+    "stock_status_codes": ["1"],
+    "stock_oper_codes": ["1"]
+  },
+  "labels": {"FD": "요식(음식점·카페)", "RT": "유통(편의점·소매)", "MD": "의료(병원)", "ED": "교육(학원)", "PS": "전문서비스", "ET": "기타"}
+}
