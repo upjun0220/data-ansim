@@ -1,0 +1,16 @@
+# 필수 — 현장 JupyterLab 표준 스택
+pandas>=1.5
+numpy>=1.22
+scikit-learn>=1.1
+matplotlib>=3.5
+
+# 선택 — 없으면 폴백 경로로 돈다(kill_criteria 1번이 확인)
+# ruptures      # 없으면 kepco_loader.pelt_builtin (같은 L2 목적함수 정확해)
+# econml        # 없으면 heterogeneity.estimate_cate_fallback (2x2 서브그룹)
+# scipy         # scikit-learn 의존성에도 포함. 8-B는 직접 linprog 사용, 없으면 그리디
+# linearmodels  # 사용 안 함 — CS·FE 회귀·클러스터 SE 내장
+# statsmodels   # 사용 안 함 — p값·Wald 내장
+
+# 개발·테스트 전용
+pytest>=7
+pyflakes>=3
