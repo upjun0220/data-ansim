@@ -244,11 +244,27 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
         out["region_table_export"] = _suppress(reg, "충전세션수_근사", min_n)
     feats = feats[feats["_n"] >= min_n].drop(columns="_n")
     out["features"] = feats
+    out["charging_shape"] = charging_shape(feat_sessions[feat_sessions["end"] < before]) if verdict == "individual" else None
     out["spatial"] = pd.DataFrame([{"경로": path_label, "비교 충전위치 수": n_pts,
                                     f"KEP_007 {params['station_match_m']:.0f}m 이내 비율": agree,
                                     "비고": "KEP_007 은 2019 기준 — 이후 설치분은 불일치로 잡힘"}])
     log.info("3단계 CAN 완료: 경로 %s · 공간 일치율 %s", path_label, f"{agree:.1%}" if np.isfinite(agree) else "—")
     return out
+
+
+def charging_shape(sessions):
+    """사전기간 세션의 시간대 점유 모양(최대=1). 충전기 수 분모가 없어 실제 이용률은 아니다."""
+    if len(sessions) < 3:
+        return None
+    occupancy = np.zeros(24)
+    for row in sessions.itertuples():
+        start, end = pd.Timestamp(row.start), pd.Timestamp(row.end)
+        if end <= start:
+            continue
+        for hour in pd.date_range(start.floor("h"), end.floor("h"), freq="h"):
+            overlap = (min(end, hour + pd.Timedelta(hours=1)) - max(start, hour)).total_seconds()
+            occupancy[hour.hour] += max(0, overlap) / 3600
+    return occupancy / occupancy.max() if occupancy.max() > 0 else None
 
 
 def _suppress(df, count_col, min_n):

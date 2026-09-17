@@ -112,6 +112,13 @@ DEFAULT_PARAMS = {
     },
     "kep007": {"sido_code_remap": {"42": "51", "45": "52"}},
     "load_axis": {"period": ["2025-01", "2025-12"], "cate_cut": "median", "conc_cut": "median"},
+    "energy": {"enabled": False, "evaluation_start": "2025-12-25", "evaluation_days": 7,
+               "weeks": 4, "holdout_weeks": 8, "calibration_days": 28, "holidays": {},
+               "multipliers": [1.1, 1.2, 1.3], "new_chargers": [0, 2, 3, 5],
+               "charger_kw": 7.0, "utilization_scale": 0.5,
+               "utilization_shape": [0.1] * 7 + [0.3] * 5 + [0.6] * 5 + [1.0] * 5 + [0.3] * 2,
+               "solver": "auto", "ess_params": {}, "candidates": None,
+               "min_validation_days": 28, "max_relative_bias": 0.1, "priority_multiplier": 1.2},
     "kill": {"sample_rows": 2_000_000, "compare_rows": 1_000_000, "kepco_max_chunks": None,
              "cf_min_regions": 30, "es_min_regions": 10, "min_tizo": 4, "mask_max_rate": 0.30},
     "outputs": {"dpi": 150, "png_max_rows": 30},
@@ -133,7 +140,7 @@ DEFAULT_INDUSTRY = {
 }
 
 PATH_KEYS = ("bjd_master", "bjd_crosswalk", "emd_centroids", "kepco_001", "kepco_002", "shc001", "shc002",
-             "can_m", "kep007", "industry_codes", "out_dir")
+             "can_m", "kep007", "industry_codes", "out_dir", "kepco_hourly", "smp", "public_evidence")
 
 
 def _strip_comments(obj):

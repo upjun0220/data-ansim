@@ -7,10 +7,13 @@
     "emd_centroids": "../data/field/법정동_중심점_20230729.csv",
     "kepco_001": "../data/field/KEPCO_001.csv",
     "kepco_002": "../data/field/KEPCO_002.csv",
+    "kepco_hourly": "../data/field/KEPCO_001.csv",
+    "smp": null,
+    "public_evidence": null,
     "shc001": "../data/field/SHC001.csv",
     "shc002": "../data/field/SHC002.csv",
     "can_m": "../data/field/CAN_M.csv",
-    "kep007": "../data/field/KEP_007.csv",
+    "kep007": null,
     "industry_codes": "industry_codes.json",
     "out_dir": "../out/field"
   },
@@ -20,9 +23,11 @@
     "kepco_cpo": {}
   },
   "params": {
-    "kepco": {"layout": "auto", "chunksize": 2000000, "sido": null},
+    "kepco": {"source": "002", "layout": "auto", "chunksize": 2000000, "sido": null},
     "_kepco_sido": "메모리 부족 시 [\"서울\"] 처럼 시도별로 나눠 실행",
     "identification": {"n_boot": 499, "use_log1p": false, "control_group": "never_treated"},
+    "energy": {"enabled": true, "evaluation_start": "2025-12-25", "evaluation_days": 7, "holidays": {}},
+    "_energy": "관측기간에 맞춰 평가일 조정. 최소 12주 연속 일별 이력·공식 공휴일 확인 필요. SMP는 timestamp(KST),smp(원/kWh) 정규화 CSV. 공공성 증빙 미확보는 null 유지. KEP_007 미신청이면 paths.kep007=null.",
     "kill": {"sample_rows": 2000000, "compare_rows": 1000000, "kepco_max_chunks": 3}
   }
 }

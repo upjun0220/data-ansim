@@ -78,6 +78,12 @@ def test_all_stages_complete(pipeline_result):
     assert pipeline_result["status"] == "완료"
 
 
+def test_energy_environment_check_is_added_when_enabled(mock_env):
+    table = run_checks(mock_env["config"], params_override={"energy": {"enabled": True}}, write=False)
+    assert table["번호"].tolist() == list(range(1, 10))
+    assert table.set_index("번호").at[9, "판정"] == "통과"
+
+
 def test_every_stage_writes_csv_and_png(pipeline_result):
     out = Path(pipeline_result["out_dir"])
     missing = []

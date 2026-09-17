@@ -89,7 +89,7 @@ def write_centroids(reg, path):
         .to_csv(path, index=False, encoding="utf-8-sig")
 
 
-def write_kepco(reg, rng, path001, path002):
+def write_kepco(reg, rng, path001, path002, daily_period=None):
     months = np.arange(_mi("2023-01"), _mi("2025-12") + 1)
     days = np.array([1, 8, 15, 22])
     hours = np.arange(24)
@@ -108,6 +108,12 @@ def write_kepco(reg, rng, path001, path002):
         prof = (1 - r["peakiness"]) * flat / flat.sum() + r["peakiness"] * peaky / peaky.sum()
         M, D, H = np.meshgrid(np.arange(len(months)), days, hours, indexing="ij")
         M, D, H = M.ravel(), D.ravel(), H.ravel()
+        if daily_period is not None:
+            dates = pd.date_range(*daily_period, freq="D")
+            M = np.repeat((dates.year * 12 + dates.month - 1 - months[0]).to_numpy(), 24)
+            D, H = np.repeat(dates.day.to_numpy(), 24), np.tile(hours, len(dates))
+            if (M < 0).any() or (M >= len(months)).any():
+                raise ValueError("mock 일별 기간은 2023~2025 안이어야 함")
         kwh = level[M] * prof[H] * rng.lognormal(0, 0.08, len(M))
         mi = months[M]
         period = ((mi // 12) * 1_000_000 + (mi % 12 + 1) * 10_000 + D * 100 + H).astype(str)
@@ -266,12 +272,30 @@ def generate(out_dir, seed=42):
     return truth
 
 
+def generate_energy(out_dir, seed=42):
+    """기존 mock 파일을 건드리지 않는 연속 일별 8-A/8-B 시험 자료. 실측이 아니다."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(seed)
+    reg = build_regions(rng)
+    # 작은 공용 거점 가정: 증설 2~5대가 상한을 넘는 경우까지 시험한다. 현장 규모 추정 아님.
+    reg["kwh_level"] *= 0.1
+    write_kepco(reg, rng, out / "kepco_001_hourly.csv", out / "kepco_002_hourly.csv",
+                daily_period=("2025-09-01", "2025-12-31"))
+    ts = pd.date_range("2025-09-01", "2025-12-31 23:00", freq="h")
+    smp = 100 + 70 * np.exp(-((ts.hour.to_numpy() - 19) / 3) ** 2)
+    pd.DataFrame({"timestamp": ts, "smp": smp}).to_csv(out / "smp_mock.csv", index=False, encoding="utf-8-sig")
+
+
 def main():
     parser = argparse.ArgumentParser(description="충전 리플맵 4.2 mock 데이터 생성")
     parser.add_argument("--out", default="data/mock")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--energy", action="store_true", help="8-A/8-B 연속 일별 합성 자료도 생성")
     args = parser.parse_args()
     truth = generate(args.out, args.seed)
+    if args.energy:
+        generate_energy(args.out, args.seed)
     print(truth["role"].value_counts().to_string())
     print("생성 완료:", Path(args.out).resolve())
 

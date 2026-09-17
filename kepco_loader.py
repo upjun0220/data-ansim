@@ -167,6 +167,56 @@ def daily_series(mh):
     return tmp.groupby(["bjd_code", "mi"])["kwh_per_day"].sum(min_count=1).reset_index()
 
 
+def load_kepco_hourly(path, columns, params, master, crosswalk=None):
+    """8-A 전용: 날짜를 보존한 1시간 평균 kW. 월 집계·중복·마스킹은 거부한다.
+
+    기존 월별 로더의 형식 해석을 재사용한다. 결측을 0으로 채우거나 월값을 일별로 복제하지 않는다.
+    """
+    header, enc, sep = read_header(path)
+    layout = _layout(header, columns, params["layout"])
+    chunks = _iter_wide(path, columns, params, "KEPCO_hourly", header, enc, sep) if layout == "wide" \
+        else _iter_long(path, columns, params, "KEPCO_hourly")
+    parts = []
+    for chunk in chunks:
+        digits = chunk["period"].astype(str).str.replace(r"\D", "", regex=True)
+        if (digits.str.len() < 8).any():
+            raise ValueError("day-ahead 예측에는 일자·시간 원자료가 필요함 — 월 집계 입력 거부")
+        pd.to_datetime(digits.str[:8], format="%Y%m%d", errors="raise")
+        if "hour" in chunk:
+            if not chunk["hour"].astype(str).str.fullmatch(r"\d{1,2}(?:시)?").all():
+                raise ValueError("시각 열은 0~23 또는 1~24 정수 표기여야 함")
+        elif not digits.str.len().eq(10).all():
+            raise ValueError("별도 시각 열이 없으면 조회기간은 YYYYMMDDHH여야 함")
+        value = to_num(chunk["kwh"])
+        if not np.isfinite(value).all() or (value < 0).any():
+            raise ValueError("시간별 충전량에 마스킹·결측·음수 있음 — 원자료 품질 확인 필요")
+        parts.append(_prepare_chunk(chunk, params, "KEPCO_hourly"))
+    if not parts:
+        raise ValueError("시간별 충전 원자료 없음")
+    raw = pd.concat(parts, ignore_index=True)
+    if raw.empty:
+        raise ValueError("설정 기간에 시간별 충전 원자료 없음")
+    hour = raw["hour"]
+    base = params.get("hour_base", "auto")
+    if base in (1, "1") or (base == "auto" and hour.max() == 24 and hour.min() >= 1):
+        raw["hour"] = hour - 1
+    if not raw["hour"].between(0, 23).all() or (raw["hour"] % 1 != 0).any():
+        raise ValueError("시각은 0~23 또는 명시한 1~24 정수여야 함")
+    raw["date"] = pd.to_datetime(raw["date8"], format="%Y%m%d", errors="raise")
+    if raw.duplicated(KEYS + ["date", "hour"]).any():
+        raise ValueError("지역·일자·시간 중복 — 고객별 원자료인지 집계자료인지 명세 확인 필요")
+    regions = raw.groupby(KEYS)["kwh"].sum().reset_index()
+    matched, _, _, _ = match_regions(regions, master, weight_col="kwh",
+                                      fail_warn_rate=0.30)
+    matched["bjd_code"] = canonicalize(matched["bjd_code"], crosswalk)
+    out = raw.merge(matched[KEYS + ["bjd_code"]], on=KEYS, how="left", validate="many_to_one")
+    out = out.dropna(subset=["bjd_code"])[["bjd_code", "date", "hour", "kwh"]]
+    if out.duplicated(["bjd_code", "date", "hour"]).any():
+        raise ValueError("기준코드 보정 후 시간별 셀 중복 — 합산 전 원천 범위 확인 필요")
+    out["kw"] = out.pop("kwh") / 1.0  # 1시간 구간 에너지 / 1h. 순간 최대전력 아님.
+    return out.sort_values(["bjd_code", "date", "hour"]).reset_index(drop=True)
+
+
 def band_series(mh, bands):
     """시간대구간(TIZO) 별 월 일평균 충전량. bands: {"코드": [시각,...]}."""
     hour_to_band = {int(h): str(code) for code, hours in bands.items() for h in hours}

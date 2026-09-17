@@ -195,8 +195,8 @@ def plot_quadrants(df, cate_cut, conc_cut):
     """4사분면 — x: CATE, y: 부하 집중도. 유보 지역은 빈 원으로 구분."""
     fig = new_figure(7.5, 6)
     ax = fig.add_subplot(111)
-    colors = {"① 증설 최우선": "#1F77B4", "② 증설+시간대 분산 유도": "#FF7F0E",
-              "③ 상권 연계 프로그램 우선": "#2CA02C", "④ 신규 투자 최후순위": "#7F7F7F"}
+    colors = {"① 접근성·수요 확인": "#1F77B4", "② 부하 완화 검토": "#FF7F0E",
+              "③ 공공 필요 확인": "#2CA02C", "④ 부하 완화·공공 필요 검토": "#7F7F7F"}
     for label, g in df.groupby("quadrant"):
         hold = g["reserved"].astype(bool)
         c = colors.get(label, "black")

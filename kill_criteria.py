@@ -189,15 +189,29 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(8, "CAN verify_join_key", "경고", f"{verdict} | {ev}", "경로 B(법정동 밀집도, 보조 근거)")
     guarded(8, "CAN verify_join_key", check8)
 
+    if P["energy"]["enabled"]:
+        def check9():
+            try:
+                import scipy
+                from scipy.optimize import linprog
+            except ImportError as exc:
+                add(9, "ESS LP 실행 환경", "경고", str(exc), "그리디 전환 후 물리 제약 재검증")
+                return
+            result = linprog([1.0], bounds=[(0, 1)], method="highs")
+            add(9, "ESS LP 실행 환경", "통과" if result.success else "경고",
+                f"scipy {scipy.__version__} · HiGHS: {result.message}",
+                "데이터별 실행가능성은 8-B에서 별도 검증")
+        guarded(9, "ESS LP 실행 환경", check9)
+
     table = pd.DataFrame(rows).sort_values("번호").reset_index(drop=True)
     if write:
         writer = OutputWriter(out_dir, **P["outputs"])
-        writer.table(table, "k_kill_criteria", "킬 크라이테리아 8항목 판정")
+        writer.table(table, "k_kill_criteria", f"킬 크라이테리아 {len(table)}항목 판정")
     return table
 
 
 def main():
-    parser = argparse.ArgumentParser(description="킬 크라이테리아 8항목 자동 판정")
+    parser = argparse.ArgumentParser(description="킬 크라이테리아 자동 판정 (ESS 활성화 시 9항목)")
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     table = run_checks(args.config)

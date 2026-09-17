@@ -5,6 +5,8 @@
     "emd_centroids": "../data/mock/bjd_centroids.csv",
     "kepco_001": "../data/mock/kepco_001.csv",
     "kepco_002": "../data/mock/kepco_002.csv",
+    "kepco_hourly": "../data/mock/kepco_001_hourly.csv",
+    "smp": "../data/mock/smp_mock.csv",
     "shc001": "../data/mock/shc001.csv",
     "shc002": "../data/mock/shc002.csv",
     "can_m": "../data/mock/can_m_individual.csv",
@@ -13,7 +15,9 @@
     "out_dir": "../out/mock"
   },
   "params": {
+    "kepco": {"source": "002"},
     "identification": {"n_boot": 199},
+    "energy": {"enabled": true},
     "kill": {"sample_rows": 500000, "compare_rows": 200000}
   }
 }

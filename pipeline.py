@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import time
 import traceback
 from pathlib import Path
@@ -31,6 +32,8 @@ import identification
 import kep007_loader
 import kepco_loader
 import load_axis
+import load_forecast
+import ess_optimizer
 from common import log, mi_to_ym, setup_logging
 from config import deep_merge, load_config
 from outputs import (OutputWriter, plot_activation_examples, plot_bar, plot_event_study, plot_histogram,
@@ -284,7 +287,11 @@ def run(config_path, params_override=None, paths_override=None):
         def stage8():
             if "het" not in S:
                 raise RuntimeError("7단계 CATE 결과가 없어 처방을 만들 수 없음")
-            conc = load_axis.compute_concentration(S["mh"], P["load_axis"]["period"])
+            load_mh = S["mh"]
+            if str(P["kepco"]["source"]) != "001":
+                raw = kepco_loader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"])
+                load_mh, _, _, _ = kepco_loader.attach_bjd(raw, S["master"], P["bjd"]["fail_warn_rate"], S.get("crosswalk"))
+            conc = load_axis.compute_concentration(load_mh, P["load_axis"]["period"])
             writer.table(conc, "s8_load_concentration", "8단계 부하 집중도",
                          note="avg_kw = 1시간 kWh ÷ 1h 의 일평균 = 구간 평균 kW (순간 최대전력 아님)")
             quad, cc, kc = load_axis.classify_quadrants(S["het"]["cate"], conc, P["load_axis"], reserved)
@@ -296,6 +303,72 @@ def run(config_path, params_override=None, paths_override=None):
             writer.figure(plot_bar(counts, "quadrant", "법정동수", "사분면별 법정동 수", "법정동 수"), "s8_quadrant_counts_bar")
             S["quadrants"] = quad
         runner.run("8", "전력축·처방", stage8, ISOLATED)
+
+        if P["energy"]["enabled"]:
+            # 8-A/8-B는 일자 보존 원자료를 별도로 읽는다. 기존 월 집계를 일별로 복제하지 않는다.
+            def stage8a():
+                ep = P["energy"]
+                hourly = kepco_loader.load_kepco_hourly(paths["kepco_hourly"] or paths["kepco_001"],
+                                                       C["kepco"], P["kepco"], S["master"], S.get("crosswalk"))
+                # 공학 평가 대상도 평가 시작 전 교정자료로 고정한다(CATE 크기로 제외하지 않음).
+                start = pd.Timestamp(ep["evaluation_start"])
+                prior = hourly[hourly["date"].between(start - pd.Timedelta(days=ep["calibration_days"]),
+                                                    start - pd.Timedelta(days=1))]
+                complete = []
+                for code in prior["bjd_code"].unique():
+                    matrix = load_forecast.daily_matrix(prior, code)
+                    if len(matrix) == ep["calibration_days"] and not matrix.isna().any().any():
+                        profile = matrix.mean(axis=0)
+                        complete.append({"bjd_code": code, "concentration": profile.max() / profile.sum()
+                                         if profile.sum() > 0 else 0.0})
+                    else:
+                        log.warning("8-A %s: 교정기간 결측 — 대상선정 보류", code)
+                conc = pd.DataFrame(complete, columns=["bjd_code", "concentration"])
+                cutoff = load_axis._cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
+                regions = conc.loc[conc["concentration"] > cutoff, "bjd_code"].tolist()
+                if not regions:
+                    raise ValueError("고집중도 지역 없음 — 대상 기준 확인 필요")
+                rows = []
+                for code in regions:
+                    try:
+                        rows.append(load_forecast.backtest_forecast(
+                            hourly, code, ep["holdout_weeks"], ep["weeks"], ep["holidays"],
+                            end_date=pd.Timestamp(ep["evaluation_start"]) - pd.Timedelta(days=1)))
+                    except ValueError as exc:
+                        log.warning("8-A %s 검증 실패: %s", code, exc)
+                        rows.append({"bjd_code": code, "error": str(exc)})
+                validation = pd.DataFrame(rows)
+                writer.table(validation, "s8a_validation", "8-A 과거 일별 부하예측 검증",
+                             note="증가 지역 bias 양수=하향 추정. 검증 종료는 ESS 평가 시작 이전")
+                S["energy_input"] = (hourly, regions, validation)
+            runner.run("8-A", "일별 부하예측 검증", stage8a, ISOLATED)
+
+            def stage8b():
+                if "energy_input" not in S:
+                    raise RuntimeError("8-A 입력 없음 — oracle로 예측 성과를 대체하지 않음")
+                try:
+                    smp = ess_optimizer.load_smp(paths["smp"])
+                except (OSError, ValueError, KeyError) as exc:
+                    log.warning("SMP 로드 실패 — 피크 목적함수: %s", exc)
+                    smp = None
+                hourly, regions, validation = S["energy_input"]
+                shape = S.get("can", {}).get("charging_shape")
+                results, schedules = ess_optimizer.run_scenarios(hourly, regions, P["energy"], validation, smp, shape)
+                evidence = None
+                if paths["public_evidence"]:
+                    evidence = json.loads(Path(paths["public_evidence"]).read_text(encoding="utf-8"))
+                priority = ess_optimizer.public_priority(results, evidence, P["energy"]["priority_multiplier"])
+                note = "정책 상한·후보 용량·SMP 비용 차이 시뮬레이션. 정전 예방/교체비 절감 실증 아님"
+                writer.table(results, "s8b_scenarios", "8-B ESS 시나리오 전체 결과", note=note)
+                writer.table(schedules, "s8b_schedules", "8-B 계획 및 실측 재현 스케줄", note="법정동·시간 집계. 개별 차량 자료 없음")
+                summary = results.groupby(["mode", "new_chargers", "multiplier"]).agg(
+                    계획가능비율=("plan_feasible", "mean"), 평균초과_kW=("exceedance_kw", "mean"),
+                    평균비용차이_원=("energy_cost_difference_won", "mean"), 평균종단잔량오차_kWh=("terminal_error_kwh", "mean")).reset_index()
+                writer.table(summary, "s8b_comparison", "8-B oracle / 예측 비교 (동일 후보 용량)", note=note)
+                writer.table(priority, "s9_public_review", "9단계 공공 인프라 잠정 검토표",
+                             note="부하 점검 순서이며 공공 투자 확정 순위 아님. 형평성 미확보는 별도 표시")
+                S.update(energy_results=results, energy_schedules=schedules, public_priority=priority)
+            runner.run("8-B", "ESS 시나리오 및 공공 검토", stage8b, ISOLATED)
     finally:
         # ------------------------------------------------ 9단계: 요약·목록 (실패해도 남긴다)
         stages = runner.table()
