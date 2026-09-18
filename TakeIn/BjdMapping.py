@@ -213,7 +213,12 @@ def load_crosswalk(path, columns):
     df = read_columns(path, columns, "법정동코드대응")
     code, canon = clean_code(df["code"], 10), clean_code(df["canonical"], 10)
     ok = code.notna() & canon.notna() & (code != canon)
-    mapping = dict(zip(code[ok], canon[ok]))
+    code_ok, canon_ok = code[ok], canon[ok]
+    conflicting = sorted({c for c in code_ok[code_ok.duplicated(keep=False)]
+                           if canon_ok[code_ok == c].nunique() > 1})
+    if conflicting:
+        raise ValueError(f"코드대응표에 같은 코드가 서로 다른 기준코드로 중복 매핑됨: {conflicting[:5]} — 대응표를 정리할 것")
+    mapping = dict(zip(code_ok, canon_ok))
     chained = sorted(c for c in set(mapping.values()) if c in mapping)
     if chained:
         raise ValueError(f"코드대응이 연쇄됨(기준코드가 다시 다른 코드로 대응): {chained[:5]} — 대응표를 한 단계로 정리할 것")

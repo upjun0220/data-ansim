@@ -154,9 +154,11 @@ def attach_bjd(agg, master, fail_warn_rate, crosswalk=None):
     matched["bjd_code"] = canonicalize(matched["bjd_code"], crosswalk)
     out = agg.merge(matched[KEYS + ["bjd_code", "region_name"]], on=KEYS, how="left")
     out = out[out["bjd_code"].notna()]
-    # 서로 다른 텍스트가 같은 법정동으로 모인 경우('가람제1동'·'가람1동', 개편 전/후 명칭) 합친다
+    # 서로 다른 텍스트가 같은 법정동으로 모인 경우('가람제1동'·'가람1동', 개편 전/후 명칭) 합친다.
+    # 개편 전/후 명칭은 같은 달 안에서 서로 다른(비중첩) 기간을 담당하므로 n_days 도 kwh 처럼 합산한다 —
+    # max 를 쓰면 각 명칭이 담당한 일수가 합쳐지지 않아 daily_series() 의 kwh/n_days 평균이 부풀어 오른다.
     out = out.groupby(["bjd_code", "mi", "hour"], sort=True).agg(
-        kwh=("kwh", "sum"), n_days=("n_days", "max"), cust_sum=("cust_sum", "sum"), region_name=("region_name", "first")
+        kwh=("kwh", "sum"), n_days=("n_days", "sum"), cust_sum=("cust_sum", "sum"), region_name=("region_name", "first")
     ).reset_index()
     return out, rate_table, unmatched, fail_rate
 

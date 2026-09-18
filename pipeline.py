@@ -225,7 +225,10 @@ def run(config_path, params_override=None, paths_override=None):
                     reg = identification.regression_event_study(panel, "y_main", S["activation"], ip, units)
                     writer.table(identification.event_table(reg), "s5_event_regression", "5단계 강건성 — 상대시점 더미 회귀")
                     S["regression"] = reg
-                except Exception as exc:
+                # 통계적 미수렴·특이행렬 등 "돌긴 하는데 답이 안 나오는" 경우만 격리한다.
+                # TypeError/AttributeError 등 호출 시그니처·코드 버그는 여기서 삼키지 않고 그대로 올려
+                # "강건성 회귀 실패"로 오인되지 않게 한다.
+                except (ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
                     log.warning("강건성 회귀 실패(주 결과에는 영향 없음): %s", exc)
             S.update(main=main, units=units, pretrend_flagged=flagged)
         runner.run("5", "이벤트 스터디", stage5, CRITICAL)
@@ -324,7 +327,7 @@ def run(config_path, params_override=None, paths_override=None):
                     else:
                         log.warning("8-A %s: 교정기간 결측 — 대상선정 보류", code)
                 conc = pd.DataFrame(complete, columns=["bjd_code", "concentration"])
-                cutoff = load_axis._cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
+                cutoff = load_axis.cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
                 regions = conc.loc[conc["concentration"] > cutoff, "bjd_code"].tolist()
                 if not regions:
                     raise ValueError("고집중도 지역 없음 — 대상 기준 확인 필요")

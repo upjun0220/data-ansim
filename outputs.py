@@ -24,7 +24,9 @@ from common import log
 
 KOREAN_FONTS = ("Malgun Gothic", "NanumGothic", "NanumBarunGothic", "AppleGothic",
                 "Noto Sans CJK KR", "Noto Sans KR", "UnDotum")
-GPS_COLUMN = re.compile(r"(위도|경도|좌표|gps|latitude|longitude|^lat$|^lon$|^lng$|^ltd$|^lngt$)", re.IGNORECASE)
+GPS_COLUMN = re.compile(r"(위도|경도|좌표|gps|latitude|longitude)", re.IGNORECASE)
+GPS_SHORT_TOKENS = {"lat", "lon", "lng", "ltd", "lngt"}
+_TOKEN_SPLIT = re.compile(r"[^0-9a-zA-Z]+")
 _GLYPH_FALLBACK = str.maketrans({"−": "-", "≈": "~", "≥": ">=", "≤": "<=", "τ": "tau", "×": "x"})
 
 
@@ -101,7 +103,16 @@ class OutputWriter:
 
     @staticmethod
     def assert_no_gps(df, name):
-        bad = [c for c in df.columns if GPS_COLUMN.search(str(c))]
+        def is_gps_column(c):
+            s = str(c)
+            if GPS_COLUMN.search(s):
+                return True
+            # 짧은 별칭(lat/lon/...)은 부분일치가 아니라 '_'·기호로 나뉜 토큰 전체 일치만 잡는다.
+            # 그래야 merge suffix(lat_x)·파생 컬럼명(home_lat, site_lon)도 놓치지 않는다.
+            tokens = _TOKEN_SPLIT.split(s.lower())
+            return any(t in GPS_SHORT_TOKENS for t in tokens if t)
+
+        bad = [c for c in df.columns if is_gps_column(c)]
         if bad:
             raise ValueError(f"[{name}] 좌표 컬럼 {bad} 이 포함된 표는 저장하지 않는다(반출 규칙). 법정동 단위로 집계할 것")
 

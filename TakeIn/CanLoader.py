@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from common import EARTH_RADIUS_KM, haversine_km, log, mi_to_ym, nearest_region, read_columns, to_num, ym_to_mi
+from outputs import suppress_small
 
 DURATION_BINS = [0, 10, 20, 30, 40, 60, 90, 120, 240, 480, 1440]
 
@@ -268,10 +269,6 @@ def charging_shape(sessions):
 
 
 def _suppress(df, count_col, min_n):
-    out = df.copy()
-    small = out[count_col] < min_n
-    for c in out.columns:
-        if c != "bjd_code" and pd.api.types.is_numeric_dtype(out[c]):
-            out[c] = out[c].astype("float64")
-            out.loc[small, c] = np.nan
-    return out
+    """소표본 억제 — outputs.suppress_small 의 얇은 래퍼(반출 규칙의 유일한 구현을 그쪽에 둔다)."""
+    cols = [c for c in df.columns if c != "bjd_code" and pd.api.types.is_numeric_dtype(df[c])]
+    return suppress_small(df, count_col, min_n, cols=cols)

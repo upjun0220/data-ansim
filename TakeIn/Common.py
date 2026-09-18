@@ -44,7 +44,10 @@ def optional_import(name):
     """현장 PC 에 없을 수 있는 패키지. 없으면 None — 호출부가 폴백 경로로 간다."""
     try:
         return importlib.import_module(name)
-    except Exception:  # ImportError 외에 의존 패키지 버전 충돌도 '없음'으로 본다
+    except Exception as exc:  # ImportError 외에 의존 패키지 버전 충돌도 '없음'으로 본다
+        # 미설치와 "설치는 됐지만 깨짐"을 코드 흐름상 구분하지 않되, 후자를 조용히 묻지는 않는다 —
+        # pipeline.log 에 남겨 현장에서 실제 환경 문제인지 확인할 수 있게 한다.
+        log.debug("선택 패키지 %s 불러오기 실패(폴백 경로로 진행): %s", name, exc)
         return None
 
 
