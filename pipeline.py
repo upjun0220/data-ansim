@@ -9,7 +9,8 @@
 
 단계 격리 원칙
   - 필수: 0·1(정합·집계) · 2(변화점) · 4(Y_ddd) · 5(이벤트 스터디) · 6(위약) — 실패하면 중단한다.
-  - 격리: 3(CAN · KEP_007) · 6.5(처치오염) · 7(CATE) · 8(처방) — 실패해도 나머지는 계속 돈다.
+  - 격리: 3(CAN · KEP_007) · 6.5(처치오염) · 7(CATE) · 8(처방) · 8-C(접근성) · 8-E(결합점수)
+    — 실패해도 나머지는 계속 돈다.
     CAN 이 실패하면 'CAN 처리 생략됨' 로그와 함께 3단계 표만 비워 둔다.
 산출물은 out_dir/png(반출용) · out_dir/csv(현장 작업용), 로그는 out_dir/pipeline.log.
 """
@@ -27,6 +28,7 @@ import pandas as pd
 import bjd_mapping
 import can_loader
 import diagnostics
+import equity_access
 import heterogeneity
 import identification
 import kep007_loader
@@ -34,7 +36,8 @@ import kepco_loader
 import load_axis
 import load_forecast
 import ess_optimizer
-from common import log, mi_to_ym, setup_logging
+import priority_score
+from common import log, mi_to_ym, setup_logging, ym_to_mi
 from config import deep_merge, load_config
 from outputs import (OutputWriter, plot_activation_examples, plot_bar, plot_event_study, plot_histogram,
                      plot_quadrants)
@@ -75,6 +78,51 @@ def _ym_col(df, col="mi", name="월"):
     return out.drop(columns=col)
 
 
+def _energy_load_window(params):
+    """검증·교정·평가에 필요한 최소 시간별 원자료 기간만 계산한다."""
+    if not params.get("evaluation_start"):
+        raise ValueError("energy.enabled=true인데 energy.evaluation_start가 비어 있음 — 현장 평가 시작일을 설정할 것")
+    start = pd.Timestamp(params["evaluation_start"]).normalize()
+    validation_days = max(7 * int(params["holdout_weeks"]), int(params["min_validation_days"]))
+    history_days = max(int(params["calibration_days"]), validation_days + 7 * int(params["weeks"]))
+    date_start = start - pd.Timedelta(days=history_days)
+    date_end = start + pd.Timedelta(days=int(params["evaluation_days"]) - 1)
+    log.info("8-A 시간별 원자료 필터: %s~%s", date_start.date(), date_end.date())
+    return date_start, date_end
+
+
+def _warn_energy_calendar(params):
+    """연말·설 평가는 공식 휴일 달력 확인이 필요함을 알린다(연휴 날짜 자체는 설정에서만 읽는다)."""
+    if not params.get("evaluation_start"):
+        raise ValueError("energy.enabled=true인데 energy.evaluation_start가 비어 있음 — 현장 평가 시작일을 설정할 것")
+    start = pd.Timestamp(params["evaluation_start"]).normalize()
+    end = start + pd.Timedelta(days=int(params["evaluation_days"]) - 1)
+    days = pd.date_range(start, end)
+    holidays = params.get("holidays") or {}
+    if not holidays:
+        log.warning("8-A holidays가 비어 있음 — 공식 공휴일·설 연휴 포함 여부를 확인할 것")
+    if any((d.month == 12 and d.day >= 24) or (d.month == 1 and d.day <= 1) for d in days):
+        log.warning("8-A 평가 구간이 12/24~1/1에 걸침 — 연말 특수기간 사용 여부를 확인할 것")
+    lunar = [pd.Timestamp(d).normalize() for d, label in holidays.items() if "설" in str(label)]
+    if any(start - pd.Timedelta(days=1) <= d <= end + pd.Timedelta(days=1) for d in lunar):
+        log.warning("8-A 평가 구간이 설정된 설 연휴 전후에 걸침 — 대표성 확인 필요")
+
+
+def _kepco_export(df, customer_min, min_count, value_cols):
+    """내부 CSV에는 원값과 억제 표시를 남기고, 반출 PNG에서만 법정동 수치를 가린다."""
+    csv = df.copy()
+    if "bjd_code" not in csv:
+        return csv, csv.copy()
+    small = csv["bjd_code"].astype(str).map(customer_min).fillna(0) < int(min_count)
+    csv["소표본억제"] = small
+    png = csv.copy()
+    for col in set(value_cols) & set(png.columns):
+        png.loc[small, col] = np.nan
+    if small.any():
+        log.info("KEPCO 소표본 PNG 억제: %d행 · 최소 고객호수 < %d", int(small.sum()), min_count)
+    return csv, png
+
+
 def run(config_path, params_override=None, paths_override=None):
     cfg = load_config(config_path)
     if params_override:
@@ -84,7 +132,7 @@ def run(config_path, params_override=None, paths_override=None):
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
     out_dir = Path(paths["out_dir"])
     setup_logging(out_dir)
-    writer = OutputWriter(out_dir, **P["outputs"])
+    writer = OutputWriter(out_dir, **P["outputs"], font_path=paths["font"])
     runner = StageRunner()
     S = {}
     log.info("설정: %s", cfg["config_path"])
@@ -195,6 +243,17 @@ def run(config_path, params_override=None, paths_override=None):
             S.update(scan=scan, panel=panel)
         runner.run("4", "Outcome 축약(Y_ddd)", stage4, CRITICAL)
 
+        # ------------------------------------------------ 4.5단계 (격리)
+        def stage45():
+            mp = P["mde"]
+            mde = identification.estimate_mde(
+                S["panel"], S["activation"], P["identification"], mp["repetitions"], mp["seed"],
+                P["activation"]["window"], mp["bias_se_multiple"])
+            writer.table(mde, "s45_mde", "4.5단계 검출 가능 최소효과(MDE)",
+                         note="MDE=2.8×경험 SE. 처치 수는 실제 처치 수를 가정")
+            S["mde"] = mde
+        runner.run("4.5", "검출 가능 최소효과(MDE)", stage45, ISOLATED)
+
         # ------------------------------------------------ 5단계
         def stage5():
             panel = S["panel"]
@@ -225,10 +284,7 @@ def run(config_path, params_override=None, paths_override=None):
                     reg = identification.regression_event_study(panel, "y_main", S["activation"], ip, units)
                     writer.table(identification.event_table(reg), "s5_event_regression", "5단계 강건성 — 상대시점 더미 회귀")
                     S["regression"] = reg
-                # 통계적 미수렴·특이행렬 등 "돌긴 하는데 답이 안 나오는" 경우만 격리한다.
-                # TypeError/AttributeError 등 호출 시그니처·코드 버그는 여기서 삼키지 않고 그대로 올려
-                # "강건성 회귀 실패"로 오인되지 않게 한다.
-                except (ValueError, RuntimeError, np.linalg.LinAlgError) as exc:
+                except Exception as exc:
                     log.warning("강건성 회귀 실패(주 결과에는 영향 없음): %s", exc)
             S.update(main=main, units=units, pretrend_flagged=flagged)
         runner.run("5", "이벤트 스터디", stage5, CRITICAL)
@@ -295,11 +351,20 @@ def run(config_path, params_override=None, paths_override=None):
                 raw = kepco_loader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"])
                 load_mh, _, _, _ = kepco_loader.attach_bjd(raw, S["master"], P["bjd"]["fail_warn_rate"], S.get("crosswalk"))
             conc = load_axis.compute_concentration(load_mh, P["load_axis"]["period"])
-            writer.table(conc, "s8_load_concentration", "8단계 부하 집중도",
+            p0, p1 = (ym_to_mi(v) for v in P["load_axis"]["period"])
+            customer_min = load_mh.loc[load_mh["mi"].between(p0, p1)].groupby("bjd_code")["cust_min"].min()
+            conc_csv, conc_png = _kepco_export(conc, customer_min, P["can"]["min_cell_count"],
+                                               ["concentration", "peak_avg_kw", "daily_kwh"])
+            writer.table(conc_csv, "s8_load_concentration", "8단계 부하 집중도",
+                         png_df=conc_png,
                          note="avg_kw = 1시간 kWh ÷ 1h 의 일평균 = 구간 평균 kW (순간 최대전력 아님)")
             quad, cc, kc = load_axis.classify_quadrants(S["het"]["cate"], conc, P["load_axis"], reserved)
             export = quad.drop(columns=["reserved"])
-            writer.table(export, "s8_quadrants", "8단계 4사분면 처방 표", note="유보사유가 있는 지역은 해석 유보")
+            export_csv, export_png = _kepco_export(
+                export, customer_min, P["can"]["min_cell_count"],
+                ["concentration", "peak_avg_kw", "daily_kwh"])
+            writer.table(export_csv, "s8_quadrants", "8단계 4사분면 처방 표", png_df=export_png,
+                         note="유보사유가 있는 지역은 해석 유보")
             counts = quad.groupby("quadrant").agg(법정동수=("bjd_code", "size"), 유보수=("reserved", "sum")).reset_index()
             writer.table(counts, "s8_quadrant_counts", "8단계 사분면별 법정동 수")
             writer.figure(plot_quadrants(quad, cc, kc), "s8_quadrants_plot")
@@ -307,12 +372,31 @@ def run(config_path, params_override=None, paths_override=None):
             S["quadrants"] = quad
         runner.run("8", "전력축·처방", stage8, ISOLATED)
 
+        # ------------------------------------------------ 8-C단계 (격리)
+        if P["priority"]["enabled"]:
+            def stage8c():
+                if not paths["access_stations"] or not paths["ev_registration"]:
+                    raise FileNotFoundError("paths.access_stations 또는 paths.ev_registration 없음")
+                if "centroids" not in S:
+                    raise RuntimeError("법정동 중심점 없음 — 2SFCA 계산 불가")
+                stations, points = equity_access.load_access_inputs(
+                    paths["access_stations"], paths["ev_registration"], C, S["centroids"], S.get("crosswalk"))
+                access = equity_access.compute_2sfca(
+                    stations, points, P["priority"]["radii_m"], P["priority"]["default_radius_m"])
+                writer.table(access, "s8c_accessibility", "8-C 법정동별 2SFCA 접근성과 형평성 부족도",
+                             note="2SFCA가 낮을수록 equity_need_norm은 높음. 실제 취약계층 규모가 아님")
+                S.update(access=access, access_match_rate=float(points["ev_count"].notna().mean()))
+            runner.run("8-C", "충전 접근성 2SFCA", stage8c, ISOLATED)
+
         if P["energy"]["enabled"]:
             # 8-A/8-B는 일자 보존 원자료를 별도로 읽는다. 기존 월 집계를 일별로 복제하지 않는다.
             def stage8a():
                 ep = P["energy"]
+                _warn_energy_calendar(ep)
+                date_start, date_end = _energy_load_window(ep)
+                hourly_params = dict(P["kepco"], date_start=str(date_start.date()), date_end=str(date_end.date()))
                 hourly = kepco_loader.load_kepco_hourly(paths["kepco_hourly"] or paths["kepco_001"],
-                                                       C["kepco"], P["kepco"], S["master"], S.get("crosswalk"))
+                                                       C["kepco"], hourly_params, S["master"], S.get("crosswalk"))
                 # 공학 평가 대상도 평가 시작 전 교정자료로 고정한다(CATE 크기로 제외하지 않음).
                 start = pd.Timestamp(ep["evaluation_start"])
                 prior = hourly[hourly["date"].between(start - pd.Timedelta(days=ep["calibration_days"]),
@@ -327,7 +411,7 @@ def run(config_path, params_override=None, paths_override=None):
                     else:
                         log.warning("8-A %s: 교정기간 결측 — 대상선정 보류", code)
                 conc = pd.DataFrame(complete, columns=["bjd_code", "concentration"])
-                cutoff = load_axis.cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
+                cutoff = load_axis._cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
                 regions = conc.loc[conc["concentration"] > cutoff, "bjd_code"].tolist()
                 if not regions:
                     raise ValueError("고집중도 지역 없음 — 대상 기준 확인 필요")
@@ -341,9 +425,15 @@ def run(config_path, params_override=None, paths_override=None):
                         log.warning("8-A %s 검증 실패: %s", code, exc)
                         rows.append({"bjd_code": code, "error": str(exc)})
                 validation = pd.DataFrame(rows)
-                writer.table(validation, "s8a_validation", "8-A 과거 일별 부하예측 검증",
+                customer_min = hourly.groupby("bjd_code")["cust"].min()
+                validation_csv, validation_png = _kepco_export(
+                    validation, customer_min, P["can"]["min_cell_count"],
+                    ["mae_naive_seasonal", "mae_persistence", "bias_actual_minus_forecast", "growth_bias", "peak_mae"])
+                writer.table(validation_csv, "s8a_validation", "8-A 과거 일별 부하예측 검증",
+                             png_df=validation_png,
                              note="증가 지역 bias 양수=하향 추정. 검증 종료는 ESS 평가 시작 이전")
                 S["energy_input"] = (hourly, regions, validation)
+                S["energy_customer_min"] = customer_min
             runner.run("8-A", "일별 부하예측 검증", stage8a, ISOLATED)
 
             def stage8b():
@@ -362,19 +452,54 @@ def run(config_path, params_override=None, paths_override=None):
                     evidence = json.loads(Path(paths["public_evidence"]).read_text(encoding="utf-8"))
                 priority = ess_optimizer.public_priority(results, evidence, P["energy"]["priority_multiplier"])
                 note = "정책 상한·후보 용량·SMP 비용 차이 시뮬레이션. 정전 예방/교체비 절감 실증 아님"
-                writer.table(results, "s8b_scenarios", "8-B ESS 시나리오 전체 결과", note=note)
-                writer.table(schedules, "s8b_schedules", "8-B 계획 및 실측 재현 스케줄", note="법정동·시간 집계. 개별 차량 자료 없음")
+                customer_min = S["energy_customer_min"]
+                result_values = [c for c in results if c.endswith(("_kw", "_kwh", "_won"))]
+                results_csv, results_png = _kepco_export(results, customer_min, P["can"]["min_cell_count"], result_values)
+                writer.table(results_csv, "s8b_scenarios", "8-B ESS 시나리오 전체 결과", note=note,
+                             png_df=results_png)
+                schedule_values = [c for c in schedules if c.endswith(("_kw", "_kwh"))]
+                schedules_csv, schedules_png = _kepco_export(
+                    schedules, customer_min, P["can"]["min_cell_count"], schedule_values)
+                writer.table(schedules_csv, "s8b_schedules", "8-B 계획 및 실측 재현 스케줄",
+                             png_df=schedules_png, note="법정동·시간 집계. 개별 차량 자료 없음")
                 summary = results.groupby(["mode", "new_chargers", "multiplier"]).agg(
                     계획가능비율=("plan_feasible", "mean"), 평균초과_kW=("exceedance_kw", "mean"),
                     평균비용차이_원=("energy_cost_difference_won", "mean"), 평균종단잔량오차_kWh=("terminal_error_kwh", "mean")).reset_index()
                 writer.table(summary, "s8b_comparison", "8-B oracle / 예측 비교 (동일 후보 용량)", note=note)
-                writer.table(priority, "s9_public_review", "9단계 공공 인프라 잠정 검토표",
+                priority_csv, priority_png = _kepco_export(
+                    priority, customer_min, P["can"]["min_cell_count"],
+                    ["baseline_exceedance_kwh", "residual_exceedance_kwh", "peak_reduction_kw"])
+                writer.table(priority_csv, "s9_public_review", "9단계 공공 인프라 잠정 검토표",
+                             png_df=priority_png,
                              note="부하 점검 순서이며 공공 투자 확정 순위 아님. 형평성 미확보는 별도 표시")
                 S.update(energy_results=results, energy_schedules=schedules, public_priority=priority)
             runner.run("8-B", "ESS 시나리오 및 공공 검토", stage8b, ISOLATED)
+
+        # ------------------------------------------------ 8-E단계 (격리)
+        if P["priority"]["enabled"]:
+            def stage8e():
+                if "access" not in S or "energy_results" not in S:
+                    raise RuntimeError("8-C 접근성 또는 8-B ESS 결과 없음")
+                result = priority_score.build_priority(S["energy_results"], S["access"], P["priority"])
+                coverage = priority_score.seasonal_coverage(S["energy_input"][0])
+                result["season_status"] = coverage["season_status"]
+                result["missing_seasons"] = coverage["missing_seasons"]
+                if "het" in S:
+                    cate = S["het"]["cate"][["bjd_code", "cate"]].rename(columns={"cate": "cate_reference"})
+                    result = result.merge(cate, on="bjd_code", how="left")
+                score_values = [c for c in result if c != "bjd_code" and pd.api.types.is_numeric_dtype(result[c])
+                                and not pd.api.types.is_bool_dtype(result[c])]
+                result_csv, result_png = _kepco_export(
+                    result, S["energy_customer_min"], P["can"]["min_cell_count"], score_values)
+                writer.table(result_csv, "s8e_priority", "8-E 공공 인프라 현장 검토 우선순위",
+                             png_df=result_png,
+                             note="경제성=운영비 절감 잠재력. CATE=부가 편익 참고값. 실제 설치 지점 선정 결과가 아님")
+                S.update(priority_score=result, season_coverage=coverage)
+            runner.run("8-E", "투자 검토 결합점수", stage8e, ISOLATED)
     finally:
         # ------------------------------------------------ 9단계: 요약·목록 (실패해도 남긴다)
         stages = runner.table()
+        stages["사용폰트"] = writer.font or "없음"
         writer.table(stages, "s0_run_summary", "실행 요약 — 단계별 상태", digits=1)
         writer.table(writer.manifest_table(), "s9_manifest", "9단계 산출물 목록 (PNG = 반출용 · CSV = 현장 작업용)")
         log.info("완료: %s", stages[["단계", "상태"]].to_dict("records"))

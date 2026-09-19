@@ -35,6 +35,7 @@ STAGE_OUTPUTS = {
     "3": ["s3_kep007_stock", "s3_can_join_key", "s3_can_session_summary", "s3_can_session_dist", "s3_can_region",
           "s3_can_spatial_agreement", "s3_treated_excl_base"],
     "4": ["s4_ydd_panel", "s4_skipped_summary", "s4_shc002_quality"],
+    "4.5": ["s45_mde"],
     "5": ["s5_event_main", "s5_pretrend_overall", "s5_pretrend_region", "s5_event_regression"],
     "6": ["s6_event_placebo", "s6_discount_by_k", "s6_post_summary"],
     "6.5": ["s65_contamination"],
@@ -80,7 +81,7 @@ def test_all_stages_complete(pipeline_result):
 
 def test_energy_environment_check_is_added_when_enabled(mock_env):
     table = run_checks(mock_env["config"], params_override={"energy": {"enabled": True}}, write=False)
-    assert table["번호"].tolist() == list(range(1, 10))
+    assert table["번호"].tolist() == list(range(1, 12))
     assert table.set_index("번호").at[9, "판정"] == "통과"
 
 
@@ -161,7 +162,7 @@ def test_no_gps_in_exports(pipeline_result):
 
 def test_kill_criteria(mock_env):
     table = run_checks(mock_env["config"])
-    assert list(table["번호"]) == list(range(1, 9))
+    assert list(table["번호"]) == list(range(1, 9)) + [10, 11]
     assert set(table["판정"]) <= {"통과", "경고", "실패", "오류"}
     assert not (table["판정"] == "오류").any(), table.to_string()
     v = table.set_index("번호")["판정"]

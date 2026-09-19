@@ -93,10 +93,7 @@ def contamination_check(shc001m, activation, params):
         elif (np.isfinite(excess) and excess >= params["excess_ratio"]) and (post - pre) >= params["min_abs_increase"]:
             verdict = "유보(상권 자체 성장 가능성)"
         elif pre == 0 and post >= params["min_abs_increase"]:
-            # pre=0 이면 자기비율(own_ratio)이 정의되지 않아 excess_ratio 조건을 계산할 수 없다(0으로 나눔).
-            # 이 경우는 "초과비율 AND 증가폭" 두 조건이 아니라 증가폭 조건 하나로만 판단하는 별도 분기이므로,
-            # 표에서 구분되도록 사유를 남긴다 — 소표본 노이즈로 오탐될 수 있어 현장에서 별도 확인이 필요하다.
-            verdict = "유보(상권 자체 성장 가능성, 사전 개설률 0 — 초과비율 계산 불가)"
+            verdict = "유보(상권 자체 성장 가능성)"
         else:
             verdict = "정상"
         rows.append({"bjd_code": code, "T_r": row["T_r"], "개설률_사전": pre, "개설률_사후": post,

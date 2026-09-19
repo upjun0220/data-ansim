@@ -18,6 +18,8 @@ Y_ddd(r, m) = [log S(외지, 대기소비) − log S(거주자, 대기소비)] �
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -314,8 +316,9 @@ def cs_event_study(panel, ycol, activation, params, units=None):
     unit_pre = _unit_pretrend(Y, M, g_arr, unit_ids, col, kmin, params)
     k_avail = (int(event.loc[event["note"] != "기준", "k"].min()), int(event.loc[event["note"] != "기준", "k"].max())) \
         if (event["note"] != "기준").any() else (None, None)
-    log.info("5단계 CS[%s] %s: 처치 %d · 대조 %d · 가용 k %s~%s · 사후 평균 %.4f (SE %.4f) · 사전추세 p=%.3f",
-             ycol, ctrl_mode, len(cohorts), len(controls), k_avail[0], k_avail[1], post["att"], post["se"], pre["p"])
+    if not params.get("_quiet"):
+        log.info("5단계 CS[%s] %s: 처치 %d · 대조 %d · 가용 k %s~%s · 사후 평균 %.4f (SE %.4f) · 사전추세 p=%.3f",
+                 ycol, ctrl_mode, len(cohorts), len(controls), k_avail[0], k_avail[1], post["att"], post["se"], pre["p"])
     return {"estimator": "Callaway–Sant'Anna(내장)", "event": event, "att_gt": pd.DataFrame(attgt), "boot": boot,
             "pretrend": pre, "post": post, "unit_pretrend": unit_pre, "n_treated": len(cohorts),
             "n_control": len(controls), "k_available": k_avail, "unit_ids": unit_ids}
@@ -538,6 +541,76 @@ def discount_by_placebo(main, placebo):
         log.warning("⚠ 위약 효과가 0 과 유의하게 다름(p=%.3f, %.4f) — 주 결과를 그만큼 할인해 보고", pp["p"], pp["att"])
     log.info("6단계 위약 할인: 사후평균 %.4f → %.4f (위약 %.4f)", mp["att"], post_adj, pp["att"])
     return table, summary
+
+
+def estimate_mde(panel, activation, params, repetitions=50, seed=42, activation_window=None,
+                 bias_se_multiple=2.0):
+    """never-treated 표본에 가짜 처치를 반복 배정해 CS 사후효과의 경험적 MDE를 구한다.
+
+    실제 처치·대조 수를 유지하려고 never-treated 지역을 복원추출해 가상 표본을 만든다. 따라서
+    never-treated 수가 실제 처치 수보다 적어도 현장 표본크기 가정을 그대로 평가할 수 있다.
+    """
+    repetitions = int(repetitions)
+    if repetitions < 2:
+        raise ValueError("MDE 반복 수는 2 이상이어야 함")
+    treated = activation.loc[activation["status"] == "treated"]
+    controls = activation.loc[activation["status"] == "never_treated", "bjd_code"].astype(str)
+    n_treated, n_control = len(treated), len(controls)
+    if n_treated < 1 or n_control < int(params["min_units_per_k"]):
+        raise ValueError(f"MDE 표본 부족: 실제 처치 {n_treated} · never-treated {n_control}")
+    eligible = sorted(set(controls) & set(panel["bjd_code"].astype(str)))
+    if not eligible:
+        raise ValueError("MDE에 쓸 never-treated 패널이 없음")
+    cohorts = treated.get("T_r_mi", pd.Series(dtype=float)).dropna().astype(int).to_numpy()
+    if len(cohorts) == 0:
+        if not activation_window:
+            raise ValueError("실제 처치 코호트와 activation.window가 모두 없음")
+        from common import ym_to_mi
+        lo, hi = (ym_to_mi(v) for v in activation_window)
+        cohorts = np.arange(lo, hi + 1)
+
+    rng = np.random.default_rng(int(seed))
+    estimates = {"주 결과": [], "위약": [], "할인 후": []}
+    local = dict(params, estimator="cs", n_boot=0, _quiet=True)
+    started = time.perf_counter()
+    for rep in range(repetitions):
+        sampled = rng.choice(eligible, size=n_treated + n_control, replace=True)
+        pieces = []
+        ids = []
+        for i, source in enumerate(sampled):
+            clone = f"mde_{rep:03d}_{i:04d}"
+            part = panel.loc[panel["bjd_code"].astype(str) == source].copy()
+            part["bjd_code"] = clone
+            pieces.append(part)
+            ids.append(clone)
+        fake_panel = pd.concat(pieces, ignore_index=True)
+        fake_cohorts = rng.choice(cohorts, size=n_treated, replace=True)
+        fake_activation = pd.DataFrame({
+            "bjd_code": ids,
+            "status": ["treated"] * n_treated + ["never_treated"] * n_control,
+            "T_r_mi": np.r_[fake_cohorts, np.full(n_control, np.nan)],
+        })
+        main = cs_event_study(fake_panel, "y_main", fake_activation, local)
+        placebo = cs_event_study(fake_panel, "y_placebo", fake_activation, local)
+        estimates["주 결과"].append(main["post"]["att"])
+        estimates["위약"].append(placebo["post"]["att"])
+        estimates["할인 후"].append(main["post"]["att"] - placebo["post"]["att"])
+
+    elapsed = time.perf_counter() - started
+    rows = []
+    for label, values in estimates.items():
+        values = np.asarray(values, dtype=float)
+        values = values[np.isfinite(values)]
+        if len(values) < 2:
+            raise ValueError(f"MDE {label}: 유효 반복 {len(values)}회")
+        mean, se = float(values.mean()), float(values.std(ddof=1))
+        if abs(mean) > float(bias_se_multiple) * se:
+            log.warning("MDE 추정기 편향 의심(%s): 가짜 효과 평균 %.4f · 경험 SE %.4f", label, mean, se)
+        rows.append({"구분": label, "가짜효과평균": mean, "경험_SE": se, "MDE": 2.8 * se,
+                     "반복수": len(values), "처치수_가정": n_treated, "대조수": n_control,
+                     "처치수_근거": "실제 처치 수"})
+    log.info("4.5 MDE: %d회 %.2f초 · 반복 1회당 %.3f초", repetitions, elapsed, elapsed / repetitions)
+    return pd.DataFrame(rows)
 
 
 def event_table(res):

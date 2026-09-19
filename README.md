@@ -1,12 +1,12 @@
 # 충전 리플맵 4.2 — 분석 파이프라인
 
-2026 데이터+AI 혁신 챌린지(데이터안심구역 부문) 제출용. 스펙 원문: [docs/spec_리플맵4.2.md](docs/spec_리플맵4.2.md)
+2026 데이터+AI 혁신 챌린지(데이터안심구역 부문) 제출용. 현재 설계 기준은 루트의 V9 HTML과 이 README다.
 
-주민의 전력 이용 안정성·충전 접근성·합리적 공공 투자를 지원하는 **공공 충전 인프라 투자 우선순위 지도**를 목표로 한다. 현재 산출물은 부하 중심 잠정 검토표다. 상권 파급효과(DDD·이벤트 스터디·CATE)는 부가 편익으로 두고, 과거 이력 기반 부하 예측과 ESS 시뮬레이션으로 현장 검토 근거를 만든다. 저CATE 지역을 투자 후보에서 배제하지 않는다.
+주민의 전력 이용 안정성·충전 접근성·합리적 공공 투자를 지원하는 **공공 충전 인프라 투자 검토 우선순위 지도**를 목표로 한다. V9은 정책 상한 초과량, 역방향 2SFCA 접근성 부족도, SMP 기반 ESS 운영비 절감 잠재력을 결합한다. 상권 파급효과(DDD·이벤트 스터디·CATE)는 부가 편익 참고값이며 결합점수에 넣지 않는다.
 
-**현재 기준은 [v7 HTML](docs/충전리플맵4_2-07_08절-전력공학축확장안.html)과 [v7 구현 명세](docs/claude_claude-code-구현-프롬프트-리플맵4_2-08절추가모듈.md)다.** 원본 스펙과 다르면 이 개정안을 따른다. 실측 변압기 정격·주거지 접속관계·취약계층 수혜를 확보한 분석이 아니며, 정전 예방·교체비 절감은 입증한 성과가 아니다.
+**현재 기준은 루트의 V9 HTML과 이 README다.** 실측 변압기 정격·주거지 접속관계·취약계층 수혜를 확보한 분석이 아니며, 정전 예방·교체비 절감은 입증한 성과가 아니다. 결합점수는 실제 설치 지점 선정 결과가 아니라 법정동별 현장 검토 순서다.
 
-[최종 검증 기록](docs/최종검증_2026-09-17.md): 선택 패키지를 포함한 전체 테스트 49개 성공·실패 0개, 공학 시나리오 2,520행. 원자료 확보 후 확인할 항목도 기록했다.
+V9 현재 회귀 검증은 55개 성공·실패 0개·선택 패키지 2개 생략이다.
 
 > ⚠ `data/mock/` 은 전부 **가상** 데이터다. 로더·파이프라인 동작 검증용이며 결론에 쓰지 않는다.
 
@@ -30,20 +30,15 @@ py -3 -m venv .venv
 3. **첫날:** `from kill_criteria import run_checks; run_checks("config/field.json")` — 업종 코드가 비어 있어도 돈다.
 4. `TB_SHC_TOBU_CODE.csv` · `TB_SHC_CODE.csv` 로 `industry_codes.json` 을 채운 뒤 `from pipeline import run; run("config/field.json")`.
 
-5. 8-A/8-B는 날짜가 보존된 1시간 원자료와 최소 12주 연속 이력이 필요하다. `energy.evaluation_start`·공휴일 달력·후보 장치 사양을 자료에 맞춰 확인한다. 월 집계만 있으면 예측은 실패로 남기며 실측으로 대체하지 않는다.
+5. 8-A/8-B는 날짜가 보존된 1시간 원자료와 최소 12주 연속 이력이 필요하다. `energy.evaluation_start`는 현장에서 반드시 지정하고, 공휴일 달력·후보 장치 사양을 자료에 맞춰 확인한다. 로더는 검증·교정·평가에 필요한 기간만 읽는다. 월 집계만 있으면 예측은 실패로 남기며 실측으로 대체하지 않는다.
 6. SMP는 `timestamp,smp`(KST 시간 시작, 원/kWh) CSV로 정규화한 뒤 `paths.smp`를 지정한다. 미입력은 피크 목적함수와 비용 결측이다. 과거 SMP는 사후 가격 평가이며 사전 이용 가능 시점은 별도 확인한다.
 7. 현재 신청에서 제외한 KEP_007은 현장 템플릿의 `null`을 유지한다. 해당 선택 단계 생략은 의도한 부분완료이며, mock 전체 실행은 기존 경로 회귀 검증을 위해 합성 KEP_007을 포함한다.
 
 산출물: `out_dir/png/`(반출용) · `out_dir/csv/`(현장 작업용, 반출 대상 아님) · `out_dir/pipeline.log`.
 
-## 반입 파일
+## 참고자료 생성
 
-| 묶음 | 내용 | 만드는 법 |
-|---|---|---|
-| `dist/ev-ripplemap_반입_<커밋>.zip` | 해당 커밋의 실행 코드(예측·ESS 포함) · 설정 · README · requirements · SHA-256 목록 | 새 커밋 기준 재생성 필요. 기존 ZIP은 v7 모듈을 포함하지 않음 |
-| `dist/ev-ripplemap_참고자료_반입.zip` | 법정동코드 마스터 · 법정동 코드대응 · 법정동 중심점 · 대조표 · 안내 | `tools\build_reference_files.py` |
-
-`config/field_template.json` 의 `paths` 가 참고자료 파일 이름을 그대로 가리킨다. 반입하지 않는 것: `mock_data.py` · `tests/` · `config/mock.json` · `config/industry_codes_mock.json` · `docs/` · `tools/`.
+법정동 마스터·코드대응·중심점 참고자료는 `data/ref/` 원본에서 `tools/build_reference_files.py`로 필요할 때 생성한다. 이전 `dist/` 반입 ZIP은 V9 코드와 일치하지 않아 보관하지 않는다.
 
 ### 법정동 코드 개편 — 기준코드
 
@@ -69,6 +64,7 @@ py -3 -m venv .venv
 | 2 변화점 | `kepco_loader.py` | `s2_activation` · `s2_activation_examples` | 중단 |
 | 3 처치 정제 | `can_loader.py` · `kep007_loader.py` | `s3_can_*` · `s3_treated_excl_base` · `s3_kep007_stock` | **격리**(`s3_can_skipped`) |
 | 4 Y_ddd | `identification.py` | `s4_ydd_panel` · `s4_skipped_*` · `s4_shc002_quality` | 중단 |
+| 4.5 MDE | `identification.py` | `s45_mde` — 실제 처치 수 가정의 주·위약·할인 후 경험 SE와 MDE | 격리 |
 | 5 이벤트 스터디 | `identification.py` | `s5_event_main` · `s5_pretrend_*` · `s5_event_regression` · `s5_s6_event_study` | 중단 |
 | 6 위약 | `identification.py` | `s6_event_placebo` · `s6_discount_by_k` · `s6_post_summary` | 중단 |
 | 6.5 처치오염 | `diagnostics.py` | `s65_contamination` | 격리 |
@@ -76,6 +72,8 @@ py -3 -m venv .venv
 | 8 처방 | `load_axis.py` | `s8_load_concentration` · `s8_quadrants` · `s8_quadrants_plot` | 격리 |
 | 8-A 일별 예측 | `load_forecast.py` · `kepco_loader.py` | `s8a_validation` | 격리·실패 표시, 실측 대체 금지 |
 | 8-B ESS | `ess_optimizer.py` | `s8b_scenarios` · `s8b_schedules` · `s8b_comparison` · `s9_public_review` | 격리·행별 제약/예측/가격 상태 기록 |
+| 8-C 접근성 | `equity_access.py` | `s8c_accessibility` | 격리·외부자료 없으면 생략 |
+| 8-E 결합점수 | `priority_score.py` | `s8e_priority` | 격리·8-B/8-C 없으면 생략 |
 | 9 반출 | `outputs.py` · `pipeline.py` | `s0_run_summary` · `s9_manifest` | — |
 | 킬 크라이테리아 | `kill_criteria.py` | `kill_criteria/png/k_kill_criteria` | 항목별 `오류` |
 
@@ -118,14 +116,18 @@ py -3 -m venv .venv
 - ESS는 이산 후보에서 초기·종단 에너지, SOC 사용 범위, 충방전 효율·출력, 재충전, 순부하 0 이상을 검증해 선택한다. 전역 최소 비용 용량이 아니다. 하루씩 독립된 실험이며 열화·설비비를 제외한다.
 - forecast와 oracle에 같은 사전 선정 용량을 사용한다. 예측 오차로 실측 적용 시 상한·종단잔량을 못 지키면 그대로 보고한다. SMP 비용 차이는 실제 전기요금·교체비 절감이 아니다.
 - 공공성 증빙 미입력은 “자료 보완 후 검토”다. 낮은 필요도로 점수화하지 않는다. 부하 점검 순서는 미적용 초과 kWh → 잔여 초과 kWh 내림차순, 동률은 법정동코드다. 현장 증빙·비용효과 없이 투자 확정 순위로 쓰지 않는다.
+- V9 형평성 점수는 2SFCA를 반전해 접근성이 낮을수록 높다. 결측 축은 0점 대신 남은 가중치로 재정규화하고 신뢰도·결측 축 수를 별도 표시한다. 기본 증설 시나리오는 3대이며 설정으로 바꿀 수 있다.
+- 경제성 점수는 SMP 기반 ESS 운영비 절감 잠재력이다. 설치비·배전망 보강비·생애주기비가 없어 공공 투자 순편익으로 해석하지 않는다. MCLP·실제 GIS 지도·DEM 경사 보정은 현재 구현 범위가 아니다.
 - 코드 마스터는 도형이 아니다. 실제 2D 지도는 [국토교통부 경계 WFS](https://www.data.go.kr/data/15059008/openapi.do) 등의 기준일·좌표계·코드 정합을 확인한 후 QGIS에서 작성한다. 현재 Python 결과는 표·차트이며 지도 완성을 주장하지 않는다.
 - 충전기 시간 이동 최적화는 도착·출차·충전 필요량 등 서비스 제약을 확보한 뒤 수행할 후속 기능이다.
 
 ## 반출 규칙 (코드로 강제)
 
 - 모든 표는 CSV + PNG 동시 생성. PNG 가 반출용.
+- `paths.font`가 있으면 해당 폰트를 등록하며, 실행 요약에 실제 폰트명을 남긴다. 한글 폰트가 없으면 킬 크라이테리아 실패다.
 - 위도·경도·좌표 계열 컬럼이 든 표는 `OutputWriter` 가 저장을 거부(`ValueError`). CAN·KEP_007 좌표는 내부 계산에만 쓴다.
 - CAN 법정동 표는 차량/세션 수 3 미만 칸을 `—` 로 억제.
+- KEPCO 법정동 표는 기간 내 최소 고객호수가 3 미만이면 PNG 수치를 `—`로 억제하고, 내부 CSV에는 원값과 `소표본억제` 열을 남긴다.
 - 경로 B 산출물 제목에는 "정황상 보조 근거, 개별 차량 식별 아님"을 붙인다.
 - CATE 피처에 부하·집중도·피크 계열 이름이 들어오면 `ValueError`, 스냅샷이 활성화 창 시작 이후 달을 포함하면 `ValueError`.
 
@@ -137,11 +139,14 @@ py -3 -m venv .venv
 | 활성화 시점 | 처치 18 · never 10 · 창 이전 1 · 창 이후 1 | 18/18 월 단위 일치, 상태 분류 전부 일치 |
 | 주 효과(사후 평균) | 평균 τ 0.117 | CS 0.106 (SE 0.036) · 회귀 0.110 (SE 0.032) · 사전추세 p=0.26 |
 | 위약 | 0 | 0.023 (SE 0.021) → 할인 후 0.083 |
+| MDE 50회 | 실제 처치 18 · 대조 10 | 주 0.0418 · 위약 0.0760 · 할인 후 0.0914, 반복당 0.106초 |
+| MDE 고잡음 | SHC 셀 로그정규 잡음 0.10 | 할인 후 경험 SE 0.05110 · MDE 0.14309 |
+| 8-A 메모리 | 동일 mock 시간별 파일 | tracemalloc 27.89→22.08 MiB(20.8% 감소), 검증 15행 동일 |
 | 처치오염 | 2곳 | 정확히 2곳 유보 |
 | 법정동별 사전추세 | 0곳 | 유보 0/18 (합성 패널에 심은 추세 1곳은 검출 — 테스트) |
 | CAN | individual / model 파일 | individual → 경로 A, model → 경로 B |
-| 킬 크라이테리아 | 후보 18곳 · 002⊆001 | 1 경고(선택 패키지) · 2 경고(30곳 미만) · 3~8 통과, 13초 |
-| 통합 테스트 | — | 25 passed · pyflakes 0 |
+| 킬 크라이테리아 | 후보 18곳 · 002⊆001 | 15항목: 통과 11 · 경고 4 · 실패/오류 0 |
+| 통합 테스트 | — | 55 passed · 2 skipped · pyflakes 0 |
 
 4사분면 유보 12곳 중 10곳은 'CAN 거점성 충전 다수'다 — mock 에서 자가충전 거점을 12개 법정동에 몰아 둔 탓이며, 실데이터에서 이 비율이 높으면 `can.base_share_flag` 기준을 재검토할 것.
 

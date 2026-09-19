@@ -7,6 +7,9 @@
     "kepco_002": "../data/mock/kepco_002.csv",
     "kepco_hourly": "../data/mock/kepco_001_hourly.csv",
     "smp": "../data/mock/smp_mock.csv",
+    "access_stations": "../data/mock/access_stations.csv",
+    "ev_registration": "../data/mock/ev_registration.csv",
+    "font": null,
     "shc001": "../data/mock/shc001.csv",
     "shc002": "../data/mock/shc002.csv",
     "can_m": "../data/mock/can_m_individual.csv",
@@ -18,6 +21,7 @@
     "kepco": {"source": "002"},
     "identification": {"n_boot": 199},
     "energy": {"enabled": true},
+    "priority": {"enabled": true},
     "kill": {"sample_rows": 500000, "compare_rows": 200000}
   }
 }

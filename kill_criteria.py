@@ -12,17 +12,20 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 import bjd_mapping
 import can_loader
+import equity_access
 import identification
 import kepco_loader
+import priority_score
 from common import log, setup_logging
 from config import deep_merge, load_config
-from outputs import OutputWriter
+from outputs import OutputWriter, setup_korean_font
 
 PACKAGES = [
     ("pandas", True, ""), ("numpy", True, ""), ("sklearn", True, "DBSCAN·BallTree·RandomForest"),
@@ -82,7 +85,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         raw = kepco_loader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"], "KEPCO_001",
                                                    max_chunks=K["kepco_max_chunks"])
         mh, rate, unmatched, fail = kepco_loader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
-        kepco_state.update(mh=mh, fail=fail, n_regions=len(raw[["sido", "sigungu", "emd"]].drop_duplicates()),
+        kepco_state.update(master=master, mh=mh, fail=fail, n_regions=len(raw[["sido", "sigungu", "emd"]].drop_duplicates()),
                            unmatched=unmatched)
 
     def check2():
@@ -105,7 +108,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
 
     def load_shc():
         scan = identification.scan_shc002(paths["shc002"], C, ind, P["shc"], nrows=K["sample_rows"], extra_stats=True)
-        shc_state["stats"] = scan["stats"]
+        shc_state.update(scan=scan, stats=scan["stats"])
 
     def check3():
         load_shc()
@@ -189,6 +192,40 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(8, "CAN verify_join_key", "경고", f"{verdict} | {ev}", "경로 B(법정동 밀집도, 보조 근거)")
     guarded(8, "CAN verify_join_key", check8)
 
+    # 10. 실제 처치 수 기준 검출 가능 최소효과
+    def check10():
+        if "scan" not in shc_state:
+            load_shc()
+        if "mh" not in kepco_state:
+            load_kepco()
+        activation = kepco_loader.detect_activation(kepco_loader.daily_series(kepco_state["mh"]), P["activation"])
+        panel, _ = identification.build_ydd(shc_state["scan"]["cells"], ind, P["identification"]["use_log1p"])
+        mp = P["mde"]
+        result = identification.estimate_mde(
+            panel, activation, P["identification"], mp["repetitions"], mp["seed"],
+            P["activation"]["window"], mp["bias_se_multiple"])
+        row = result.loc[result["구분"] == "할인 후"].iloc[0]
+        verdict = "경고" if row["MDE"] > K["mde_warn"] else "통과"
+        evidence = " · ".join(f"{r['구분']} {r['MDE']:.4f}" for _, r in result.iterrows())
+        add(10, "검출 가능 최소효과(MDE)", verdict,
+            f"MDE: {evidence} · 반복 {int(row['반복수'])}회 · 처치 {int(row['처치수_가정'])}곳",
+            "상권 효과는 MDE 이상 여부만 보고" if verdict == "경고" else "")
+    guarded(10, "검출 가능 최소효과(MDE)", check10)
+
+    # 11. PNG 반출용 한글 폰트
+    def check11():
+        try:
+            name = setup_korean_font(paths["font"])
+        except (OSError, ValueError) as exc:
+            add(11, "한글 폰트", "실패", str(exc), "PNG 반출 불가 — 폰트 파일 반입 또는 서버 폰트 확인")
+            return
+        if name:
+            add(11, "한글 폰트", "통과", f"사용 폰트: {name}")
+        else:
+            add(11, "한글 폰트", "실패", "사용 가능한 한글 폰트 없음",
+                "PNG 반출 불가 — 폰트 파일 반입 또는 서버 폰트 확인")
+    guarded(11, "한글 폰트", check11)
+
     if P["energy"]["enabled"]:
         def check9():
             try:
@@ -203,18 +240,77 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 "데이터별 실행가능성은 8-B에서 별도 검증")
         guarded(9, "ESS LP 실행 환경", check9)
 
+    if P["priority"]["enabled"]:
+        # 12. 외부 접근성 자료의 법정동 매칭
+        def check12():
+            if not paths["access_stations"] or not paths["ev_registration"] or not paths["emd_centroids"]:
+                add(12, "접근성 지역키 매칭", "경고", "접근성 입력 경로 미설정", "공개자료 반입 후 다시 실행")
+                return
+            cent = bjd_mapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
+            _stations, points = equity_access.load_access_inputs(
+                paths["access_stations"], paths["ev_registration"], C, cent)
+            rate = float(points["ev_count"].notna().mean())
+            verdict = "통과" if rate >= K["access_match_min"] else "실패"
+            add(12, "접근성 지역키 매칭", verdict, f"중심점 기준 EV 등록자료 매칭 {rate:.1%}",
+                "행정동→법정동 대응표 보완" if verdict == "실패" else "")
+        guarded(12, "접근성 지역키 매칭", check12)
+
+        # 13. 4계절 시계열 포함 여부
+        def check13():
+            if not paths["kepco_hourly"]:
+                add(13, "계절 커버리지", "경고", "paths.kepco_hourly 없음", "계절 검증 보류")
+                return
+            if "master" not in kepco_state:
+                load_kepco()
+            hourly = kepco_loader.load_kepco_hourly(paths["kepco_hourly"], C["kepco"], P["kepco"],
+                                                    kepco_state["master"])
+            coverage = priority_score.seasonal_coverage(hourly)
+            verdict = "통과" if coverage["season_status"] == "검증 가능" else "경고"
+            add(13, "계절 커버리지", verdict,
+                f"{coverage['season_count']}/4계절 · 누락 {coverage['missing_seasons'] or '없음'}",
+                "단일 평가기간 결과에 계절 미검증 표시" if verdict == "경고" else "")
+        guarded(13, "계절 커버리지", check13)
+
+        # 14. 설정 가중치와 선택 AHP 행렬
+        def check14():
+            w = priority_score.validate_weights(P["priority"]["weights"])
+            matrix = P["priority"].get("ahp_matrix")
+            if matrix is None:
+                add(14, "가중치/AHP 일관성", "통과", f"설정 가중치 {w.round(4).tolist()} · AHP 입력 없음")
+                return
+            cr = priority_score.ahp_consistency_ratio(matrix)
+            add(14, "가중치/AHP 일관성", "통과" if cr < 0.1 else "실패", f"CR={cr:.4f}",
+                "CR<0.1이 되도록 쌍대비교 재검토" if cr >= 0.1 else "")
+        guarded(14, "가중치/AHP 일관성", check14)
+
+        # 15. 파이프라인 산출 후 강건 상위군 존재 확인
+        def check15():
+            path = Path(paths["out_dir"]) / "csv" / "s8e_priority.csv"
+            if not path.exists():
+                add(15, "민감도 강건 상위군", "경고", "8-E 산출물 없음", "파이프라인 실행 후 재확인")
+                return
+            result = pd.read_csv(path, encoding="utf-8-sig")
+            share = float(result["robust_top"].astype(str).str.lower().isin(["true", "1"]).mean())
+            verdict = "통과" if share >= K["robust_top_min_share"] else "경고"
+            add(15, "민감도 강건 상위군", verdict, f"전체 후보 중 {share:.1%}",
+                "단일 결합순위 대신 축별 순위 병기" if verdict == "경고" else "")
+        guarded(15, "민감도 강건 상위군", check15)
+
     table = pd.DataFrame(rows).sort_values("번호").reset_index(drop=True)
     if write:
-        writer = OutputWriter(out_dir, **P["outputs"])
+        configured_font = paths["font"] if paths["font"] and Path(paths["font"]).is_file() else None
+        writer = OutputWriter(out_dir, **P["outputs"], font_path=configured_font)
         writer.table(table, "k_kill_criteria", f"킬 크라이테리아 {len(table)}항목 판정")
     return table
 
 
 def main():
-    parser = argparse.ArgumentParser(description="킬 크라이테리아 자동 판정 (ESS 활성화 시 9항목)")
+    parser = argparse.ArgumentParser(description="킬 크라이테리아 자동 판정")
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     table = run_checks(args.config)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
     with pd.option_context("display.max_colwidth", 120, "display.width", 200):
         print(table.to_string(index=False))
 

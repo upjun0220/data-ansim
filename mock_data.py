@@ -128,7 +128,7 @@ def write_kepco(reg, rng, path001, path002, daily_period=None):
     pd.concat(frames002).to_csv(path002, index=False, encoding="cp949")
 
 
-def write_shc(reg, rng, path001, path002):
+def write_shc(reg, rng, path001, path002, cell_noise=0.02):
     months = np.arange(_mi("2025-01"), _mi("2025-12") + 1)
     medvs = WAIT_MEDVS + OTHER_MEDVS
     rows002 = []
@@ -154,7 +154,7 @@ def write_shc(reg, rng, path001, path002):
                 for d in DIST_CODES:
                     ow = (1 - r["outsider_share"]) * 0.95 if d == "1" else (0.05 if d == "9" else r["outsider_share"] * 0.95 / 3)
                     s = r["sales_size"] * ind_w * ow * (1 + 0.05 * np.sin(2 * np.pi * m / 12)) * region_shock[mj] \
-                        * rng.lognormal(0, 0.02)
+                        * rng.lognormal(0, cell_noise)
                     if g is not None and m >= g:
                         if r["contaminated"]:
                             s *= 1.3
@@ -193,6 +193,19 @@ def write_kep007(reg, rng, path, n_sites=60):
     })
     df.to_csv(path, index=False, encoding="utf-8-sig")
     return df
+
+
+def write_access_data(reg, stations, station_path, ev_path):
+    """V9 접근성 단계용 공개자료 형태의 합성 입력. 실제 행정동 자료가 아니다."""
+    public = pd.DataFrame({
+        "위도": stations["LTD"], "경도": stations["LNGT"],
+        "충전기수": stations["QCK_CHNG_PRE_NOEQ"] + stations["SLW_CHNG_PRE_NOEQ"],
+    })
+    public.loc[public["충전기수"] <= 0, "충전기수"] = 1
+    public.to_csv(station_path, index=False, encoding="utf-8-sig")
+    pd.DataFrame({"법정동코드": reg["bjd_code"],
+                  "전기차등록대수": 30 + (np.arange(len(reg)) * 37) % 470}).to_csv(
+                      ev_path, index=False, encoding="utf-8-sig")
 
 
 def write_can(reg, stations, rng, path, mode, n_vehicles=40):
@@ -255,7 +268,7 @@ def write_can(reg, stations, rng, path, mode, n_vehicles=40):
     out.to_csv(path, index=False, encoding="utf-8-sig")
 
 
-def generate(out_dir, seed=42):
+def generate(out_dir, seed=42, cell_noise=0.02):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(seed)
@@ -263,8 +276,9 @@ def generate(out_dir, seed=42):
     write_master(reg, out / "bjd_master.txt")
     write_centroids(reg, out / "bjd_centroids.csv")
     write_kepco(reg, rng, out / "kepco_001.csv", out / "kepco_002.csv")
-    write_shc(reg, rng, out / "shc001.csv", out / "shc002.csv")
+    write_shc(reg, rng, out / "shc001.csv", out / "shc002.csv", cell_noise)
     stations = write_kep007(reg, rng, out / "kep007.csv")
+    write_access_data(reg, stations, out / "access_stations.csv", out / "ev_registration.csv")
     write_can(reg, stations, rng, out / "can_m_individual.csv", "individual")
     write_can(reg, stations, rng, out / "can_m_model.csv", "model")
     truth = reg[["bjd_code", "sigungu", "emd", "role", "activation", "wait_share", "outsider_share", "tau", "contaminated"]]

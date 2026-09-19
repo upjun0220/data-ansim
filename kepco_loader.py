@@ -110,7 +110,7 @@ def _prepare_chunk(chunk, params, source):
 
 
 def load_kepco_monthly_hour(path, columns, params, source="KEPCO_001", max_chunks=None):
-    """KEPCO 원천 → 지역×월×시각 집계. 반환 열: sido sigungu emd mi hour kwh n_days cust_sum."""
+    """KEPCO 원천 → 지역×월×시각 집계. 고객호수 합계와 기간 내 최소값을 함께 보존한다."""
     header, enc, sep = read_header(path)
     layout = _layout(header, columns, params["layout"])
     it = _iter_wide(path, columns, params, source, header, enc, sep) if layout == "wide" \
@@ -124,11 +124,16 @@ def load_kepco_monthly_hour(path, columns, params, source="KEPCO_001", max_chunk
         prep = _prepare_chunk(chunk, params, source)
         n_rows += len(prep)
         parts.append(prep.groupby(KEYS + ["mi", "hour"], observed=True, sort=False)
-                     .agg(kwh=("kwh", "sum"), n_days=("days", "sum"), cust_sum=("cust", "sum")).reset_index())
+                     .agg(kwh=("kwh", "sum"), n_days=("days", "sum"),
+                          cust_sum=("cust", "sum"), cust_min=("cust", "min")).reset_index())
     if not parts:
         raise ValueError(f"[{source}] 읽은 행이 없음: {path}")
-    agg = pd.concat(parts, ignore_index=True).groupby(KEYS + ["mi", "hour"], observed=True, sort=True)[
+    joined = pd.concat(parts, ignore_index=True)
+    agg = joined.groupby(KEYS + ["mi", "hour"], observed=True, sort=True)[
         ["kwh", "n_days", "cust_sum"]].sum().reset_index()
+    cust_min = joined.groupby(KEYS + ["mi", "hour"], observed=True, sort=True)[
+        "cust_min"].min().reset_index()
+    agg = agg.merge(cust_min, on=KEYS + ["mi", "hour"], how="left", validate="one_to_one")
     agg["mi"] = agg["mi"].astype(int)
     agg["hour"] = agg["hour"].astype(int)
     if params.get("hour_base") == "auto" and agg["hour"].max() == 24 and agg["hour"].min() >= 1:
@@ -154,11 +159,12 @@ def attach_bjd(agg, master, fail_warn_rate, crosswalk=None):
     matched["bjd_code"] = canonicalize(matched["bjd_code"], crosswalk)
     out = agg.merge(matched[KEYS + ["bjd_code", "region_name"]], on=KEYS, how="left")
     out = out[out["bjd_code"].notna()]
-    # 서로 다른 텍스트가 같은 법정동으로 모인 경우('가람제1동'·'가람1동', 개편 전/후 명칭) 합친다.
-    # 개편 전/후 명칭은 같은 달 안에서 서로 다른(비중첩) 기간을 담당하므로 n_days 도 kwh 처럼 합산한다 —
-    # max 를 쓰면 각 명칭이 담당한 일수가 합쳐지지 않아 daily_series() 의 kwh/n_days 평균이 부풀어 오른다.
+    if "cust_min" not in out:
+        out["cust_min"] = out["cust_sum"]
+    # 서로 다른 텍스트가 같은 법정동으로 모인 경우('가람제1동'·'가람1동', 개편 전/후 명칭) 합친다
     out = out.groupby(["bjd_code", "mi", "hour"], sort=True).agg(
-        kwh=("kwh", "sum"), n_days=("n_days", "sum"), cust_sum=("cust_sum", "sum"), region_name=("region_name", "first")
+        kwh=("kwh", "sum"), n_days=("n_days", "max"), cust_sum=("cust_sum", "sum"),
+        cust_min=("cust_min", "min"), region_name=("region_name", "first")
     ).reset_index()
     return out, rate_table, unmatched, fail_rate
 
@@ -176,8 +182,10 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     """
     header, enc, sep = read_header(path)
     layout = _layout(header, columns, params["layout"])
-    chunks = _iter_wide(path, columns, params, "KEPCO_hourly", header, enc, sep) if layout == "wide" \
-        else _iter_long(path, columns, params, "KEPCO_hourly")
+    # 시간별 원자료는 날짜 필터 전에 한 청크가 메모리에 올라오므로, 1단계의 대용량 청크 설정을 그대로 쓰지 않는다.
+    hourly_params = dict(params, chunksize=min(int(params["chunksize"]), 25_000))
+    chunks = _iter_wide(path, columns, hourly_params, "KEPCO_hourly", header, enc, sep) if layout == "wide" \
+        else _iter_long(path, columns, hourly_params, "KEPCO_hourly")
     parts = []
     for chunk in chunks:
         digits = chunk["period"].astype(str).str.replace(r"\D", "", regex=True)
@@ -192,7 +200,7 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
         value = to_num(chunk["kwh"])
         if not np.isfinite(value).all() or (value < 0).any():
             raise ValueError("시간별 충전량에 마스킹·결측·음수 있음 — 원자료 품질 확인 필요")
-        parts.append(_prepare_chunk(chunk, params, "KEPCO_hourly"))
+        parts.append(_prepare_chunk(chunk, hourly_params, "KEPCO_hourly"))
     if not parts:
         raise ValueError("시간별 충전 원자료 없음")
     raw = pd.concat(parts, ignore_index=True)
@@ -212,7 +220,7 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
                                       fail_warn_rate=0.30)
     matched["bjd_code"] = canonicalize(matched["bjd_code"], crosswalk)
     out = raw.merge(matched[KEYS + ["bjd_code"]], on=KEYS, how="left", validate="many_to_one")
-    out = out.dropna(subset=["bjd_code"])[["bjd_code", "date", "hour", "kwh"]]
+    out = out.dropna(subset=["bjd_code"])[["bjd_code", "date", "hour", "kwh", "cust"]]
     if out.duplicated(["bjd_code", "date", "hour"]).any():
         raise ValueError("기준코드 보정 후 시간별 셀 중복 — 합산 전 원천 범위 확인 필요")
     out["kw"] = out.pop("kwh") / 1.0  # 1시간 구간 에너지 / 1h. 순간 최대전력 아님.

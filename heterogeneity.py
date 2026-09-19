@@ -268,14 +268,10 @@ def run_heterogeneity(features, outcomes, params):
     use_forest = forest_ok and primary in ("auto", "forest")
     if use_forest and primary == "auto":
         v = validation.set_index("방법")
-        if "Causal Forest" in v.index:
-            cf_mse = v.at["Causal Forest", "변환결과_MSE"]
-            if not np.isfinite(cf_mse):
-                use_forest = False
-                reason = "교차검증 실패(변환결과_MSE 계산 안 됨) — 2×2 서브그룹으로 대체"
-            elif cf_mse > v.at["2×2 서브그룹", "변환결과_MSE"]:
-                use_forest = False
-                reason = "교차검증 손실이 2×2 서브그룹보다 큼"
+        if "Causal Forest" in v.index and np.isfinite(v.at["Causal Forest", "변환결과_MSE"]) \
+                and v.at["Causal Forest", "변환결과_MSE"] > v.at["2×2 서브그룹", "변환결과_MSE"]:
+            use_forest = False
+            reason = "교차검증 손실이 2×2 서브그룹보다 큼"
     cells = None
     importance = None
     if use_forest:

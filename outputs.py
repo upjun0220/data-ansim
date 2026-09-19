@@ -24,13 +24,20 @@ from common import log
 
 KOREAN_FONTS = ("Malgun Gothic", "NanumGothic", "NanumBarunGothic", "AppleGothic",
                 "Noto Sans CJK KR", "Noto Sans KR", "UnDotum")
-GPS_COLUMN = re.compile(r"(위도|경도|좌표|gps|latitude|longitude)", re.IGNORECASE)
-GPS_SHORT_TOKENS = {"lat", "lon", "lng", "ltd", "lngt"}
-_TOKEN_SPLIT = re.compile(r"[^0-9a-zA-Z]+")
+GPS_COLUMN = re.compile(r"(위도|경도|좌표|gps|latitude|longitude|^lat$|^lon$|^lng$|^ltd$|^lngt$)", re.IGNORECASE)
 _GLYPH_FALLBACK = str.maketrans({"−": "-", "≈": "~", "≥": ">=", "≤": "<=", "τ": "tau", "×": "x"})
 
 
-def setup_korean_font():
+def setup_korean_font(font_path=None):
+    if font_path:
+        path = Path(font_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"설정한 한글 폰트 파일 없음: {path}")
+        font_manager.fontManager.addfont(path)
+        name = font_manager.FontProperties(fname=path).get_name()
+        rcParams["font.family"] = name
+        rcParams["axes.unicode_minus"] = False
+        return name
     available = {f.name for f in font_manager.fontManager.ttflist}
     for name in KOREAN_FONTS:
         if name in available:
@@ -90,7 +97,7 @@ def suppress_small(df, count_col, min_count, cols=None):
 
 
 class OutputWriter:
-    def __init__(self, out_dir, dpi=150, png_max_rows=30):
+    def __init__(self, out_dir, dpi=150, png_max_rows=30, font_path=None):
         self.out_dir = Path(out_dir)
         self.csv_dir = self.out_dir / "csv"
         self.png_dir = self.out_dir / "png"
@@ -99,24 +106,15 @@ class OutputWriter:
         self.dpi = dpi
         self.png_max_rows = png_max_rows
         self.manifest = []
-        self.font = setup_korean_font()
+        self.font = setup_korean_font(font_path)
 
     @staticmethod
     def assert_no_gps(df, name):
-        def is_gps_column(c):
-            s = str(c)
-            if GPS_COLUMN.search(s):
-                return True
-            # 짧은 별칭(lat/lon/...)은 부분일치가 아니라 '_'·기호로 나뉜 토큰 전체 일치만 잡는다.
-            # 그래야 merge suffix(lat_x)·파생 컬럼명(home_lat, site_lon)도 놓치지 않는다.
-            tokens = _TOKEN_SPLIT.split(s.lower())
-            return any(t in GPS_SHORT_TOKENS for t in tokens if t)
-
-        bad = [c for c in df.columns if is_gps_column(c)]
+        bad = [c for c in df.columns if GPS_COLUMN.search(str(c))]
         if bad:
             raise ValueError(f"[{name}] 좌표 컬럼 {bad} 이 포함된 표는 저장하지 않는다(반출 규칙). 법정동 단위로 집계할 것")
 
-    def table(self, df, name, title, digits=4, note=""):
+    def table(self, df, name, title, digits=4, note="", png_df=None):
         """표 → CSV + PNG. PNG 는 상위 png_max_rows 행."""
         df = df.reset_index(drop=True)
         self.assert_no_gps(df, name)
@@ -124,12 +122,12 @@ class OutputWriter:
         df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         self.manifest.append((name, "csv", str(csv_path)))
 
-        shown = df.head(self.png_max_rows)
+        shown = (df if png_df is None else png_df).reset_index(drop=True).head(self.png_max_rows)
         nrows = len(shown)
         header = title if len(df) <= self.png_max_rows else f"{title}  (상위 {nrows}행 / 전체 {len(df)}행)"
         if note:
             header += f"\n{note}"
-        labels = [png_text(c) for c in df.columns]
+        labels = [png_text(c) for c in shown.columns]
         cells = [[png_text(_fmt(v, digits)) for v in row] for row in shown.itertuples(index=False, name=None)]
         units = [max([_text_units(labels[j])] + [_text_units(r[j]) for r in cells]) + 2 for j in range(len(labels))] or [10]
         width = min(max(6.0, 0.075 * sum(units)), 30.0)

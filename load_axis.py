@@ -40,28 +40,22 @@ def compute_concentration(kepco_mh, period):
     prof = df.groupby(["bjd_code", "hour"]).agg(kwh=("kwh", "sum"), n_days=("n_days", "sum")).reset_index()
     prof["avg_kw"] = prof["kwh"] / prof["n_days"].where(prof["n_days"] > 0)   # kWh/1h ÷ 일수 = 평균 kW
     g = prof.groupby("bjd_code")
-    daily_kwh = g["avg_kw"].sum()
     out = pd.DataFrame({
-        # 총부하가 0인 법정동은 0/0 이라 나눗셈이 NaN — 뒤에서 명시적으로 경고·표시한다(조용히 저집중도로 섞이지 않도록).
-        "concentration": g["avg_kw"].max() / daily_kwh.where(daily_kwh > 0),
+        "concentration": g["avg_kw"].max() / g["avg_kw"].sum(),
         "peak_hour": prof.loc[g["avg_kw"].idxmax(), ["bjd_code", "hour"]].set_index("bjd_code")["hour"],
         "peak_avg_kw": g["avg_kw"].max(),
-        "daily_kwh": daily_kwh,
+        "daily_kwh": g["avg_kw"].sum(),
         "n_hours": g["hour"].nunique(),
     }).reset_index()
     short = out["n_hours"] < 24
     if short.any():
         log.warning("부하 집중도: 24개 시각이 다 없는 법정동 %d곳 — 집중도가 과대평가될 수 있음", int(short.sum()))
-    zero_load = out["daily_kwh"] <= 0
-    if zero_load.any():
-        log.warning("부하 집중도: 총부하가 0인 법정동 %d곳 — 집중도 계산 불가(NaN), 4사분면에서 별도 유보 처리 필요: %s",
-                    int(zero_load.sum()), out.loc[zero_load, "bjd_code"].tolist())
     log.info("8단계 부하 집중도(%s~%s): 법정동 %d · 중앙값 %.3f (균등분포면 %.3f)",
              mi_to_ym(p0), mi_to_ym(p1), len(out), out["concentration"].median(), 1 / 24)
     return out
 
 
-def cut(values, rule):
+def _cut(values, rule):
     if rule == "median":
         return float(np.nanmedian(values))
     if rule == "zero":
@@ -76,17 +70,13 @@ def classify_quadrants(cate, concentration, params, reserved=None):
     lost = set(cate["bjd_code"]) - set(df["bjd_code"])
     if lost:
         log.warning("4사분면: 부하 집중도가 없는 법정동 %d곳 제외", len(lost))
-    cate_cut = cut(df["cate"], params["cate_cut"])
-    # 총부하 0(daily_kwh<=0)이면 concentration 이 NaN이다 — 저집중도로 섞이지 않도록 별도 유보 사유로 표시한다.
-    zero_load = df["daily_kwh"] <= 0
-    conc_cut = cut(df.loc[~zero_load, "concentration"], params["conc_cut"])
+    cate_cut = _cut(df["cate"], params["cate_cut"])
+    conc_cut = _cut(df["concentration"], params["conc_cut"])
     hi_cate = df["cate"] > cate_cut
-    hi_conc = (df["concentration"] > conc_cut).where(~zero_load, False)
+    hi_conc = df["concentration"] > conc_cut
     df["quadrant"] = [QUADRANTS[(a, b)][0] for a, b in zip(hi_cate, hi_conc)]
     df["처방"] = [QUADRANTS[(a, b)][1] for a, b in zip(hi_cate, hi_conc)]
-    reserved = dict(reserved or {})
-    for code in df.loc[zero_load, "bjd_code"]:
-        reserved.setdefault(code, "부하 집중도 측정불가(총부하 0)")
+    reserved = reserved or {}
     df["유보사유"] = df["bjd_code"].map(reserved).fillna("")
     df["reserved"] = df["유보사유"] != ""
     df = df.sort_values(["quadrant", "cate"], ascending=[True, False]).reset_index(drop=True)

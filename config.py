@@ -39,6 +39,9 @@ DEFAULT_COLUMNS = {
     "kep007": {"sido_cd": "WIAR_SIDO_CD", "sido_nm": "WIAR_SIDO_NM", "sgg_cd": "SGNG_CD", "sgg_nm": "SGNG_NM",
                "place": "INST_PLC_NM", "addr": "ADDR", "fast": "QCK_CHNG_PRE_NOEQ",
                "slow": "SLW_CHNG_PRE_NOEQ", "lat": "LTD", "lon": "LNGT", "car": "SPRT_CAKI_NM"},
+    # 외부 공개자료는 분석 기준 법정동코드로 사전 매핑한 파일을 받는다.
+    "access_station": {"lat": "위도", "lon": "경도", "chargers": "충전기수"},
+    "ev_registration": {"code": "법정동코드", "ev_count": "전기차등록대수"},
 }
 
 DEFAULT_PARAMS = {
@@ -72,6 +75,7 @@ DEFAULT_PARAMS = {
         "n_boot": 499, "seed": 42, "alpha": 0.05,
         "pretrend_action": "flag",         # flag(유보 표시) | exclude(표본 제외 후 재추정)
     },
+    "mde": {"repetitions": 50, "seed": 42, "bias_se_multiple": 2.0},
     # ⚠ [9/15 mock] 초과비율 1.5 · 증가폭 0.5%p 는 월 개설 Poisson 잡음만으로 처치 17곳 중 3곳을 오탐했다.
     #   실데이터 개설률 분포를 보고 조정할 것
     "diagnostics": {"window": 2, "excess_ratio": 2.0, "min_abs_increase": 0.02},
@@ -119,8 +123,13 @@ DEFAULT_PARAMS = {
                "utilization_shape": [0.1] * 7 + [0.3] * 5 + [0.6] * 5 + [1.0] * 5 + [0.3] * 2,
                "solver": "auto", "ess_params": {}, "candidates": None,
                "min_validation_days": 28, "max_relative_bias": 0.1, "priority_multiplier": 1.2},
+    "priority": {"enabled": False, "radii_m": [300, 500, 800], "default_radius_m": 500,
+                 "weights": [1 / 3, 1 / 3, 1 / 3], "ahp_matrix": None,
+                 "base_multiplier": 1.2, "scenario_new_chargers": 3, "multipliers": [1.1, 1.2, 1.3],
+                 "weight_delta": 0.15, "top_share": 0.20, "robust_share": 0.90},
     "kill": {"sample_rows": 2_000_000, "compare_rows": 1_000_000, "kepco_max_chunks": None,
-             "cf_min_regions": 30, "es_min_regions": 10, "min_tizo": 4, "mask_max_rate": 0.30},
+             "cf_min_regions": 30, "es_min_regions": 10, "min_tizo": 4, "mask_max_rate": 0.30,
+             "access_match_min": 0.70, "robust_top_min_share": 0.05, "mde_warn": 0.05},
     "outputs": {"dpi": 150, "png_max_rows": 30},
 }
 
@@ -140,7 +149,8 @@ DEFAULT_INDUSTRY = {
 }
 
 PATH_KEYS = ("bjd_master", "bjd_crosswalk", "emd_centroids", "kepco_001", "kepco_002", "shc001", "shc002",
-             "can_m", "kep007", "industry_codes", "out_dir", "kepco_hourly", "smp", "public_evidence")
+             "can_m", "kep007", "industry_codes", "out_dir", "kepco_hourly", "smp", "public_evidence",
+             "access_stations", "ev_registration", "font")
 
 
 def _strip_comments(obj):
