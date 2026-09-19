@@ -26,6 +26,8 @@
     "kepco_cpo": {}
   },
   "params": {
+    "analysis_level": "emd",
+    "_analysis_level": "emd=법정동(기본). 킬 5번이 행정동 기준을 의심하면 sigungu(시군구 폴백)로 바꿔 다시 실행. 시군구 모드는 8-C·8-E 생략",
     "kepco": {"source": "002", "layout": "auto", "chunksize": 2000000, "sido": null},
     "shc": {"sido": null, "chunksize": 2000000,
       "_shc_sido": "RAM 8GB 이하면 시도 코드 앞 2자리 목록으로 분할(예 [\"11\"] 서울). 16GB 이상이면 null(전체).",

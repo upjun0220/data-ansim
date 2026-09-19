@@ -370,3 +370,24 @@ def test_pelt_builtin_finds_step():
     rng = np.random.default_rng(0)
     y = np.concatenate([rng.normal(0, 0.05, 20), rng.normal(1, 0.05, 16)])
     assert kepco_loader.pelt_builtin(y, pen=0.05 * np.log(36), min_size=2) == [20]
+
+
+def test_sigungu_mode_matches_admin_dong_names_and_folds_codes():
+    from bjd_mapping import canonicalize, make_key, match_regions, set_analysis_level
+    master = pd.DataFrame({"bjd_code": ["1168010100", "1168010300"], "sido": ["서울", "서울"],
+                           "sigungu": ["강남구", "강남구"], "emd": ["역삼동", "개포동"]})
+    master["key_raw"] = make_key(master["sido"], master["sigungu"], master["emd"])
+    master["key_norm"] = make_key(master["sido"], master["sigungu"], master["emd"], normalized=True)
+    master["region_name"] = "서울 강남구 " + master["emd"]
+    regions = pd.DataFrame({"sido": ["서울"], "sigungu": ["강남구"], "emd": ["역삼1동"], "kwh": [1.0]})  # 행정동 표기
+    assert pd.isna(match_regions(regions, master)[0].at[0, "bjd_code"])       # 법정동 모드는 못 맞춘다
+    try:
+        set_analysis_level("sigungu")
+        out, _rate, _unmatched, fail = match_regions(regions, master, weight_col="kwh")
+        assert out.at[0, "bjd_code"] == "1168000000" and fail == 0 and out.at[0, "emd"] == "역삼1동"
+        folded = canonicalize(pd.Series(["1168010100", None], dtype=object), None)
+        assert folded.iloc[0] == "1168000000" and pd.isna(folded.iloc[1])
+    finally:
+        set_analysis_level("emd")
+    with pytest.raises(ValueError, match="analysis_level"):
+        set_analysis_level("dong")

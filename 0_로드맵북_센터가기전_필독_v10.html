@@ -341,11 +341,11 @@ section[id]{scroll-margin-top:16px}
 
   <h3>직접 실행하는 파일</h3>
   <div class="files">
-    <div class="file"><h4>pipeline.py <small>661줄 · 총감독</small></h4>
+    <div class="file"><h4>pipeline.py <small>666줄 · 총감독</small></h4>
       <p class="one">0~9단계를 순서대로 부르는 지휘자.</p>
       <p class="like">비유: 요리 레시피 순서표. 재료 손질부터 담기까지 차례대로 시킨다.</p>
       <dl><dt>넣는 것</dt><dd>config/field.json</dd><dt>나오는 것</dt><dd>out/…/csv, png, pipeline.log</dd></dl></div>
-    <div class="file"><h4>kill_criteria.py <small>359줄 · 첫날 점검</small></h4>
+    <div class="file"><h4>kill_criteria.py <small>365줄 · 첫날 점검</small></h4>
       <p class="one">데이터가 계획대로 쓸 수 있는 상태인지 16개 항목을 판정.</p>
       <p class="like">비유: 수술 전 건강검진. 여기서 걸리면 계획을 줄인다.</p>
       <dl><dt>넣는 것</dt><dd>config/field.json (원자료 일부만 읽음)</dd><dt>나오는 것</dt><dd>k_kill_criteria 표 (통과/경고/실패/오류)</dd></dl></div>
@@ -594,7 +594,7 @@ summary</code></pre></li>
       <tr><td class="num">8</td><td>분석 서버 메모리·한글 폰트 미확인</td><td>멈추거나 반출 불가</td><td><span class="pill p-info">문의 중</span></td></tr>
       <tr><td class="num">9</td><td>가상 데이터 결과 ≠ 실제</td><td>모든 수치는 동작 확인용</td><td>현장 첫날 실측</td></tr>
       <tr><td class="num">10</td><td>안전·경제성 점수가 사실상 같은 값일 수 있음(둘 다 8-B의 같은 배터리 시뮬레이션에서 나옴). 가상 데이터로는 상관 0.50(피어슨)·0.63(스피어만)이라 경고가 안 떴고, 이전 점검에서 보고된 0.9997은 재현되지 않음</td><td>세 축이 아니라 두 축으로 순위가 나올 수 있음</td><td><span class="pill p-info">실데이터로 확인</span> 코드가 자동 경고. 축 정의를 바꿀지는 팀 결정</td></tr>
-      <tr><td class="num">11</td><td>한전 읍면동이 행정동이면 대응 기능이 없음. 설계안 ① 시군구 단위 폴백(약 1.5~2일, 해상도 하락·2SFCA 무의미) ② 행정동→법정동 배분표(약 3~4일, 매핑표 필요·고객호수 배분으로 소수 셀 억제가 깨질 위험)</td><td>행정동이면 카드 데이터와 동네를 못 맞춤</td><td><span class="pill p-opt">결정 필요</span> 추천은 ①을 먼저. 작업량은 추정치</td></tr>
+      <tr><td class="num">11</td><td>한전 읍면동이 행정동일 때의 대응. <strong>① 시군구 폴백은 구현됨</strong>(<code>params.analysis_level: "sigungu"</code>) — 시군구 단위로 묶어 돌리며 8-C·8-E(2SFCA·순위)는 생략, 지역이 적으면 상권 단계 표본 부족. ② 행정동→법정동 배분표(약 3~4일, 매핑표 필요·고객호수 배분으로 소수 셀 억제가 깨질 위험)는 미구현</td><td>행정동이면 법정동 단위 순위는 못 냄</td><td><span class="pill p-info">① 구현 완료</span> 킬 5번이 실패하면 sigungu로 다시 실행. ②는 매핑표 확보 후 결정</td></tr>
       <tr><td class="num">12</td><td><code>kepco.source</code> 기본값이 코드는 <code>"001"</code>, 현장 템플릿·mock은 <code>"002"</code></td><td>설정 안 적으면 다른 원천으로 돌 수 있음</td><td><span class="pill p-opt">결정 필요</span> 지금은 README에 명시만</td></tr>
       <tr><td class="num">13</td><td>형평성 지표 3(자가충전 제약 주거 비율)과 300/500m 커버리지 미구현</td><td>V9에 적힌 지표 일부가 아직 없음</td><td><span class="pill p-opt">결정 필요</span> LH 자료를 신청 범위에 넣을지</td></tr>
       <tr><td class="num">14</td><td>저장소가 아주 긴 폴더 경로에 있으면 이름이 긴 결과 파일(예: <code>s3_can_spatial_agreement.csv</code>) 저장이 실패할 수 있음(윈도우 경로 260자 제한)</td><td>로컬 실행에서 일부 표가 빠짐. 코드 문제 아님</td><td><span class="pill p-info">환경</span> 짧은 경로(<code>C:\dev\…</code>)에서 실행</td></tr>

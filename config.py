@@ -45,6 +45,9 @@ DEFAULT_COLUMNS = {
 }
 
 DEFAULT_PARAMS = {
+    # 분석 지역 단위. "emd"=법정동(기본), "sigungu"=시군구(한전 읍면동이 행정동이어서 법정동과 못 맞출 때의 폴백).
+    # 시군구 모드: 지역키가 시군구5자리+"00000". 8-C(2SFCA·중심점 근사)·8-E는 시군구 규모에서 의미가 없어 생략된다.
+    "analysis_level": "emd",
     "kepco": {
         "source": "001",                  # 변화점 탐지에 쓸 원천. 001/002 는 포함관계 불명 → 합산 금지
         "layout": "auto",                 # auto | long | wide

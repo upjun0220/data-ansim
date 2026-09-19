@@ -41,6 +41,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     cfg = load_config(config_path, require_industry=False)
     if params_override:
         cfg["params"] = deep_merge(cfg["params"], params_override)
+    bjd_mapping.set_analysis_level(cfg["params"]["analysis_level"])
     if paths_override:
         cfg["paths"].update({k: (str(Path(v).resolve()) if v else None) for k, v in paths_override.items()})
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
@@ -144,7 +145,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         ev = f"KEPCO 지역 {kepco_state['n_regions']}곳 중 미매칭 {fail:.1%} (예: " + \
             ", ".join(kepco_state["unmatched"][["sido", "sigungu", "emd"]].head(3).agg(" ".join, axis=1)) + ")"
         if fail >= P["bjd"]["fail_warn_rate"]:
-            add(5, "한전 읍면동 매핑 실패율", "실패", ev, "행정동 기준일 가능성 — 행정동↔법정동 매핑표 필요")
+            add(5, "한전 읍면동 매핑 실패율", "실패", ev,
+                "행정동 기준일 가능성 — params.analysis_level=\"sigungu\"(시군구 폴백)로 다시 실행하거나 행정동↔법정동 매핑표 확보")
         elif fail > 0.10:
             add(5, "한전 읍면동 매핑 실패율", "경고", ev, "미매칭 목록 사람 검토")
         else:
@@ -278,6 +280,10 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     if P["priority"]["enabled"]:
         # 12. 외부 접근성 자료의 법정동 매칭
         def check12():
+            if bjd_mapping.ANALYSIS_LEVEL == "sigungu":
+                add(12, "접근성 지역키 매칭", "경고", "analysis_level=sigungu — 2SFCA(8-C)는 시군구 규모에서 의미가 없어 생략",
+                    "형평성 축은 읍면동(법정동) 모드에서만 계산")
+                return
             if not paths["access_stations"] or not paths["ev_registration"] or not paths["emd_centroids"]:
                 add(12, "접근성 지역키 매칭", "경고", "접근성 입력 경로 미설정", "공개자료 반입 후 다시 실행")
                 return

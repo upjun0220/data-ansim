@@ -159,6 +159,7 @@ def run(config_path, params_override=None, paths_override=None):
     cfg = load_config(config_path)
     if params_override:
         cfg["params"] = deep_merge(cfg["params"], params_override)
+    bjd_mapping.set_analysis_level(cfg["params"]["analysis_level"])
     if paths_override:
         cfg["paths"].update({k: (str(Path(v).resolve()) if v else None) for k, v in paths_override.items()})
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
@@ -250,7 +251,8 @@ def run(config_path, params_override=None, paths_override=None):
                 raise FileNotFoundError("paths.emd_centroids 없음 — CAN·KEP_007 좌표를 법정동으로 보낼 수 없음")
             cent = bjd_mapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
             cent["bjd_code"] = bjd_mapping.canonicalize(cent["bjd_code"], S.get("crosswalk"))
-            S["centroids"] = cent.drop_duplicates("bjd_code")
+            # 시군구 모드는 읍면동 중심점을 다 남긴다: 좌표→가장 가까운 읍면동→그 시군구 코드로 보내려는 것이다.
+            S["centroids"] = cent if bjd_mapping.ANALYSIS_LEVEL == "sigungu" else cent.drop_duplicates("bjd_code")
         runner.run("3", "법정동 중심점", stage3_centroids, ISOLATED)
 
         def stage3_kep007():
@@ -444,6 +446,8 @@ def run(config_path, params_override=None, paths_override=None):
         # ------------------------------------------------ 8-C단계 (격리)
         if P["priority"]["enabled"]:
             def stage8c():
+                if bjd_mapping.ANALYSIS_LEVEL == "sigungu":
+                    raise RuntimeError("analysis_level=sigungu: 300/500/800m 2SFCA와 중심점 근사는 시군구 규모에서 의미가 없어 생략(8-E도 생략)")
                 if not paths["access_stations"] or not paths["ev_registration"]:
                     raise FileNotFoundError("paths.access_stations 또는 paths.ev_registration 없음")
                 if "centroids" not in S:
@@ -622,6 +626,7 @@ def run(config_path, params_override=None, paths_override=None):
         # ------------------------------------------------ 9단계: 요약·목록 (실패해도 남긴다)
         stages = runner.table()
         stages["사용폰트"] = writer.font_label
+        stages["analysis_level"] = P["analysis_level"]
         stages["min_cell_count"] = P["output"]["min_cell_count"]
         stages["suppress_basis"] = P["kepco"]["suppress_basis"]
         writer.table(stages, "s0_run_summary", "실행 요약 — 단계별 상태", digits=1)
