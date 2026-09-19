@@ -123,6 +123,37 @@ def _kepco_export(df, customer_min, min_count, value_cols):
     return csv, png
 
 
+def _period_customer_count(df, cust_col, basis, group_cols=("bjd_code",)):
+    """법정동(×월) 대표 고객호수 — suppress_basis 설정에 따라 최댓값(기본) 또는 최솟값.
+
+    최댓값을 기본으로 하는 이유: 서로 다른 시각의 고객 수는 서로 다른 하한이라, 새벽처럼
+    저조한 시간대 하나로 법정동 전체를 가리지 않기 위함(R1, 2026-09-19 리뷰).
+    """
+    if basis not in ("max", "min"):
+        raise ValueError(f"params.kepco.suppress_basis 는 'max' 또는 'min' — 받은 값: {basis!r}")
+    return df.groupby(list(group_cols))[cust_col].agg(basis)
+
+
+def _exclude_small_cells(df, rep, min_count, label):
+    """(법정동,월) 대표 고객호수 rep 기준 소표본 셀을 제외한 부분집합 — 전국 합계 PNG 전용(R2).
+
+    행을 가리는 방식(_kepco_export)이 아니라 전국 합계에 기여하는 것 자체를 막는다.
+    법정동 열이 없는 전국 합계표(s1)는 나머지 값을 빼는 차감 역산으로 소표본 법정동이
+    재식별될 수 있기 때문이다.
+    """
+    idx = pd.MultiIndex.from_frame(df[["bjd_code", "mi"]])
+    small = pd.Series(rep.reindex(idx).fillna(0).to_numpy() < min_count, index=df.index)
+    if small.any():
+        log.info("%s PNG 억제: 법정동×월 %d칸 제외 · 대표 고객호수 < %d", label, int(small.sum()), min_count)
+    return df[~small]
+
+
+def _exclude_small_activation(act, rep, min_count):
+    """활성화 시점 예시 그림 후보에서 소표본 법정동을 제외한다(R2). rep: bjd_code 인덱스 대표 고객호수."""
+    small = act["bjd_code"].astype(str).map(rep).fillna(0) < min_count
+    return act[~small], int((small & (act["status"] == "treated")).sum())
+
+
 def run(config_path, params_override=None, paths_override=None):
     cfg = load_config(config_path)
     if params_override:
@@ -155,12 +186,29 @@ def run(config_path, params_override=None, paths_override=None):
             daily = kepco_loader.daily_series(mh)
             monthly = daily.groupby("mi").agg(법정동수=("bjd_code", "nunique"),
                                               일평균충전량_합_kWh=("kwh_per_day", "sum")).reset_index()
-            writer.table(_ym_col(monthly), "s1_kepco_monthly", f"1단계 KEPCO_{src} 월별 집계 (법정동 합)", digits=1)
+            # R2: 전국 합계표는 bjd_code 열이 없어 _kepco_export 행 마스킹이 못 걸린다.
+            # 대신 소표본 법정동의 기여분 자체를 PNG 집계에서 빼, 다른 표와의 차감 역산을 막는다.
+            basis = P["kepco"].get("suppress_basis", "max")
+            min_count = P["can"]["min_cell_count"]
+            cell_rep = _period_customer_count(mh, "cust_min", basis, ("bjd_code", "mi"))
+            daily_visible = _exclude_small_cells(daily, cell_rep, min_count, "s1_kepco_monthly")
+            monthly_png = (daily_visible.groupby("mi").agg(
+                법정동수=("bjd_code", "nunique"), 일평균충전량_합_kWh=("kwh_per_day", "sum"))
+                .reindex(monthly["mi"]).fillna(0).reset_index())
+            writer.table(_ym_col(monthly), "s1_kepco_monthly", f"1단계 KEPCO_{src} 월별 집계 (법정동 합)", digits=1,
+                         png_df=_ym_col(monthly_png),
+                         note=f"PNG는 그 달 대표 고객호수(시간별 {basis}) < {min_count}인 법정동의 기여분 제외")
             if ind.get("tizo_bands"):
                 band = kepco_loader.band_series(mh, ind["tizo_bands"])
                 wide = band.groupby(["mi", "band"])["kwh_per_day"].sum().unstack(fill_value=0)
                 share = wide.div(wide.sum(axis=1), axis=0).add_prefix("구간비_").reset_index()
-                writer.table(_ym_col(share), "s1_kepco_band_share", "1단계 시간대구간(TIZO)별 충전량 비중")
+                band_visible = _exclude_small_cells(band, cell_rep, min_count, "s1_kepco_band_share")
+                wide_png = (band_visible.groupby(["mi", "band"])["kwh_per_day"].sum()
+                            .unstack(fill_value=0).reindex(index=wide.index, columns=wide.columns, fill_value=0))
+                share_png = wide_png.div(wide_png.sum(axis=1), axis=0).add_prefix("구간비_").reset_index()
+                writer.table(_ym_col(share), "s1_kepco_band_share", "1단계 시간대구간(TIZO)별 충전량 비중",
+                             png_df=_ym_col(share_png),
+                             note=f"PNG는 그 달 대표 고객호수(시간별 {basis}) < {min_count}인 법정동의 기여분 제외")
             S.update(master=master, mh=mh, daily=daily, fail_rate=fail)
         runner.run("0·1", "지역키 정합 + KEPCO 시계열 집계", stage01, CRITICAL)
 
@@ -173,7 +221,16 @@ def run(config_path, params_override=None, paths_override=None):
             counts = act["status"].value_counts().rename_axis("상태").reset_index(name="법정동수")
             writer.table(counts, "s2_status_counts", "2단계 처치 상태별 법정동 수")
             if (act["status"] == "treated").any():
-                writer.figure(plot_activation_examples(S["daily"], act), "s2_activation_examples")
+                # R2: 그림은 법정동명·수치가 그대로 드러나므로 예시 후보에서 소표본 법정동을 뺀다.
+                basis = P["kepco"].get("suppress_basis", "max")
+                rep = _period_customer_count(S["mh"], "cust_min", basis)
+                eligible, n_excluded = _exclude_small_activation(act, rep, P["can"]["min_cell_count"])
+                if n_excluded:
+                    log.info("s2_activation_examples: 소표본 법정동 %d곳 예시에서 제외", n_excluded)
+                if (eligible["status"] == "treated").any():
+                    writer.figure(plot_activation_examples(S["daily"], eligible), "s2_activation_examples")
+                else:
+                    log.warning("s2_activation_examples: 소표본 제외 후 남은 처치 지역 없음 — 그림 생략")
             S["activation"] = act
         runner.run("2", "변화점 탐지", stage2, CRITICAL)
 
@@ -352,7 +409,9 @@ def run(config_path, params_override=None, paths_override=None):
                 load_mh, _, _, _ = kepco_loader.attach_bjd(raw, S["master"], P["bjd"]["fail_warn_rate"], S.get("crosswalk"))
             conc = load_axis.compute_concentration(load_mh, P["load_axis"]["period"])
             p0, p1 = (ym_to_mi(v) for v in P["load_axis"]["period"])
-            customer_min = load_mh.loc[load_mh["mi"].between(p0, p1)].groupby("bjd_code")["cust_min"].min()
+            # R1: 최솟값 대신 기간 내 시간별 고객호수의 최댓값을 기본으로 쓴다(suppress_basis).
+            customer_min = _period_customer_count(
+                load_mh.loc[load_mh["mi"].between(p0, p1)], "cust_min", P["kepco"].get("suppress_basis", "max"))
             conc_csv, conc_png = _kepco_export(conc, customer_min, P["can"]["min_cell_count"],
                                                ["concentration", "peak_avg_kw", "daily_kwh"])
             writer.table(conc_csv, "s8_load_concentration", "8단계 부하 집중도",
@@ -425,7 +484,8 @@ def run(config_path, params_override=None, paths_override=None):
                         log.warning("8-A %s 검증 실패: %s", code, exc)
                         rows.append({"bjd_code": code, "error": str(exc)})
                 validation = pd.DataFrame(rows)
-                customer_min = hourly.groupby("bjd_code")["cust"].min()
+                # R1: 최솟값 대신 기간 내 시간별 고객호수의 최댓값을 기본으로 쓴다(suppress_basis).
+                customer_min = _period_customer_count(hourly, "cust", P["kepco"].get("suppress_basis", "max"))
                 validation_csv, validation_png = _kepco_export(
                     validation, customer_min, P["can"]["min_cell_count"],
                     ["mae_naive_seasonal", "mae_persistence", "bias_actual_minus_forecast", "growth_bias", "peak_mae"])
@@ -481,7 +541,11 @@ def run(config_path, params_override=None, paths_override=None):
                 if "access" not in S or "energy_results" not in S:
                     raise RuntimeError("8-C 접근성 또는 8-B ESS 결과 없음")
                 result = priority_score.build_priority(S["energy_results"], S["access"], P["priority"])
-                coverage = priority_score.seasonal_coverage(S["energy_input"][0])
+                # R3: 8-A 평가창(91일) 필터가 걸린 S["energy_input"] 대신, period 열만 가볍게 스캔한
+                # 원천 전체 기간의 관측 일자로 계절 커버리지를 판정한다(시간별 원자료 전체를 다시 올리지 않음).
+                observed_dates = kepco_loader.scan_observed_dates(
+                    paths["kepco_hourly"] or paths["kepco_001"], C["kepco"], P["kepco"])
+                coverage = priority_score.seasonal_coverage(observed_dates)
                 result["season_status"] = coverage["season_status"]
                 result["missing_seasons"] = coverage["missing_seasons"]
                 if "het" in S:

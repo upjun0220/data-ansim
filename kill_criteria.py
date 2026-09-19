@@ -196,19 +196,31 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     def check10():
         if "scan" not in shc_state:
             load_shc()
-        if "mh" not in kepco_state:
-            load_kepco()
-        activation = kepco_loader.detect_activation(kepco_loader.daily_series(kepco_state["mh"]), P["activation"])
+        # R4(2026-09-19): 본 분석(pipeline)은 P["kepco"]["source"]의 원천을 쓰는데, 이 항목은
+        # KEPCO_001을 하드코딩해 원천이 다르면(현장 002) 처치 수가 실제와 어긋났다.
+        src = str(P["kepco"]["source"])
+        cols = C["kepco"] if src == "001" else C["kepco_cpo"]
+        master = kepco_state["master"] if "master" in kepco_state else bjd_mapping.load_bjd_master(paths["bjd_master"], C["bjd"])
+        raw = kepco_loader.load_kepco_monthly_hour(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}",
+                                                   max_chunks=K["kepco_max_chunks"])
+        mh, *_ = kepco_loader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
+        activation = kepco_loader.detect_activation(kepco_loader.daily_series(mh), P["activation"])
         panel, _ = identification.build_ydd(shc_state["scan"]["cells"], ind, P["identification"]["use_log1p"])
         mp = P["mde"]
-        result = identification.estimate_mde(
-            panel, activation, P["identification"], mp["repetitions"], mp["seed"],
-            P["activation"]["window"], mp["bias_se_multiple"])
+        note = "표본 기반 참고값 — 본 판정은 pipeline 4.5"
+        try:
+            result = identification.estimate_mde(
+                panel, activation, P["identification"], mp["repetitions"], mp["seed"],
+                P["activation"]["window"], mp["bias_se_multiple"])
+        except ValueError as exc:
+            # kepco_max_chunks·sample_rows 표본 제약으로 처치·대조 수가 부족할 수 있다 — 오류가 아니라 경고.
+            add(10, "검출 가능 최소효과(MDE)", "경고", f"{note} · {exc}", "표본 확대 또는 pipeline 4.5 결과로 판단")
+            return
         row = result.loc[result["구분"] == "할인 후"].iloc[0]
         verdict = "경고" if row["MDE"] > K["mde_warn"] else "통과"
         evidence = " · ".join(f"{r['구분']} {r['MDE']:.4f}" for _, r in result.iterrows())
         add(10, "검출 가능 최소효과(MDE)", verdict,
-            f"MDE: {evidence} · 반복 {int(row['반복수'])}회 · 처치 {int(row['처치수_가정'])}곳",
+            f"{note} · MDE: {evidence} · 반복 {int(row['반복수'])}회 · 처치 {int(row['처치수_가정'])}곳",
             "상권 효과는 MDE 이상 여부만 보고" if verdict == "경고" else "")
     guarded(10, "검출 가능 최소효과(MDE)", check10)
 

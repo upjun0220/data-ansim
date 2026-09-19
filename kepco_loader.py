@@ -175,6 +175,21 @@ def daily_series(mh):
     return tmp.groupby(["bjd_code", "mi"])["kwh_per_day"].sum(min_count=1).reset_index()
 
 
+def scan_observed_dates(path, columns, params, source="KEPCO_seasonal"):
+    """8-E 계절 커버리지 전용 — period 열만 청크로 가볍게 스캔해 관측 일자를 모은다.
+
+    8-A 평가창 날짜 필터(date_start/date_end)와 무관하게 원천의 전체 기간을 본다(R3, 2026-09-19).
+    시간별 원자료 전체를 메모리에 올리지 않도록 열 1개만 읽는다.
+    """
+    chunks = read_columns(path, {"period": columns["period"]}, source,
+                          chunksize=params.get("chunksize", 2_000_000))
+    dates = set()
+    for chunk in chunks:
+        digits = chunk["period"].fillna("").astype(str).str.replace(r"\D", "", regex=True)
+        dates.update(digits[digits.str.len() >= 8].str[:8].unique())
+    return pd.DataFrame({"date": sorted(dates)})
+
+
 def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     """8-A 전용: 날짜를 보존한 1시간 평균 kW. 월 집계·중복·마스킹은 거부한다.
 

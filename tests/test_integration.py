@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 import can_loader  # noqa: E402
 import heterogeneity  # noqa: E402
+import identification  # noqa: E402
 import kepco_loader  # noqa: E402
 import load_axis  # noqa: E402
 import mock_data  # noqa: E402
@@ -185,6 +186,26 @@ def test_kill_criteria_model_can_and_high_fail_rate(mock_env, tmp_path):
     v = table.set_index("번호")["판정"]
     assert v[5] == "실패"
     assert v[8] == "경고" and "model" in table.set_index("번호").at[8, "근거"]
+
+
+def test_check10_uses_configured_kepco_source(mock_env, tmp_path):
+    """R4: check10 은 항상 KEPCO_001이 아니라 P["kepco"]["source"]에 맞는 파일을 읽어야 한다."""
+    missing = tmp_path / "missing_kepco_002.csv"
+    table = run_checks(mock_env["config"], params_override={"kepco": {"source": "002"}},
+                       paths_override={"kepco_002": str(missing)}, write=False)
+    v = table.set_index("번호")["판정"]
+    assert v[10] == "오류", table.set_index("번호").at[10, "근거"]
+
+
+def test_check10_reports_sample_shortage_as_warning_not_error(mock_env, monkeypatch):
+    """R4: estimate_mde 의 표본 부족 ValueError 는 '오류'가 아니라 '경고'로 내려야 한다."""
+    def boom(*args, **kwargs):
+        raise ValueError("MDE 표본 부족: 실제 처치 1 · never-treated 0")
+    monkeypatch.setattr(identification, "estimate_mde", boom)
+    table = run_checks(mock_env["config"], write=False)
+    row = table.set_index("번호").loc[10]
+    assert row["판정"] == "경고"
+    assert "표본 기반 참고값" in row["근거"] and "pipeline 4.5" in row["근거"] and "표본 부족" in row["근거"]
 
 
 # ---------------------------------------------------------------- 격리·분기

@@ -53,6 +53,10 @@ DEFAULT_PARAMS = {
         "date_start": None, "date_end": None,
         "sido": None,
         "chunksize": 2_000_000,
+        # 소표본 억제 기준: "max"(기본) = 공개 값을 만든 셀·기간의 시간별 고객호수 최댓값,
+        # "min" = 예전 방식(최솟값 — 새벽 한 시간만 적어도 법정동 전체가 가려짐).
+        # 고객호수 정의(고정 등록 수 vs 그 시간 충전 고객 수)가 사무국 답변으로 확정되면 바꾼다(R1, 2026-09-19).
+        "suppress_basis": "max",
     },
     "bjd": {"fail_warn_rate": 0.30},
     "activation": {
@@ -129,7 +133,10 @@ DEFAULT_PARAMS = {
                  "weight_delta": 0.15, "top_share": 0.20, "robust_share": 0.90},
     "kill": {"sample_rows": 2_000_000, "compare_rows": 1_000_000, "kepco_max_chunks": None,
              "cf_min_regions": 30, "es_min_regions": 10, "min_tizo": 4, "mask_max_rate": 0.30,
-             "access_match_min": 0.70, "robust_top_min_share": 0.05, "mde_warn": 0.05},
+             "access_match_min": 0.70, "robust_top_min_share": 0.05,
+             # mde_warn 0.03(2026-09-19, R5): Nature Communications(2024) 보고 충전소 인근 사업장
+             # 매출 효과 0.8~1.4% 참고. 법정동 단위 집계에서는 더 희석되므로 0.05보다 보수적으로 낮춤.
+             "mde_warn": 0.03},
     "outputs": {"dpi": 150, "png_max_rows": 30},
 }
 

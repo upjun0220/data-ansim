@@ -10,9 +10,12 @@ from matplotlib import font_manager
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import identification
+import kepco_loader
+import priority_score
 from config import DEFAULT_PARAMS
 from outputs import setup_korean_font
-from pipeline import _energy_load_window, _kepco_export, _warn_energy_calendar
+from pipeline import (_energy_load_window, _exclude_small_activation, _exclude_small_cells, _kepco_export,
+                      _period_customer_count, _warn_energy_calendar)
 
 
 def test_mde_null_effect_mean_is_within_two_empirical_se():
@@ -61,3 +64,72 @@ def test_kepco_small_cells_are_only_hidden_in_png():
     assert csv["daily_kwh"].tolist() == [10.0, 20.0]
     assert csv["소표본억제"].tolist() == [True, False]
     assert np.isnan(png.loc[0, "daily_kwh"]) and png.loc[1, "daily_kwh"] == 20.0
+
+
+# ---------------------------------------------------------------- R1: 소표본 억제 기준(max/min)
+
+def test_period_customer_count_max_avoids_single_low_hour_suppression():
+    """새벽 한 시간만 고객이 적어도(A) 낮에 고객이 많으면 최댓값 기준으로는 가리지 않는다."""
+    mh = pd.DataFrame({
+        "bjd_code": ["A", "A", "B", "B"],
+        "mi": [1, 1, 1, 1],
+        "hour": [3, 14, 3, 14],
+        "cust_min": [1, 20, 1, 2],
+    })
+    max_count = _period_customer_count(mh, "cust_min", "max")
+    min_count = _period_customer_count(mh, "cust_min", "min")
+    assert max_count.to_dict() == {"A": 20, "B": 2}
+    assert min_count.to_dict() == {"A": 1, "B": 1}
+    _, png = _kepco_export(pd.DataFrame({"bjd_code": ["A", "B"], "daily_kwh": [10.0, 20.0]}),
+                           max_count, 3, ["daily_kwh"])
+    assert png.loc[0, "daily_kwh"] == 10.0    # A: 새벽 1명뿐이어도 낮 20명 있으면 억제 안 함
+    assert np.isnan(png.loc[1, "daily_kwh"])  # B: 최댓값도 2명 미만 → 여전히 억제(보수적 유지)
+
+
+def test_period_customer_count_rejects_unknown_basis():
+    mh = pd.DataFrame({"bjd_code": ["A"], "mi": [1], "cust_min": [5]})
+    with pytest.raises(ValueError, match="suppress_basis"):
+        _period_customer_count(mh, "cust_min", "average")
+
+
+# ---------------------------------------------------------------- R2: 전국 합계표·예시 그림 억제
+
+def test_exclude_small_cells_removes_contribution_from_png_aggregate_only():
+    daily = pd.DataFrame({
+        "bjd_code": ["A", "A", "B", "B"],
+        "mi": [1, 2, 1, 2],
+        "kwh_per_day": [10.0, 10.0, 5.0, 5.0],
+    })
+    # A: 1월 대표 고객호수 2(소표본), 2월은 10(정상). B는 항상 정상.
+    rep = pd.Series({("A", 1): 2, ("A", 2): 10, ("B", 1): 10, ("B", 2): 10})
+    rep.index = pd.MultiIndex.from_tuples(rep.index, names=["bjd_code", "mi"])
+    visible = _exclude_small_cells(daily, rep, 3, "test")
+    assert set(visible[["bjd_code", "mi"]].itertuples(index=False, name=None)) == {("A", 2), ("B", 1), ("B", 2)}
+    csv_total = daily.groupby("mi")["kwh_per_day"].sum()
+    png_total = visible.groupby("mi")["kwh_per_day"].sum().reindex(csv_total.index).fillna(0)
+    assert csv_total[1] == 15.0   # CSV(전체)는 A의 소표본 1월 값도 포함
+    assert png_total[1] == 5.0    # PNG 집계는 A의 1월 기여분을 뺀다
+
+
+def test_exclude_small_activation_drops_small_treated_regions_from_examples():
+    act = pd.DataFrame({"bjd_code": ["A", "B", "C"], "status": ["treated", "treated", "never_treated"]})
+    rep = pd.Series({"A": 1, "B": 10, "C": 10})
+    eligible, n_excluded = _exclude_small_activation(act, rep, 3)
+    assert n_excluded == 1
+    assert set(eligible["bjd_code"]) == {"B", "C"}
+
+
+# ---------------------------------------------------------------- R3: 계절 커버리지는 8-A 필터와 무관
+
+def test_seasonal_coverage_scan_ignores_8a_date_window(tmp_path):
+    dates = pd.date_range("2025-01-01", periods=370, freq="D")
+    path = tmp_path / "hourly.csv"
+    pd.DataFrame({"조회기간": [f"{d.strftime('%Y%m%d')}00" for d in dates]}).to_csv(
+        path, index=False, encoding="utf-8")
+    # 8-A 평가창처럼 12월만 보는 좁은 date_start/date_end가 섞여 있어도 무시하고 전체를 스캔해야 한다.
+    narrow_8a_params = {"chunksize": 100, "date_start": "2025-12-01", "date_end": "2025-12-31"}
+    scanned = kepco_loader.scan_observed_dates(path, {"period": "조회기간"}, narrow_8a_params)
+    assert len(scanned) == 370
+    coverage = priority_score.seasonal_coverage(scanned)
+    assert coverage["season_status"] == "검증 가능"
+    assert coverage["missing_seasons"] == ""
