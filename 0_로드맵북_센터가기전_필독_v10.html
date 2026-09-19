@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>충전 리플맵 로드맵북 v10</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#F3F6F5; --sheet:#FFFFFF; --ink:#16232A; --ink-2:#44555D; --ink-3:#6E7F86;
+  --line:#D3DEDB; --line-2:#E4ECEA;
+  --volt:#0D6B70; --volt-soft:#DCEEEE; --amber:#B8700F; --amber-soft:#FBEFD9;
+  --red:#B0362C; --red-soft:#F8E1DE; --good:#2D7A4C; --good-soft:#DDF0E3;
+  --code-bg:#EAF0EE;
+  --serif:"Gowun Batang","Noto Serif KR","Nanum Myeongjo",serif;
+  --sans:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",Consolas,"D2Coding",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F171B; --sheet:#152127; --ink:#E5EEEC; --ink-2:#B3C2C1; --ink-3:#83959A;
+    --line:#2A3A40; --line-2:#1E2C32;
+    --volt:#5EC3C4; --volt-soft:#163539; --amber:#E7A94A; --amber-soft:#35291A;
+    --red:#EE8A7F; --red-soft:#3A2020; --good:#74C795; --good-soft:#18322A; --code-bg:#1B2A30;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F171B; --sheet:#152127; --ink:#E5EEEC; --ink-2:#B3C2C1; --ink-3:#83959A;
+  --line:#2A3A40; --line-2:#1E2C32;
+  --volt:#5EC3C4; --volt-soft:#163539; --amber:#E7A94A; --amber-soft:#35291A;
+  --red:#EE8A7F; --red-soft:#3A2020; --good:#74C795; --good-soft:#18322A; --code-bg:#1B2A30;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0;word-break:keep-all;overflow-wrap:break-word}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 80px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);gap:0}}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);align-self:start;font-size:14px;max-height:calc(100vh - 40px);overflow:auto}
+@media (max-width:900px){nav.toc{position:static;max-height:none;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:24px}}
+@media (max-width:900px){nav.toc ol{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+nav.toc p{font-size:12px;letter-spacing:.08em;color:var(--ink-3);margin:0 0 8px}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+nav.toc a{display:grid;grid-template-columns:2.2em 1fr;color:var(--ink-2);text-decoration:none;padding:4px 6px;border-radius:6px}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--volt-soft);color:var(--ink);outline:none}
+nav.toc a span{font-family:var(--mono);color:var(--volt);font-size:12px;padding-top:2px}
+main{min-width:0}
+header.cover{padding-block:8px 36px;border-bottom:2px solid var(--ink);margin-bottom:12px}
+.eyebrow{font-size:13px;letter-spacing:.1em;color:var(--volt);font-weight:600;margin:0 0 10px}
+h1{font-family:var(--serif);font-size:clamp(34px,5vw,50px);line-height:1.2;margin:0 0 14px;text-wrap:balance;font-weight:700}
+.lede{font-size:18px;color:var(--ink-2);max-width:40em;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:20px;font-size:13px;color:var(--ink-3)}
+section.ch{padding-block:44px 8px;border-bottom:1px solid var(--line)}
+section.ch:last-of-type{border-bottom:0}
+.chno{font-family:var(--mono);font-size:13px;color:var(--volt);letter-spacing:.06em;margin:0 0 6px}
+h2{font-family:var(--serif);font-size:clamp(26px,3.4vw,32px);line-height:1.3;margin:0 0 18px;text-wrap:balance}
+h3{font-size:18px;margin:32px 0 10px;line-height:1.4}
+p{margin:0 0 14px;max-width:42em}
+ul,ol{margin:0 0 14px;padding-left:1.3em;max-width:42em}
+li{margin:4px 0}
+strong{font-weight:600}
+code,kbd{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 6px;border-radius:4px}
+pre{font-family:var(--mono);font-size:13.5px;line-height:1.6;background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:auto;margin:0 0 16px;max-width:100%}
+pre code{background:none;padding:0}
+.env{display:inline-block;font-size:12px;font-weight:600;color:var(--volt);border:1px solid var(--volt);border-radius:999px;padding:0 10px;margin-bottom:6px}
+.easy{background:var(--volt-soft);border-radius:10px;padding:16px 18px;margin:0 0 18px;max-width:46em}
+.easy b.tag{display:block;font-size:12px;letter-spacing:.08em;color:var(--volt);margin-bottom:4px}
+.easy p:last-child{margin-bottom:0}
+.warn{background:var(--amber-soft);border-left:4px solid var(--amber);padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 18px;max-width:46em}
+.warn b.tag{display:block;font-size:12px;letter-spacing:.08em;color:var(--amber);margin-bottom:4px}
+.warn p:last-child,.warn ul:last-child{margin-bottom:0}
+.stop{background:var(--red-soft);border-left:4px solid var(--red);padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 18px;max-width:46em}
+.stop b.tag{display:block;font-size:12px;letter-spacing:.08em;color:var(--red);margin-bottom:4px}
+.tbl{overflow-x:auto;margin:0 0 20px;border:1px solid var(--line);border-radius:8px;background:var(--sheet)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.6}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line-2)}
+th{font-size:12.5px;letter-spacing:.04em;color:var(--ink-3);font-weight:600;background:var(--paper);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);color:var(--volt);white-space:nowrap}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;white-space:nowrap}
+.p-must{background:var(--red-soft);color:var(--red)}
+.p-iso{background:var(--good-soft);color:var(--good)}
+.p-opt{background:var(--amber-soft);color:var(--amber)}
+.p-info{background:var(--volt-soft);color:var(--volt)}
+/* 폴더 지도 */
+.tree{font-family:var(--mono);font-size:13.5px;line-height:1.75;background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:14px 18px;overflow-x:auto;white-space:pre;margin:0 0 18px}
+.tree .c{color:var(--ink-3)}
+.tree .h{color:var(--volt);font-weight:500}
+/* 파이프라인 레일 */
+.rail{list-style:none;padding:0;margin:0 0 20px;max-width:none;display:grid;gap:0}
+.rail li{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;margin:0;position:relative;padding-bottom:14px}
+.rail li::before{content:"";position:absolute;left:31px;top:30px;bottom:0;width:2px;background:var(--line)}
+.rail li:last-child::before{display:none}
+.rail .st{font-family:var(--mono);font-size:13px;font-weight:500;width:64px;height:30px;border-radius:6px;display:grid;place-items:center;background:var(--sheet);border:1.5px solid var(--ink-3);color:var(--ink);position:relative;z-index:1}
+.rail .st.must{border-color:var(--red);color:var(--red)}
+.rail .st.iso{border-color:var(--good);color:var(--good)}
+.rail .bd{padding-top:2px}
+.rail .bd b{font-size:15.5px}
+.rail .bd p{margin:2px 0 0;font-size:14.5px;color:var(--ink-2)}
+.rail .group{font-size:12px;letter-spacing:.08em;color:var(--ink-3);margin:6px 0 10px 78px}
+/* 파일 사전 */
+.files{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin:0 0 20px}
+.file{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.file h4{margin:0;font-family:var(--mono);font-size:14.5px;font-weight:500;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}
+.file h4 small{font-family:var(--sans);font-size:12px;color:var(--ink-3);font-weight:400}
+.file .one{font-weight:600;margin:0;font-size:15px}
+.file .like{margin:0;font-size:14px;color:var(--ink-2)}
+.file dl{margin:4px 0 0;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13.5px}
+.file dt{color:var(--ink-3)}
+.file dd{margin:0}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13.5px;color:var(--ink-2);margin:0 0 16px}
+.checklist{list-style:none;padding:0}
+.checklist li{padding-left:28px;position:relative}
+.checklist li::before{content:"";position:absolute;left:2px;top:.45em;width:14px;height:14px;border:1.5px solid var(--volt);border-radius:3px}
+.steps{counter-reset:s;list-style:none;padding:0;max-width:46em}
+.steps>li{counter-increment:s;padding-left:40px;position:relative;margin:0 0 16px}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:13px;display:grid;place-items:center}
+.day{font-family:var(--serif);font-size:20px;margin:28px 0 12px}
+dl.gloss{display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:0;margin:0 0 20px;border-top:1px solid var(--line)}
+dl.gloss dt,dl.gloss dd{padding:10px 0;border-bottom:1px solid var(--line-2);margin:0}
+dl.gloss dt{font-weight:600;padding-right:14px}
+@media (max-width:560px){dl.gloss{grid-template-columns:1fr}dl.gloss dt{border-bottom:0;padding-bottom:0}}
+a{color:var(--volt)}
+a:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
+footer{margin-top:40px;font-size:13px;color:var(--ink-3)}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth}
+section[id]{scroll-margin-top:16px}
+</style>
+</head><body>
+
+<div class="wrap">
+<nav class="toc" aria-label="목차">
+  <p>차례</p>
+  <ol>
+    <li><a href="#ch0"><span>00</span>5분 요약</a></li>
+    <li><a href="#ch1"><span>01</span>우리가 하려는 것</a></li>
+    <li><a href="#ch2"><span>02</span>폴더 지도</a></li>
+    <li><a href="#ch3"><span>03</span>데이터</a></li>
+    <li><a href="#ch4"><span>04</span>분석 순서 한눈에</a></li>
+    <li><a href="#ch5"><span>05</span>코드 파일 사전</a></li>
+    <li><a href="#ch6"><span>06</span>첫날 점검 16항목</a></li>
+    <li><a href="#ch7"><span>07</span>센터에서 할 일</a></li>
+    <li><a href="#ch8"><span>08</span>설정값 바꾸는 법</a></li>
+    <li><a href="#ch9"><span>09</span>결과물 읽는 법</a></li>
+    <li><a href="#ch10"><span>10</span>아직 안 풀린 문제</a></li>
+    <li><a href="#ch11"><span>11</span>심사 질문 대비</a></li>
+    <li><a href="#ch12"><span>12</span>용어 사전</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="cover">
+  <p class="eyebrow">2026 데이터안심구역 경진대회 · 팀 공부용</p>
+  <h1>충전 리플맵 로드맵북 v10</h1>
+  <p class="lede">센터에 가기 전에 이것 하나만 읽으면 된다. 우리가 뭘 하려는지, 어떤 데이터를 쓰는지, 코드 파일 하나하나가 무슨 일을 하는지, 센터에서 첫날 무엇을 누르고 무엇을 확인하는지를 순서대로 적었다.</p>
+  <div class="meta"><span>v10 · 기준일 2026-09-19(밤)</span><span>기준 문서: 전체설계 V9 수정본(9/19) · 연구계획서(9/19) · 코드(P0~P2 반영본, 전화 확인 대비)</span></div>
+</header>
+
+<!-- 00 -->
+<section class="ch" id="ch0">
+  <p class="chno">00</p>
+  <h2>5분 요약</h2>
+  <div class="easy">
+    <b class="tag">한 줄로</b>
+    <p><strong>전기차 충전이 한꺼번에 몰리는 동네를 찾고, 그 동네에 배터리(ESS)를 두면 부담이 얼마나 줄어드는지, 충전기가 부족한 동네는 어디인지를 합쳐서 “어디부터 살펴봐야 하는지” 순위표를 만든다.</strong></p>
+  </div>
+  <ul>
+    <li><strong>무엇을 만드나:</strong> 법정동(동네)별 “공공 충전 인프라 검토 우선순위 지도”. 안전·형평성·경제성 세 가지 점수를 합친다.</li>
+    <li><strong>상권(카드 매출)은?</strong> 충전이 늘면 동네 가게 매출이 느는지도 보지만, <em>참고용 부가 결과</em>다. 순위 점수에는 넣지 않는다.</li>
+    <li><strong>어디서 하나:</strong> 데이터안심구역 센터(인터넷 없는 보안 PC). 원자료는 밖으로 못 가져오고, 동네 단위로 묶은 표·그림만 심사를 받고 반출한다.</li>
+    <li><strong>코드는?</strong> 이미 다 짜 두었다. 가상 데이터로 전 과정이 돌아가는 것까지 확인했다(테스트 72개 통과). 센터에서는 경로와 설정값만 바꿔서 돌린다.</li>
+    <li><strong>첫날 가장 중요한 일:</strong> <code>kill_criteria</code>(첫날 점검)를 돌려서 “이 데이터로 계획대로 갈 수 있는지”를 판정받는 것. 분석은 그다음이다.</li>
+  </ul>
+  <div class="warn">
+    <b class="tag">솔직하게 알고 가야 할 것</b>
+    <p>상권 효과는 아마 “통계적으로 유의하지 않음”으로 나올 가능성이 높다. 선행연구의 효과 크기(약 1%)보다 우리 데이터로 잡을 수 있는 최소 크기(가상 데이터 기준 약 9%)가 훨씬 크기 때문이다. 이건 실패가 아니라 미리 예상한 결과이고, 그래서 상권은 부가 결과로 뒀다. 자세한 건 <a href="#ch9">09장</a>.</p>
+  </div>
+  <div class="easy">
+    <b class="tag">v10 변경점 (9/19 밤)</b>
+    <ul>
+      <li><strong>순위표 고침:</strong> 세 점수가 모두 있는 동네만 순위에 넣는다. 예전엔 점수 하나만 있는 동네가 오히려 1위로 뜨는 문제가 있었다. 나머지는 “부하 미평가 — 접근성 부족만 확인” 별도 목록(<code>s8e_not_ranked</code>)으로 낸다.</li>
+      <li><strong>축 중복 경고:</strong> 안전·경제성 점수가 사실상 같은 값인지 자동으로 재서 경고한다(0.9 이상이면 “세 축이 아니라 두 축”).</li>
+      <li><strong>한글 폰트가 없어도 그림 생성:</strong> 영문 라벨로 대체해서 진행한다(기본). 예전엔 반출 그림이 □로 깨졌다.</li>
+      <li><strong>소수 셀 기준 이름 정리:</strong> <code>params.output.min_cell_count</code>. 옛 이름도 통한다. 고객호수 정의별 <code>suppress_basis</code> 결정표를 README에 넣었다.</li>
+      <li><strong>KEPCO 수록 기간 점검(16번):</strong> 고른 원천이 분석 창 끝보다 일찍 끝나는지 확인하고, 창을 줄이는 옵션(<code>activation.clip_to_data</code>)을 넣었다.</li>
+      <li><strong>발표 숫자 3개 표(<code>s9_headline</code>)</strong>와 접근성 지표 1·2 추가. 신한카드 시도별 분할(<code>shc.sido</code>), 반입 묶음 점검 도구도 추가.</li>
+      <li><strong>설계 원본 V9를 9/19 수정본으로 교체.</strong> LH 자료는 신청 범위 밖으로 정정, 지표 3과 300/500m 커버리지는 후속.</li>
+      <li><strong>방법론 감사 반영:</strong> 사전추세로 지역을 제외하는 옵션 삭제, CATE는 BLP 교정 검정을 통과해야 보고(미충족이면 4사분면은 부하 집중도만으로), 위약은 “0과 구분되는가”로 판정, 추정량 이름 정정(“충전 활동 활성화 시점의 외지 대기소비 매출 변화”).</li>
+      <li><strong>결정이 필요한 것:</strong> 행정동 기준일 때의 대응 방식, <code>kepco.source</code> 기본값 통일(<a href="#ch10">10장</a>).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 01 -->
+<section class="ch" id="ch1">
+  <p class="chno">01</p>
+  <h2>우리가 하려는 것</h2>
+  <div class="easy">
+    <b class="tag">비유로 먼저</b>
+    <p>아파트 한 동에 콘센트가 10개 있는데, 저녁 7시에 모두가 한꺼번에 전자레인지를 돌리면 차단기가 내려갈 수 있다. 전기차 충전도 비슷하다. 퇴근 후 저녁에 충전이 몰리는 동네가 있다.</p>
+    <p>우리는 (1) 어느 동네가 저녁에 몰리는지 찾고, (2) 낮에 미리 충전해 뒀다가 저녁에 대신 전기를 내주는 “큰 보조배터리(ESS)”를 두면 얼마나 줄어드는지 계산하고, (3) 애초에 충전기가 부족한 동네는 어디인지 재서, 세 가지를 합친 순위를 만든다.</p>
+  </div>
+
+  <h3>세 가지 점수 (공공가치 세 축)</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>축</th><th>쉽게 말하면</th><th>실제로 계산하는 것</th><th>담당 단계</th></tr></thead>
+    <tbody>
+      <tr><td><strong>안전</strong></td><td>충전이 너무 몰려서 전기 설비가 힘든 동네</td><td>정한 상한선을 넘는 충전량(kWh). 상한선 = 평소 최대 충전량의 1.1~1.3배</td><td class="num">8-B</td></tr>
+      <tr><td><strong>형평성</strong></td><td>집에서 충전하기 어렵고, 근처 공용 충전기도 부족한 동네</td><td>2SFCA 접근성 점수(반경 300/500/800m 안의 충전기 대비 전기차 수)</td><td class="num">8-C</td></tr>
+      <tr><td><strong>경제성</strong></td><td>배터리를 두면 전기요금 기준으로 얼마나 아끼는지</td><td>SMP(전력 도매가격) 기준 비용 차이. 설치비·수명은 미포함</td><td class="num">8-B</td></tr>
+    </tbody>
+  </table></div>
+  <p>세 점수를 각각 0~1로 맞춘 뒤 똑같은 비중(각 1/3)으로 더한 게 <strong>결합점수</strong>(8-E)다. 비중을 바꿔도 순위가 유지되는지(민감도)도 같이 본다.</p>
+
+  <h3>우리가 주장하지 <u>않는</u> 것</h3>
+  <p>심사 때 가장 많이 찔리는 부분이라 외워 두자.</p>
+  <ul>
+    <li>“정전을 막았다”, “변압기 교체비를 아꼈다” — <strong>아니다.</strong> 한전 변압기 용량 자료가 없어서 상한선은 우리가 정한 가정이다.</li>
+    <li>“ESS 최적 용량을 구했다” — <strong>아니다.</strong> 미리 정한 후보 7개 중 조건을 만족하는 가장 작은 걸 고른 것이다.</li>
+    <li>“충전 취약계층 몇 명이 혜택을 본다” — <strong>아니다.</strong> 소득 자료가 없어서 사람 수는 못 센다. 물리적 거리·대수만 잰다.</li>
+    <li>“충전소 때문에 매출이 X% 올랐다” — 확정적으로 말하지 않는다. 조건부 추정이고, 부가 편익이다.</li>
+  </ul>
+
+  <h3>방향이 어떻게 바뀌어 왔나</h3>
+  <p>처음(4.0안, 9/14)에는 “충전소가 상권 매출을 올리는가”가 주제였다. 그 뒤 “공공 예산을 왜 상권에 쓰나”라는 약점 때문에 <strong>주민 전력 안전·충전 접근성·비용</strong>을 주축으로 바꿨다(V6~V9). 그래서 프로젝트 폴더에 남아 있는 4.0 통합안은 <em>옛날 방향</em>이다. 지금 기준은 V9다.</p>
+</section>
+
+<!-- 02 -->
+<section class="ch" id="ch2">
+  <p class="chno">02</p>
+  <h2>폴더 지도</h2>
+  <p>코드 파일은 서로를 불러 쓰기 때문에 폴더 맨 위에 그대로 둬야 한다. 문서만 <code>문서/</code>로 모았다.</p>
+<div class="tree"><span class="h">공모전2/</span>
+├── <span class="h">문서/</span>                                   <span class="c">← 사람이 읽는 것</span>
+│   ├── 0_로드맵북_센터가기전_필독.html        <span class="c">← 지금 이 책</span>
+│   ├── 1_팀공유_전체설계_V9_20260919_수정.html     <span class="c">← 설계 원본(자세함, 수식 포함)</span>
+│   ├── 2_센터제출용_데이터이용신청_연구계획서_20260919.docx / .pdf
+│   │                                         <span class="c">← 센터 이용신청 때 내는 4쪽 참고자료</span>
+│   ├── 3_센터·사무국_문의문안_20260919.md     <span class="c">← 사전 문의할 질문 목록</span>
+│   └── _이전버전/                            <span class="c">← 9/17 연구계획서 등, 안 봐도 됨</span>
+├── pipeline.py 외 .py 파일 18개              <span class="c">← 분석 코드 (05장)</span>
+├── <span class="h">config/</span>                                  <span class="c">← 설정 파일 (08장)</span>
+│   ├── field_template.json                  <span class="c">← 센터용 설정 원본(복사해서 씀)</span>
+│   ├── industry_codes_template.json         <span class="c">← 업종 코드 원본(센터에서 채움)</span>
+│   └── mock.json                            <span class="c">← 가상 데이터 연습용</span>
+├── <span class="h">tests/</span>                                   <span class="c">← 코드가 맞게 도는지 자동 검사</span>
+├── <span class="h">tools/</span>build_reference_files.py · check_import_bundle.py <span class="c">← 참고자료 만들기 · 반입 묶음 점검</span>
+├── <span class="h">data/</span>ref/  data/mock/                     <span class="c">← 공개 원본 / 가상 데이터</span>
+├── out/                                     <span class="c">← 실행 결과(자동 생성)</span>
+├── README.md                                <span class="c">← 개발자용 설명서</span>
+└── requirements.txt                         <span class="c">← 필요한 파이썬 패키지 목록</span></div>
+  <div class="easy">
+    <b class="tag">어떤 문서를 누구에게</b>
+    <p><strong>팀원 공부용</strong> → 이 로드맵북 · <strong>설계를 깊게 볼 때</strong> → 1번 V9 · <strong>센터에 낼 때</strong> → 2번 연구계획서 · <strong>문의 담당</strong> → 3번 문의문안</p>
+  </div>
+</section>
+
+<!-- 03 -->
+<section class="ch" id="ch3">
+  <p class="chno">03</p>
+  <h2>데이터</h2>
+  <div class="easy">
+    <b class="tag">핵심 규칙</b>
+    <p>센터 데이터는 <strong>센터 안에서만</strong> 볼 수 있다. 우리가 밖에서 가져가는 것(반입)은 미리 신청한 파일만 들어가고, 결과를 밖으로 가져오는 것(반출)은 동네 단위 이상으로 묶은 표·그림만, 심사를 받고 나온다.</p>
+  </div>
+
+  <h3>센터에서 받는 데이터 (신청 데이터)</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>이름</th><th>뭐가 들어 있나</th><th>우리가 쓰는 곳</th><th>크기·기간</th></tr></thead>
+    <tbody>
+      <tr><td><strong>KEPCO_001</strong><br><small>한전 전기차 충전량</small></td><td>동네별·날짜별·시간별 충전 전력량, 고객호수</td><td>충전 몰림(8), 다음날 예측(8-A), 배터리 계산(8-B)</td><td>1.02GB · 2023~2025</td></tr>
+      <tr><td><strong>KEPCO_002</strong><br><small>충전사업자용 충전량</small></td><td>001과 같은 형식, 공용 충전 사업자 쪽</td><td>“충전이 갑자기 늘어난 시점” 찾기(2)</td><td>698MB · 2023~2025</td></tr>
+      <tr><td><strong>SHC001</strong><br><small>신한카드 가맹점</small></td><td>동네·업종별 가게 수, 개업·폐업</td><td>동네 특성(7), 가게가 한꺼번에 생겼는지 확인(6.5)</td><td>68MB · 2025년</td></tr>
+      <tr><td><strong>SHC002</strong><br><small>신한카드 매출</small></td><td>동네·업종·시간대·손님 거주 거리별 매출</td><td>상권 효과(4~7)</td><td>3.13GB · 2025년 · 8개 시도</td></tr>
+      <tr><td><strong>티벨 CAN</strong><br><small>차량 운행 기록(선택)</small></td><td>차량 위치·배터리 잔량 기록</td><td>충전이 하루 중 언제 몰리는지 모양(3). 없어도 됨</td><td>미확인</td></tr>
+    </tbody>
+  </table></div>
+  <p>주의: 신한카드 파일은 칸 구분이 쉼표가 아니라 <code>|</code>(파이프)다. 코드는 자동으로 알아낸다.</p>
+
+  <h3>우리가 들고 가는 것 (반입)</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>파일</th><th>왜 필요한가</th><th>없으면</th></tr></thead>
+    <tbody>
+      <tr><td>분석 코드 묶음(.py, config, requirements)</td><td>분석 자체</td><td>아무것도 못 함</td></tr>
+      <tr><td>법정동 참고자료 3종(코드 마스터·코드대응표·중심점)</td><td>한전(이름)과 신한카드(코드)를 같은 동네로 맞추기</td><td>0단계 중단</td></tr>
+      <tr><td>SMP(전력 도매가격) CSV</td><td>경제성 점수</td><td>비용 결측, 피크만 계산</td></tr>
+      <tr><td>공용 충전소 위치(위도·경도·충전기 수)</td><td>형평성 점수(8-C)</td><td>8-C·8-E 생략</td></tr>
+      <tr><td>법정동별 전기차 등록대수 <small>(행정동→법정동 미리 변환)</small></td><td>형평성 점수(8-C)</td><td>8-C·8-E 생략</td></tr>
+      <tr><td>한글 폰트 파일(.ttf) — 서버에 없을 때만</td><td>반출 그림의 한글</td><td>영문 라벨로 대체해 진행(기본). 한글 그림이 필요하면 폰트 반입</td></tr>
+      <tr><td>반입 묶음 규정 확인</td><td>최대 10개·총 50MB·데이터는 CSV만. 예: 코드 zip 1 + 데이터 6 + 폰트 1 = <strong>8개</strong>(V9 0-5절은 데이터 6개만 셈)</td><td><code>tools/check_import_bundle.py</code>로 점검</td></tr>
+    </tbody>
+  </table></div>
+  <div class="stop">
+    <b class="tag">지금 서류에 빠져 있음</b>
+    <p>연구계획서(9/19) 3절 반입자료에는 코드와 법정동 참고자료만 있고, <strong>SMP·충전소 위치·전기차 등록</strong>이 없다. 이대로 신청하면 형평성·결합점수를 센터에서 못 돌린다. 신청 전에 추가해야 한다(<a href="#ch10">10장</a>).</p>
+  </div>
+</section>
+
+<!-- 04 -->
+<section class="ch" id="ch4">
+  <p class="chno">04</p>
+  <h2>분석 순서 한눈에</h2>
+  <p><code>pipeline.py</code>를 한 번 실행하면 아래 단계가 위에서부터 차례로 돈다.</p>
+  <div class="legend">
+    <span><span class="pill p-must">필수</span> 실패하면 전체가 멈춤</span>
+    <span><span class="pill p-iso">격리</span> 실패해도 건너뛰고 계속</span>
+  </div>
+  <p class="group" style="margin-left:0;font-size:12px;letter-spacing:.08em;color:var(--ink-3)">준비 — 동네 맞추고 충전 기록 정리</p>
+  <ol class="rail">
+    <li><span class="st must">0·1</span><div class="bd"><b>동네 이름 맞추기 + 충전량 집계</b><p>한전은 “서울 강남구 역삼동” 같은 글자, 신한카드는 숫자 코드. 둘을 같은 법정동 코드로 통일하고, 한전 충전량을 동네×월×시간으로 묶는다.</p></div></li>
+    <li><span class="st must">2</span><div class="bd"><b>충전이 갑자기 늘어난 달 찾기</b><p>동네별 충전량 그래프에서 계단처럼 확 뛴 시점(활성화 시점)을 찾는다. 2025년 3~9월에 뛴 동네가 “처치 지역”, 한 번도 안 뛴 동네가 “비교 지역”.</p></div></li>
+    <li><span class="st iso">3</span><div class="bd"><b>차량 기록(CAN) 정리</b><p>충전이 하루 중 언제 몰리는지 모양을 만든다. CAN이 없으면 설정값 모양을 대신 쓴다.</p></div></li>
+  </ol>
+  <p class="group" style="margin-left:0;font-size:12px;letter-spacing:.08em;color:var(--ink-3)">상권 — 부가 결과</p>
+  <ol class="rail">
+    <li><span class="st must">4</span><div class="bd"><b>카드 매출을 한 숫자로 줄이기</b><p>“외지 손님이 카페·편의점에서 쓴 돈”이 “동네 주민 소비”와 “병원·학원 같은 대조 업종”에 비해 얼마나 변했는지를 동네×월마다 한 숫자로 만든다.</p></div></li>
+    <li><span class="st iso">4.5</span><div class="bd"><b>잡을 수 있는 최소 효과(MDE) 계산</b><p>가짜로 충전이 늘었다고 쳐서 50번 돌려 보고, “이 데이터로는 최소 몇 % 효과부터 구별되는지”를 잰다. 상권 결과를 믿을지 여기서 판단한다.</p></div></li>
+    <li><span class="st must">5</span><div class="bd"><b>전후 비교(이벤트 스터디)</b><p>충전이 늘기 전 몇 달과 후 몇 달의 매출 변화를 비교 지역과 견준다.</p></div></li>
+    <li><span class="st must">6</span><div class="bd"><b>가짜 효과 검사(위약)</b><p>충전과 상관없어야 할 업종(병원 등)에서도 효과가 나오면, 그만큼 빼고 보고한다.</p></div></li>
+    <li><span class="st iso">6.5</span><div class="bd"><b>가게가 한꺼번에 생긴 동네 표시</b><p>상권 자체가 커지던 동네는 “유보” 표시.</p></div></li>
+    <li><span class="st iso">7</span><div class="bd"><b>어떤 동네에서 효과가 큰가(CATE)</b><p>업종 구성·외지 손님 비율에 따라 효과가 다른지 본다.</p></div></li>
+  </ol>
+  <p class="group" style="margin-left:0;font-size:12px;letter-spacing:.08em;color:var(--ink-3)">전력·형평성 — 주 결과</p>
+  <ol class="rail">
+    <li><span class="st iso">8</span><div class="bd"><b>충전 몰림 정도 + 4사분면</b><p>하루 중 가장 붐비는 한 시간이 전체의 몇 %인지(집중도)를 재고, 상권 효과와 묶어 4칸으로 나눈다.</p></div></li>
+    <li><span class="st iso">8-C</span><div class="bd"><b>충전기 접근성(형평성)</b><p>동네 중심에서 반경 안의 충전기 수 대비 전기차 수(2SFCA)를 잰다. 함께 “충전기 1기당 전기차 수”(지표 1)와 “가장 가까운 충전기까지 거리”(지표 2)도 낸다. 둘 다 동네 중심점 기준 근사다. 공개자료 2종이 있어야 돈다.</p></div></li>
+    <li><span class="st iso">8-A</span><div class="bd"><b>다음날 충전량 예측</b><p>“지난 4주 같은 요일·같은 시간 값의 가운데 값”으로 내일을 예측하고, 얼마나 틀리는지 잰다.</p></div></li>
+    <li><span class="st iso">8-B</span><div class="bd"><b>배터리(ESS) 시뮬레이션</b><p>충전기를 0/2/3/5대 더 놓고 상한선을 1.1/1.2/1.3배로 바꿔 가며, 배터리가 초과분을 얼마나 막는지 하루씩 계산한다.</p></div></li>
+    <li><span class="st iso">8-E</span><div class="bd"><b>결합점수(최종 순위)</b><p>안전·형평성·경제성을 합쳐 동네 순위를 매기고, 비중을 흔들어도 상위권인 “강건 상위군”을 표시한다. <strong>세 점수가 모두 있는 동네만 순위에 넣고</strong>, 나머지는 별도 목록으로 뺀다. 안전·경제성 점수가 사실상 같은 값이면 경고를 낸다.</p></div></li>
+    <li><span class="st iso">9</span><div class="bd"><b>반출용 표·그림 만들기</b><p>모든 표를 CSV(센터 안 작업용)와 PNG(반출용)로 저장하고, 파일 목록을 남긴다.</p></div></li>
+    <li><span class="st iso">9-H</span><div class="bd"><b>발표용 숫자 3개 표</b><p>발표 전면에 내세울 숫자 3개를 “증설 몇 대·상한 몇 배·이용률 몇 배” 가정과 함께 한 표(<code>s9_headline</code>)로 묶는다. 8-C나 8-B 결과가 있어야 돈다.</p></div></li>
+  </ol>
+  <div class="warn">
+    <b class="tag">순서에서 걸리는 점</b>
+    <p>지금 코드는 상권 단계(4·5·6)가 “필수”라서 여기서 실패하면 <strong>주 결과인 8-A~8-E까지 멈춘다.</strong> 8단계도 7단계(CATE) 결과가 있어야 돈다. 방향(상권=부가)과 거꾸로라서 코드 수정이 필요하다(<a href="#ch10">10장 1번</a>).</p>
+  </div>
+</section>
+
+<!-- 05 -->
+<section class="ch" id="ch5">
+  <p class="chno">05</p>
+  <h2>코드 파일 사전</h2>
+  <p>파일마다 “한 줄 역할 · 비유 · 넣는 것 · 나오는 것”. 단독으로 실행하는 파일은 <code>pipeline.py</code>, <code>kill_criteria.py</code>, <code>mock_data.py</code> 세 개뿐이고 나머지는 부품이다.</p>
+
+  <h3>직접 실행하는 파일</h3>
+  <div class="files">
+    <div class="file"><h4>pipeline.py <small>668줄 · 총감독</small></h4>
+      <p class="one">0~9단계를 순서대로 부르는 지휘자.</p>
+      <p class="like">비유: 요리 레시피 순서표. 재료 손질부터 담기까지 차례대로 시킨다.</p>
+      <dl><dt>넣는 것</dt><dd>config/field.json</dd><dt>나오는 것</dt><dd>out/…/csv, png, pipeline.log</dd></dl></div>
+    <div class="file"><h4>kill_criteria.py <small>365줄 · 첫날 점검</small></h4>
+      <p class="one">데이터가 계획대로 쓸 수 있는 상태인지 16개 항목을 판정.</p>
+      <p class="like">비유: 수술 전 건강검진. 여기서 걸리면 계획을 줄인다.</p>
+      <dl><dt>넣는 것</dt><dd>config/field.json (원자료 일부만 읽음)</dd><dt>나오는 것</dt><dd>k_kill_criteria 표 (통과/경고/실패/오류)</dd></dl></div>
+    <div class="file"><h4>mock_data.py <small>318줄 · 연습용</small></h4>
+      <p class="one">진짜와 같은 모양의 가짜 데이터를 만든다.</p>
+      <p class="like">비유: 모의고사 문제지. 정답(효과 크기)을 미리 심어 두고 코드가 맞히는지 본다.</p>
+      <dl><dt>나오는 것</dt><dd>data/mock/ (결론에 절대 쓰면 안 됨)</dd></dl></div>
+  </div>
+
+  <h3>재료 읽기·정리</h3>
+  <div class="files">
+    <div class="file"><h4>config.py <small>설정 창고</small></h4>
+      <p class="one">경로·컬럼 이름·숫자 기준을 한곳에 모아 둔 기본값.</p>
+      <p class="like">비유: 게임 옵션 메뉴. JSON에 적은 값이 여기 기본값을 덮어쓴다.</p></div>
+    <div class="file"><h4>common.py <small>공구함</small></h4>
+      <p class="one">CSV 읽기(인코딩·구분자 자동 판별), 날짜 변환, 거리 계산, p값 계산.</p>
+      <p class="like">비유: 모든 파일이 빌려 쓰는 드라이버·망치.</p></div>
+    <div class="file"><h4>bjd_mapping.py <small>0단계</small></h4>
+      <p class="one">한전 동네 이름 ↔ 법정동 10자리 코드 맞추기.</p>
+      <p class="like">비유: “역삼동”이라고 쓴 편지와 우편번호 06234를 짝짓는 우체국 직원. “역삼제1동”처럼 표기가 다르면 한 번 더 다듬어서 맞춘다.</p>
+      <dl><dt>나오는 것</dt><dd>매칭률표, 못 맞춘 동네 목록</dd></dl></div>
+    <div class="file"><h4>kepco_loader.py <small>1·2단계</small></h4>
+      <p class="one">한전 충전 파일을 읽어 동네×월×시간으로 묶고, 충전이 확 뛴 달을 찾는다.</p>
+      <p class="like">비유: 동네별 키 성장 기록표에서 “갑자기 큰 해”를 찾는 것.</p>
+      <dl><dt>나오는 것</dt><dd>s1 월별 집계, s2 활성화 시점</dd></dl></div>
+    <div class="file"><h4>can_loader.py <small>3단계 · 선택</small></h4>
+      <p class="one">차량 기록으로 충전 세션을 재구성하고 시간대 모양을 만든다.</p>
+      <p class="like">비유: 블랙박스 기록으로 “이 차는 매일 저녁 7시에 충전하네”를 알아내는 것. 개별 차량인지 차종 코드인지 먼저 판정한다.</p></div>
+    <div class="file"><h4>kep007_loader.py <small>3단계 · 이번엔 안 씀</small></h4>
+      <p class="one">한전 충전소 설치현황(KEP_007) 읽기.</p>
+      <p class="like">이번 신청에서 뺀 데이터라 현장 설정에서는 꺼 둔다(null).</p></div>
+  </div>
+
+  <h3>상권 분석 (부가)</h3>
+  <div class="files">
+    <div class="file"><h4>identification.py <small>4·4.5·5·6단계</small></h4>
+      <p class="one">카드 매출을 한 숫자로 줄이고, 전후 비교·위약 검사·MDE를 계산.</p>
+      <p class="like">비유: 약을 먹은 반과 안 먹은 반의 성적 변화를 비교하고, 약과 상관없는 과목(대조 업종)도 올랐는지 확인하는 것.</p>
+      <dl><dt>나오는 것</dt><dd>s4 패널, s45_mde, s5 이벤트, s6 위약</dd></dl></div>
+    <div class="file"><h4>diagnostics.py <small>6.5단계</small></h4>
+      <p class="one">충전이 늘던 때 가게가 한꺼번에 생긴 동네를 “유보”로 표시.</p>
+      <p class="like">비유: 성적이 오른 게 약 때문인지, 마침 과외를 시작해서인지 걸러내는 것.</p></div>
+    <div class="file"><h4>heterogeneity.py <small>7단계</small></h4>
+      <p class="one">어떤 특성의 동네에서 효과가 큰지 추정(CATE).</p>
+      <p class="like">EconML이 있으면 Causal Forest, 없으면 2×2 표로 대신한다.</p></div>
+  </div>
+
+  <h3>전력·형평성 (주 결과)</h3>
+  <div class="files">
+    <div class="file"><h4>load_axis.py <small>8단계</small></h4>
+      <p class="one">하루 중 가장 붐비는 시간의 비중(집중도) 계산 + 4사분면 분류.</p>
+      <p class="like">비유: 급식실이 12시 10분에만 미어터지는지, 하루 종일 고르게 오는지 재는 것.</p></div>
+    <div class="file"><h4>load_forecast.py <small>8-A</small></h4>
+      <p class="one">내일 충전량 예측 = 지난 4주 같은 요일·같은 시간의 가운데 값.</p>
+      <p class="like">비유: “지난 4번의 월요일 저녁이 이랬으니 이번 월요일도 비슷하겠지.” AI 모델이 아니라 기준 모델이다.</p></div>
+    <div class="file"><h4>ess_optimizer.py <small>8-B</small></h4>
+      <p class="one">배터리를 언제 충전하고 언제 내보낼지 하루 단위로 계산(선형계획, 없으면 그리디).</p>
+      <p class="like">비유: 물탱크. 물이 남는 새벽에 채워 두고, 다들 샤워하는 저녁에 보태 준다. 탱크 크기 후보 7개 중 넘치지 않는 가장 작은 걸 고른다.</p></div>
+    <div class="file"><h4>equity_access.py <small>8-C</small></h4>
+      <p class="one">2SFCA로 동네별 충전기 접근성 점수 계산 + 충전기 1기당 전기차 수·최근접 충전기 거리(지표 1·2, 중심점 근사).</p>
+      <p class="like">비유: 우리 동네 반경 500m 안 충전기 한 대를 몇 대의 전기차가 나눠 쓰는지. 옆 동네 충전기도 가까우면 같이 센다.</p></div>
+    <div class="file"><h4>priority_score.py <small>8-E</small></h4>
+      <p class="one">세 점수를 0~1로 맞춰 합치고, 비중을 흔들어 순위가 버티는지 확인. 세 점수가 다 있는 동네만 순위에 넣고, 안전·경제성 점수의 상관도 잰다.</p>
+      <p class="like">비유: 국·수·영 점수를 합쳐 석차를 내되, 과목 비중을 바꿔도 상위권인 학생을 따로 표시.</p></div>
+    <div class="file"><h4>outputs.py <small>9단계 · 반출 문지기</small></h4>
+      <p class="one">표를 CSV와 PNG로 저장. 좌표 열이 있으면 저장 거부, 작은 셀은 PNG에서 가림. 한글 폰트가 없으면 영문 라벨로 대체.</p>
+      <p class="like">비유: 공항 보안검색대. 위치 정보나 1~2명만 있는 칸은 못 나가게 막는다.</p></div>
+    <div class="file"><h4>headline.py <small>9-H · 발표 숫자</small></h4>
+      <p class="one">발표 전면의 숫자 3개를 가정과 함께 한 표(s9_headline)로 묶는다.</p>
+      <p class="like">비유: 발표 맨 앞장의 요약 카드. 숫자 옆에 “증설 몇 대·상한 몇 배” 같은 조건을 꼭 적는다.</p></div>
+  </div>
+
+  <h3>그 밖의 폴더</h3>
+  <ul>
+    <li><code>tests/</code> — 코드가 맞게 도는지 자동 검사 74개(72 통과, 선택 패키지 없는 2개 건너뜀). 코드를 고친 뒤엔 꼭 돌린다.</li>
+    <li><code>tools/build_reference_files.py</code> — 공개 법정동 원본으로 반입용 참고자료 3종을 만든다.</li>
+    <li><code>tools/check_import_bundle.py</code> — 반입 묶음이 규정(10개·50MB·CSV와 코드 zip)에 맞는지 표로 점검한다.</li>
+  </ul>
+</section>
+
+<!-- 06 -->
+<section class="ch" id="ch6">
+  <p class="chno">06</p>
+  <h2>첫날 점검 16항목</h2>
+  <p><code>kill_criteria</code>가 한 번에 판정한다. 번호는 <strong>코드가 실제로 내는 표 번호</strong>다(V9 문서 4절 번호와 다르니 이 표를 기준으로).</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>무엇을 보나</th><th>기준</th><th>걸리면</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>필요한 파이썬 패키지가 있나</td><td>pandas·numpy·scikit-learn·matplotlib 필수</td><td>선택 패키지는 없어도 대체 경로로 진행</td></tr>
+      <tr><td class="num">2</td><td>2025년 3~9월에 충전이 확 뛴 동네가 몇 곳인가</td><td>10곳 미만 실패 · 30곳 미만 경고</td><td>10 미만: 상권 전후비교 포기 / 30 미만: CATE를 2×2로 축소</td></tr>
+      <tr><td class="num">3</td><td>카드 매출 시간대 구간 수</td><td>4개 이상</td><td>시간대 분석 포기</td></tr>
+      <tr><td class="num">4</td><td>손님 거주 거리 구간 정의</td><td>2개 이상 + 거주자 코드 지정</td><td>외지/주민 구분 불가 → 상권 주장 약화</td></tr>
+      <tr><td class="num">5</td><td>한전 동네 이름 매칭 실패율</td><td>10% 이하 통과 · 30% 이상 실패</td><td>행정동 기준일 가능성 → 대응표 필요</td></tr>
+      <tr><td class="num">6</td><td>카드 매출 마스킹(*) 비율</td><td>30% 이하</td><td>성별·연령 등 칸을 합쳐서 다시 집계</td></tr>
+      <tr><td class="num">7</td><td>KEPCO_002가 001에 포함되나</td><td>정황 판정</td><td>둘을 절대 더하지 않음(원래 안 더함)</td></tr>
+      <tr><td class="num">8</td><td>CAN 식별번호가 개별 차량인가</td><td>순간이동·배터리 급변 비율</td><td>차종 코드면 동네 밀집도로 격하</td></tr>
+      <tr><td class="num">9</td><td>배터리 계산(선형계획) 실행 환경</td><td>scipy 있음</td><td>없으면 그리디(최적해 아님)</td></tr>
+      <tr><td class="num">10</td><td>잡을 수 있는 최소 효과(MDE)</td><td>할인 후 3% 이하</td><td>상권 효과는 “이 이상은 없음”으로만 보고. 표본 기반 참고값이고 본 판정은 4.5단계</td></tr>
+      <tr><td class="num">11</td><td>한글 폰트</td><td>있음</td><td>없으면 <strong>경고 = 영문 라벨로 대체 진행</strong>(기본). 한글 그림이 필요하면 폰트 파일 반입. <code>outputs.font_fallback</code>을 <code>"none"</code>으로 두면 실패</td></tr>
+      <tr><td class="num">12</td><td>전기차 등록자료 동네 매칭률</td><td>70% 이상</td><td>접근성 해석 주의</td></tr>
+      <tr><td class="num">13</td><td>시간별 충전 기록이 사계절을 다 덮나</td><td>계절마다 28일 이상</td><td>“계절 미검증” 표시</td></tr>
+      <tr><td class="num">14</td><td>가중치가 유효한가(AHP 입력 시 일관성)</td><td>CR &lt; 0.1</td><td>균등 가중치 쓸지 사람이 결정</td></tr>
+      <tr><td class="num">15</td><td>비중을 흔들어도 상위권인 동네 비율(세 점수가 다 있는 순위 대상 안에서)</td><td>5% 이상</td><td>한 줄 순위 발표 보류, 축별 순위 3장 병기</td></tr>
+      <tr><td class="num">16</td><td>고른 한전 원천의 마지막 수록 달이 분석 창 끝보다 이른가</td><td>창 끝 이상</td><td>이르면 경고: 사후 3개월을 못 채우는 달 수 표시. <code>activation.clip_to_data</code>로 창을 줄임(KEPCO_002 가공일자가 제공기간보다 이르다는 점 때문)</td></tr>
+    </tbody>
+  </table></div>
+  <p>9번은 에너지 분석을 켰을 때, 12~15번은 우선순위 분석을 켰을 때만 나온다. 16번은 항상 나온다.</p>
+</section>
+
+<!-- 07 -->
+<section class="ch" id="ch7">
+  <p class="chno">07</p>
+  <h2>센터에서 할 일</h2>
+
+  <h3>가기 전 체크리스트</h3>
+  <ul class="checklist">
+    <li>센터·사무국 문의 답변 받기 — 메모리, 한글 폰트, 소수 셀 기준, 읍면동 기준, 고객호수 정의, KEPCO_002 실제 기간 (<code>문서/3_…문의문안</code>)</li>
+    <li>연구계획서 반입자료에 SMP·충전소 위치·전기차 등록 추가 후 신청</li>
+    <li>공개자료 준비: 충전소 위치 CSV, 전기차 등록(행정동→법정동 변환본), SMP(<code>timestamp,smp</code> 형식)</li>
+    <li>반입 zip 만들기 전에 로컬에서 <code>pytest</code> 통과 확인</li>
+    <li>반입 묶음은 <code>tools/check_import_bundle.py</code>로 개수(10개)·용량(50MB)·형식(CSV·zip) 점검</li>
+    <li>이 책 04~06장 읽고 오기</li>
+  </ul>
+
+  <p class="day">첫날 — 분석이 아니라 “판정”</p>
+  <ol class="steps">
+    <li><strong>설정 파일 복사.</strong> <code>config/field_template.json</code> → <code>config/field.json</code>, <code>config/industry_codes_template.json</code> → <code>config/industry_codes.json</code>.</li>
+    <li><strong>경로 채우기.</strong> <code>field.json</code>의 <code>paths</code>에 센터가 알려준 실제 파일 경로를 적는다. 열 이름이 다르면 <code>columns</code>에 그것만 적는다.</li>
+    <li><strong>첫날 점검 실행.</strong>
+      <div><span class="env">센터 JupyterLab (Python)</span></div>
+<pre><code>from kill_criteria import run_checks
+run_checks("config/field.json")</code></pre>
+      업종 코드가 비어 있어도 돈다. 결과는 <code>out/field/kill_criteria/</code>에 저장된다.</li>
+    <li><strong>코드표 보고 업종 채우기.</strong> 신한카드가 같이 주는 <code>TB_SHC_TOBU_CODE.csv</code>, <code>TB_SHC_CODE.csv</code>를 열어 <code>industry_codes.json</code>을 채운다.
+      <ul>
+        <li><code>wait</code>: 기다리며 쓰는 업종(카페·편의점·음식점·소매)</li>
+        <li><code>control</code>: 상관없는 업종(병원·학원·전문서비스), <code>placebo</code>: 그중 위약용(예: 병원)</li>
+        <li><code>resident_dist_codes</code>: 손님 거주 거리 중 “동네 주민”으로 볼 가장 가까운 구간</li>
+        <li><code>tizo_bands</code>: 카드 시간대 코드 → 몇 시~몇 시인지</li>
+      </ul>
+      이게 비어 있으면 본 분석(<code>pipeline</code>)이 멈춘다.</li>
+    <li><strong>판정 결과로 계획 조정.</strong> 06장 표의 “걸리면” 칸대로. 판정 표를 사진이 아니라 반출 신청용으로 남긴다.</li>
+    <li><strong>에너지 평가 시작일 정하기.</strong> <code>energy.evaluation_start</code>가 비어 있으면 8-A가 멈춘다. 연말(12/24~1/1)·설 연휴를 피해서, 그 앞에 12주 이상 기록이 있는 날짜로.</li>
+  </ol>
+
+  <p class="day">둘째 날 이후 — 본 분석</p>
+  <ol class="steps">
+    <li><span class="env">센터 JupyterLab (Python)</span>
+<pre><code>from pipeline import run
+summary = run("config/field.json")
+summary</code></pre></li>
+    <li><code>out/field/csv/s0_run_summary.csv</code>에서 단계별 “완료/생략/실패”와 사용 폰트를 먼저 본다.</li>
+    <li><code>s45_mde</code>로 상권 결과를 어떻게 보고할지 정한다(09장).</li>
+    <li>반출 신청은 <code>out/field/png/</code>의 그림과 <code>s9_manifest</code>(파일 목록)로.</li>
+    <li>메모리가 부족하면 <code>params.kepco.sido</code>를 <code>["서울"]</code>처럼 시도별로 나눠서 돌린다. 신한카드는 <code>params.shc.sido</code>(시도 코드 앞 2자리, 예 <code>["11"]</code>)와 <code>chunksize</code>로 나눈다.</li>
+  </ol>
+  <div class="warn"><b class="tag">방문 일수 = 점수</b><p>기술평가에서 방문 1일 2점, 3일 6점, 5일 이상 10점. 최소 3일은 잡는다.</p></div>
+</section>
+
+<!-- 08 -->
+<section class="ch" id="ch8">
+  <p class="chno">08</p>
+  <h2>설정값 바꾸는 법</h2>
+  <p>모든 설정은 <code>config/field.json</code> 한 파일에서 바꾼다. 코드 파일은 건드리지 않는다. JSON에 안 적은 값은 <code>config.py</code>의 기본값을 쓴다.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>이럴 때</th><th>바꿀 곳</th><th>값</th></tr></thead>
+    <tbody>
+      <tr><td>센터 소수 셀 기준이 5명이면</td><td><code>params.output.min_cell_count</code></td><td><code>5</code> (기본 3). 옛 이름 <code>can.min_cell_count</code>도 통하고, 둘 다 있으면 output이 우선. 실행 요약에 실제 적용값이 남는다</td></tr>
+      <tr><td>센터가 “집계에 들어간 칸이 하나라도 기준 미만이면 안 된다”고 하면</td><td><code>params.kepco.suppress_basis</code></td><td><code>"min"</code> (기본 <code>"max"</code>)</td></tr>
+      <tr><td>서버에 한글 폰트가 없어서 파일을 반입했으면</td><td><code>paths.font</code></td><td>폰트 파일 경로</td></tr>
+      <tr><td>KEPCO_002가 8월까지만 있으면</td><td><code>params.kepco.source</code> / <code>params.activation.clip_to_data</code></td><td><code>"001"</code>로 전환하거나 <code>clip_to_data: true</code>로 분석 창을 줄임. <strong>주의:</strong> 코드 기본값은 <code>"001"</code>, 현장 템플릿은 <code>"002"</code>라 팀 확인 필요</td></tr>
+      <tr><td>서버에 한글 폰트가 없는데 영문 라벨도 싫으면</td><td><code>params.outputs.font_fallback</code></td><td><code>"ascii"</code>(기본, 영문 대체) / <code>"none"</code>(한글 그대로, 깨질 수 있음)</td></tr>
+      <tr><td>메모리가 모자라면</td><td><code>params.kepco.sido</code>, <code>params.shc.sido</code></td><td><code>["서울"]</code> / <code>["11"]</code> 식으로 나눠 실행</td></tr>
+      <tr><td>순위에 넣을 최소 점수 개수</td><td><code>params.priority.min_axes</code></td><td><code>3</code>(기본, 세 점수 모두). 낮추면 점수가 부족한 동네도 순위에 들어간다</td></tr>
+      <tr><td>에너지 평가 날짜</td><td><code>params.energy.evaluation_start</code></td><td><code>"2025-11-03"</code> 같은 날짜 (현재 비어 있음, 반드시 입력)</td></tr>
+      <tr><td>공휴일 달력</td><td><code>params.energy.holidays</code></td><td><code>{"2025-10-03": "개천절"}</code> 식</td></tr>
+      <tr><td>SMP·충전소·전기차 등록 파일</td><td><code>paths.smp</code>, <code>paths.access_stations</code>, <code>paths.ev_registration</code></td><td>반입한 파일 경로 (없으면 null)</td></tr>
+    </tbody>
+  </table></div>
+  <p>예시 — 소수 셀 기준 5명, 폰트 반입, 001로 전환한 경우:</p>
+  <div><span class="env">config/field.json 일부</span></div>
+<pre><code>"paths":  { ..., "font": "../data/field/NanumGothic.ttf" },
+"params": {
+  "kepco":  { "source": "001", "suppress_basis": "max", ... },
+  "output": { "min_cell_count": 5 },
+  "energy": { "enabled": true, "evaluation_start": "2025-11-03", ... }
+}</code></pre>
+  <p>경로는 <code>field.json</code> 파일이 있는 <code>config/</code> 폴더 기준 상대경로다.</p>
+</section>
+
+<!-- 09 -->
+<section class="ch" id="ch9">
+  <p class="chno">09</p>
+  <h2>결과물 읽는 법</h2>
+  <h3>먼저 볼 것</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>파일</th><th>보는 법</th></tr></thead>
+    <tbody>
+      <tr><td><code>s0_run_summary</code></td><td>단계별 완료/생략/실패. 생략·실패면 “비고”에 이유가 있다.</td></tr>
+      <tr><td><code>s45_mde</code></td><td>“할인 후” 줄의 MDE가 이 데이터로 구별 가능한 최소 효과. 0.09면 9%.</td></tr>
+      <tr><td><code>s8e_priority</code></td><td>최종 동네 순위(세 점수가 다 있는 동네만). <code>robust_top</code>=비중을 바꿔도 상위권, <code>confidence</code>=자료 충실도.</td></tr>
+      <tr><td><code>s8e_not_ranked</code></td><td>“부하 미평가 — 접근성 부족만 확인” 목록. 0점이 아니라 “아직 안 잰 것”이다.</td></tr>
+      <tr><td><code>s8e_priority_summary</code></td><td>순위 대상 수와 안전·경제성 점수의 상관. 0.9 이상이면 사실상 한 축이라는 경고(<code>axes_redundant</code>).</td></tr>
+      <tr><td><code>s9_headline</code></td><td>발표 숫자 3개와 그 가정. 숫자 옆의 “증설 N대·상한 배율·이용률 배율”을 같이 말해야 한다.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>상권 결과를 보고하는 규칙</h3>
+  <div class="easy">
+    <b class="tag">MDE 쉽게</b>
+    <p>체중계 눈금이 1kg 단위면 300g 빠진 건 못 잰다. MDE는 우리 데이터 “체중계”의 눈금이다. 선행연구의 충전소 효과는 약 0.8~1.4%(미국 캘리포니아, 충전소 반경 500m 가게 기준, 저자 자체 추정)인데, 가상 데이터로 잰 우리 눈금은 약 9%다.</p>
+  </div>
+  <ul>
+    <li>MDE ≤ 3% → 상권 효과를 주 결과처럼 보고해도 된다.</li>
+    <li>MDE &gt; 3% → “MDE 이상의 효과는 관측되지 않았다”는 <strong>상한</strong>으로만 보고한다. 유의하게 나와도 과장하지 않는다.</li>
+  </ul>
+
+  <h3>발표 전면에 내세울 것 — 지도 1장, 숫자 3개 (V9)</h3>
+  <ol>
+    <li>지도: 결합점수(색) + ESS 용량 후보(버블) + 신뢰도(투명도)</li>
+    <li>숫자 1: 충전기 1대당 전기차 수, 상위 10% 동네 ÷ 하위 10% 동네</li>
+    <li>숫자 2: 배터리 없을 때 상한선 초과 kWh 평균</li>
+    <li>숫자 3: 배터리 둔 뒤 남은 초과 kWh와 SMP 기준 비용 차이</li>
+  </ol>
+  <p>이 숫자는 <code>s9_headline</code> 표가 만든다. 각 숫자 옆에 가정과 상한 1.1~1.3 범위가 같이 적힌다. 숫자 1의 충전소 배정은 “동네 중심점에서 가장 가까운 곳”으로 잡는 근사이고, 경계 도형을 쓴 공간조인이 아니다. 지표 3(자가충전 제약 주거 비율)과 300/500m 커버리지는 아직 구현하지 않았다.</p>
+
+  <h3>반출 그림에서 가려지는 칸</h3>
+  <p>고객이 3명 미만인 동네 수치는 PNG에서 “—”로 가려진다(CSV에는 원값 + <code>소표본억제</code> 열). 전국 합계 표는 가린 동네 몫을 빼고 합친다. 가상 데이터는 고객 수가 매우 작게 만들어져 있어서 많이 가려지지만, 실데이터에서 얼마나 가려질지는 고객호수 정의에 달렸다.</p>
+</section>
+
+<!-- 10 -->
+<section class="ch" id="ch10">
+  <p class="chno">10</p>
+  <h2>아직 안 풀린 문제</h2>
+  <p>숨기지 않고 적는다. 위에 있을수록 급하다.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>문제</th><th>영향</th><th>해결</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>상권 단계(4·5·6)가 “필수”, 8단계가 7단계(CATE)에 의존</td><td>카드 데이터에 문제가 생기면 주 결과(8~8-E)가 안 나옴</td><td><span class="pill p-must">코드 수정</span> 4·5·6을 격리로, 8단계를 CATE 없이도 돌게</td></tr>
+      <tr><td class="num">2</td><td>연구계획서 반입자료에 SMP·충전소 위치·전기차 등록 누락</td><td>8-C·8-E 불가, 경제성 비용 결측</td><td><span class="pill p-opt">서류 수정</span> 신청 전 추가</td></tr>
+      <tr><td class="num">3</td><td>신청 데이터 개수가 문서마다 다름: V9 수정본(9/19)은 LH KLH_001을 신청 범위 밖으로 정정하고 형평성 지표 3을 후속으로 돌렸다. 다만 V9와 연구계획서의 데이터 개수·항목이 아직 같은지 확인이 필요함</td><td>심사 때 앞뒤가 안 맞아 보임</td><td><span class="pill p-opt">결정 필요</span> 두 문서의 신청 항목을 맞추기</td></tr>
+      <tr><td class="num">4</td><td>첫날 점검 번호가 V9 4절과 코드가 다름</td><td>현장에서 헷갈림</td><td><span class="pill p-info">이 책 06장 기준</span></td></tr>
+      <tr><td class="num">5</td><td>한전 읍면동이 법정동인지 행정동인지 미확인</td><td>행정동이면 카드 데이터와 동네를 못 맞춤</td><td><span class="pill p-info">문의 중</span></td></tr>
+      <tr><td class="num">6</td><td>고객호수 정의·센터 소수 셀 기준 미확인</td><td>반출 그림이 얼마나 가려질지 모름</td><td><span class="pill p-info">문의 중</span></td></tr>
+      <tr><td class="num">7</td><td>KEPCO_002 가공일자(2025-08-25)와 제공기간(~12-31) 불일치</td><td>하반기 활성화 탐지 불가 가능성</td><td><span class="pill p-info">문의 중</span> 8월까지면 001로 전환</td></tr>
+      <tr><td class="num">8</td><td>분석 서버 메모리·한글 폰트 미확인</td><td>멈추거나 반출 불가</td><td><span class="pill p-info">문의 중</span></td></tr>
+      <tr><td class="num">9</td><td>가상 데이터 결과 ≠ 실제</td><td>모든 수치는 동작 확인용</td><td>현장 첫날 실측</td></tr>
+      <tr><td class="num">10</td><td>안전·경제성 점수가 사실상 같은 값일 수 있음(둘 다 8-B의 같은 배터리 시뮬레이션에서 나옴). 가상 데이터로는 상관 0.50(피어슨)·0.63(스피어만)이라 경고가 안 떴고, 이전 점검에서 보고된 0.9997은 재현되지 않음</td><td>세 축이 아니라 두 축으로 순위가 나올 수 있음</td><td><span class="pill p-info">실데이터로 확인</span> 코드가 자동 경고. 축 정의를 바꿀지는 팀 결정</td></tr>
+      <tr><td class="num">11</td><td>한전 읍면동이 행정동일 때의 대응. <strong>① 시군구 폴백은 구현됨</strong>(<code>params.analysis_level: "sigungu"</code>) — 시군구 단위로 묶어 돌리며 8-C·8-E(2SFCA·순위)는 생략, 지역이 적으면 상권 단계 표본 부족. ② 행정동→법정동 배분표(약 3~4일, 매핑표 필요·고객호수 배분으로 소수 셀 억제가 깨질 위험)는 미구현</td><td>행정동이면 법정동 단위 순위는 못 냄</td><td><span class="pill p-info">① 구현 완료</span> 킬 5번이 실패하면 sigungu로 다시 실행. ②는 매핑표 확보 후 결정</td></tr>
+      <tr><td class="num">12</td><td><code>kepco.source</code> 기본값이 코드는 <code>"001"</code>, 현장 템플릿·mock은 <code>"002"</code></td><td>설정 안 적으면 다른 원천으로 돌 수 있음</td><td><span class="pill p-opt">결정 필요</span> 지금은 README에 명시만</td></tr>
+      <tr><td class="num">13</td><td>형평성 지표 3(자가충전 제약 주거 비율)과 300/500m 커버리지 미구현</td><td>V9에 적힌 지표 일부가 아직 없음</td><td><span class="pill p-opt">결정 필요</span> LH 자료를 신청 범위에 넣을지</td></tr>
+      <tr><td class="num">14</td><td>저장소가 아주 긴 폴더 경로에 있으면 이름이 긴 결과 파일(예: <code>s3_can_spatial_agreement.csv</code>) 저장이 실패할 수 있음(윈도우 경로 260자 제한)</td><td>로컬 실행에서 일부 표가 빠짐. 코드 문제 아님</td><td><span class="pill p-info">환경</span> 짧은 경로(<code>C:\dev\…</code>)에서 실행</td></tr>
+      <tr><td class="num">15</td><td>방법론 감사(리플맵4.2) 지적 중 미반영: 방문객 계절성에 따른 처치 시점 오염(계절 조정·순열 추론), 동적 TWFE 폴백 교체(BJS imputation), 처치 인접 지역 통제군 오염(도넛·시군구 클러스터·wild bootstrap), 심은 효과 복원 테스트</td><td>상권(부가) 결과의 신뢰도. 주 결과(안전·형평성·경제성)에는 영향 없음</td><td><span class="pill p-opt">후속</span> 상권은 “MDE 이상 효과는 관측되지 않음”으로만 보고</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 11 -->
+<section class="ch" id="ch11">
+  <p class="chno">11</p>
+  <h2>심사 질문 대비</h2>
+  <p>V9 7절 Q&amp;A 중 가장 자주 나올 것만 짧게. 원문은 V9 문서.</p>
+  <h3>“1.1~1.3배는 어디서 나온 숫자인가?”</h3>
+  <p>변압기 실제 용량 자료가 없어서 정한 <strong>정책 가정</strong>이다. 용량 추정값이 아니고, 세 값으로 바꿔 가며 결과가 어떻게 달라지는지 비교한다.</p>
+  <h3>“왜 상권 매출에 공공 예산을 쓰나?”</h3>
+  <p>매출은 부가 편익이다. 주 대상은 주민 전력 안전과 집에서 충전하기 어려운 시민이다. 매출 효과가 낮은 동네도 순위에서 빼지 않는다.</p>
+  <h3>“정전을 막았다고 증명했나?”</h3>
+  <p>아니다. 지금은 피크를 얼마나 낮출 수 있는지 평가하는 단계다. 보고하는 숫자는 초과량·저감량·용량 후보·비용 차이로 한정한다.</p>
+  <h3>“ESS 열화 비용은?”</h3>
+  <p>빠져 있다. 그래서 비용 차이를 장기 순이익이라고 부르지 않는다.</p>
+  <h3>“가중치는 누가 정했나?”</h3>
+  <p>지금은 세 축 균등(1/3)이다. 바꾸면 바로 재계산되고, 바꿔도 상위권인 동네를 따로 표시한다.</p>
+  <h3>“상권 효과가 유의하지 않은데?”</h3>
+  <p>예상한 결과다. 이 데이터로 구별할 수 있는 최소 효과(MDE)가 선행연구 효과보다 커서, “MDE 이상의 효과는 없다”는 상한으로 보고한다고 계획서에 미리 적어 뒀다.</p>
+</section>
+
+<!-- 12 -->
+<section class="ch" id="ch12">
+  <p class="chno">12</p>
+  <h2>용어 사전</h2>
+  <dl class="gloss">
+    <dt>데이터안심구역</dt><dd>민감한 원자료를 밖으로 안 내보내고 센터 안 보안 PC에서만 분석하게 하는 곳.</dd>
+    <dt>반입 / 반출</dt><dd>반입 = 우리 파일을 센터로 들여감. 반출 = 결과를 심사받고 밖으로 가져옴.</dd>
+    <dt>법정동 / 행정동</dt><dd>법정동은 법으로 정한 동네 이름(주소에 쓰임), 행정동은 주민센터 기준 구역. “역삼1동(행정동)”은 “역삼동(법정동)”의 일부.</dd>
+    <dt>고객호수</dt><dd>한전 데이터의 고객 수. 정확히 무엇을 세는지는 문의 중.</dd>
+    <dt>소표본 억제</dt><dd>1~2명만 있는 칸은 그 사람이 드러날 수 있어서 반출 그림에서 가리는 것.</dd>
+    <dt>kWh / kW</dt><dd>kWh는 쓴 전기의 양(물 몇 리터), kW는 그 순간의 세기(수도꼭지를 얼마나 틀었나). 한 시간 kWh를 1시간으로 나누면 그 시간의 평균 kW.</dd>
+    <dt>ESS</dt><dd>대형 배터리. 전기가 남을 때 채우고 몰릴 때 내준다.</dd>
+    <dt>피크쉐이빙</dt><dd>가장 붐비는 시간의 봉우리를 깎아 내리는 것.</dd>
+    <dt>SMP</dt><dd>전력 도매시장 가격(원/kWh). 시간마다 다르다.</dd>
+    <dt>선형계획(LP) / 그리디</dt><dd>LP = 조건을 다 지키면서 가장 좋은 답을 수학적으로 찾기. 그리디 = 그때그때 좋아 보이는 선택을 하는 간단한 방법(최적 보장 없음).</dd>
+    <dt>oracle</dt><dd>내일을 완벽히 안다고 가정한 비교 기준. 현실 성과가 아니다.</dd>
+    <dt>변화점 탐지(PELT)</dt><dd>그래프가 계단처럼 확 바뀐 지점을 자동으로 찾는 방법.</dd>
+    <dt>처치 / 대조</dt><dd>처치 = 충전이 확 늘어난 동네, 대조 = 안 늘어난 비교 동네.</dd>
+    <dt>이벤트 스터디</dt><dd>사건(충전 증가) 전 몇 달과 후 몇 달을 줄 세워 변화를 보는 방법.</dd>
+    <dt>DDD(삼중차분)</dt><dd>세 번 빼서 다른 원인을 걸러내기: 외지인−주민, 대기업종−대조업종, 처치 동네−대조 동네.</dd>
+    <dt>위약 검정</dt><dd>효과가 없어야 할 곳(병원 등)에서도 효과가 나오는지 확인. 나오면 그만큼 빼서 보고.</dd>
+    <dt>MDE</dt><dd>이 데이터로 “효과 있음”을 구별할 수 있는 최소 크기. 체중계 눈금.</dd>
+    <dt>CATE / Causal Forest</dt><dd>동네 특성별로 효과가 얼마나 다른지 추정하는 것 / 그걸 하는 머신러닝 방법.</dd>
+    <dt>2SFCA</dt><dd>충전소마다 “반경 안에서 나눠 쓰는 전기차 수”를 구한 뒤, 동네마다 반경 안 충전소 값을 더해 접근성을 잰다. 동네 경계를 넘어 옆 동네 충전소도 센다.</dd>
+    <dt>AHP</dt><dd>“안전 대 형평성, 뭐가 몇 배 중요?”를 둘씩 비교해 가중치를 정하는 방법. 아직 팀 응답 없음.</dd>
+    <dt>강건 상위군</dt><dd>가중치·상한을 이리저리 바꿔도 90% 이상 경우에서 상위 20% 안에 드는 동네. 순위 대상(세 점수가 다 있는 동네) 안에서만 센다.</dd>
+    <dt>순위 대상(ranking pool)</dt><dd>안전·형평성·경제성 점수가 모두 있어서 순위를 매길 수 있는 동네. 나머지는 점수를 계산해도 순위 밖 목록으로 뺀다.</dd>
+    <dt>킬 크라이테리아</dt><dd>첫날 “계획대로 가도 되나”를 판정하는 점검 목록. 걸리면 계획을 줄인다.</dd>
+  </dl>
+  <footer>v10 · 작성 2026-09-19 · 근거: 코드(P0~P2 반영본, pytest 72 통과·2 생략), 전체설계 V9 수정본(9/19), 연구계획서(9/19). 수치 중 “가상 데이터 기준”은 동작 확인용이며 실제 결과가 아니다. 선행연구: Nature Communications (2024) “Effects of electric vehicle charging stations on the economic vitality of local businesses”.</footer>
+</section>
+</main>
+</div>
+</body></html>

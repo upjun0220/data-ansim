@@ -56,9 +56,17 @@ def energy_axes(results, multiplier=1.2, new_chargers=3):
     )
 
 
-def combine_scores(energy, access, weights=(1 / 3, 1 / 3, 1 / 3), can_confidence=None):
+def combine_scores(energy, access, weights=(1 / 3, 1 / 3, 1 / 3), can_confidence=None, min_axes=3):
+    """축 결측 사유를 나누고 순위 대상(rank_eligible)을 표시한다.
+
+    not_assessed_low_concentration: 8-B 평가 대상이 아님(07-1 부하 집중도 낮음) — 값이 "없는" 것이 아니라 "안 잰" 것.
+    data_missing: 평가 대상인데 축 값이 없음. 둘 다 0점으로 채우지 않고(V9 3-2절) 재정규화만 유지한다.
+    순위 대상은 유효 축이 min_axes개 이상인 동네뿐이다(기본 3 = 세 축 모두).
+    """
     w = validate_weights(weights)
-    df = energy.merge(access[["bjd_code", "access_2sfca", "access_data_present"]], on="bjd_code", how="outer")
+    df = energy.merge(access[["bjd_code", "access_2sfca", "access_data_present"]], on="bjd_code",
+                      how="outer", indicator="_src")
+    assessed = (df.pop("_src") != "right_only").to_numpy()
     df["safety_norm"] = normalize(df["safety_raw"])
     df["equity_norm"] = normalize(df["access_2sfca"], reverse=True)
     df["economy_norm"] = normalize(df["economy_raw"])
@@ -69,6 +77,10 @@ def combine_scores(energy, access, weights=(1 / 3, 1 / 3, 1 / 3), can_confidence
                                     out=np.full(len(df), np.nan), where=denom > 0)
     df["missing_axis_count"] = (~valid).sum(axis=1)
     df["missing_axes"] = [",".join(a for a, ok in zip(AXES, row) if not ok) for row in valid]
+    df["axes_present"] = valid.sum(axis=1)
+    df["missing_reason"] = np.where(df["missing_axis_count"] == 0, "",
+                                    np.where(assessed, "data_missing", "not_assessed_low_concentration"))
+    df["rank_eligible"] = (df["axes_present"] >= int(min_axes)) & df["PriorityScore"].notna()
     confidence_parts = pd.DataFrame({
         "forecast": pd.to_numeric(df.get("forecast_confidence"), errors="coerce").fillna(0),
         "plan": pd.to_numeric(df.get("plan_confidence"), errors="coerce").fillna(0),
@@ -92,6 +104,8 @@ def _weight_grid(center, delta):
 
 
 def run_sensitivity(results, access, params):
+    """상위군·강건 판정은 순위 대상(ranking_pool) 안에서만 계산한다."""
+    min_axes = int(params.get("min_axes", 3))
     weights = params["weights"]
     multipliers = params.get("multipliers") or sorted(pd.to_numeric(results["multiplier"], errors="coerce").dropna().unique())
     runs = []
@@ -101,7 +115,8 @@ def run_sensitivity(results, access, params):
         except ValueError:
             continue
         for w in _weight_grid(weights, float(params["weight_delta"])):
-            score = combine_scores(energy, access, w)[["bjd_code", "PriorityScore"]].dropna()
+            score = combine_scores(energy, access, w, min_axes=min_axes)
+            score = score.loc[score["rank_eligible"], ["bjd_code", "PriorityScore"]]
             if score.empty:
                 continue
             n_top = max(1, int(np.ceil(len(score) * float(params["top_share"]))))
@@ -117,13 +132,32 @@ def run_sensitivity(results, access, params):
     return summary
 
 
+def axes_correlation(df, threshold=0.9):
+    """안전·경제성 축 원값의 상관. 둘 다 8-B의 같은 ESS 시뮬레이션에서 나와 사실상 한 축일 수 있다."""
+    pair = df[["safety_raw", "economy_raw"]].apply(pd.to_numeric, errors="coerce").dropna()
+    n = len(pair)
+    if n < 3 or pair.nunique().min() < 2:
+        return {"n": n, "pearson": np.nan, "spearman": np.nan, "axes_redundant": False}
+    pearson = float(pair["safety_raw"].corr(pair["economy_raw"]))
+    spearman = float(pair["safety_raw"].corr(pair["economy_raw"], method="spearman"))
+    redundant = bool(max(abs(pearson), abs(spearman)) >= float(threshold))
+    return {"n": n, "pearson": pearson, "spearman": spearman, "axes_redundant": redundant}
+
+
 def build_priority(results, access, params, can_confidence=None):
+    min_axes = int(params.get("min_axes", 3))
     base = combine_scores(energy_axes(results, float(params["base_multiplier"]),
                                       int(params["scenario_new_chargers"])), access,
-                          params["weights"], can_confidence)
+                          params["weights"], can_confidence, min_axes=min_axes)
     sensitivity = run_sensitivity(results, access, params)
     out = base.merge(sensitivity, on="bjd_code", how="left")
-    return out.sort_values(["PriorityScore", "bjd_code"], ascending=[False, True]).reset_index(drop=True)
+    for col in ("robust_top", "boundary"):
+        out[col] = out[col].fillna(False).astype(bool)
+    out = out.sort_values(["rank_eligible", "PriorityScore", "bjd_code"],
+                          ascending=[False, False, True]).reset_index(drop=True)
+    out["rank"] = np.where(out["rank_eligible"], np.arange(1, len(out) + 1), np.nan)
+    out.attrs["axes_correlation"] = axes_correlation(base, params.get("redundant_corr", 0.9))
+    return out
 
 
 def seasonal_coverage(hourly):

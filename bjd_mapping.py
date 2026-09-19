@@ -20,6 +20,28 @@ import pandas as pd
 
 from common import clean_code, log, norm_text, nospace, read_columns
 
+# 분석 수준: "emd"(법정동, 기본) | "sigungu"(시군구로 묶음). 시군구 모드는 모든 지역키를 시군구5자리+"00000"으로 접어,
+# 한전 읍면동이 행정동이어서 법정동과 못 맞출 때 쓰는 폴백이다(P2-2 ①). 나머지 코드는 10자리 bjd_code 를 그대로 쓴다.
+# ponytail: 프로세스 전역 상태다. pipeline.run / run_checks 가 실행마다 set_analysis_level 로 다시 설정한다.
+ANALYSIS_LEVEL = "emd"
+
+
+def set_analysis_level(level):
+    global ANALYSIS_LEVEL
+    if level not in ("emd", "sigungu"):
+        raise ValueError(f"params.analysis_level 은 'emd' 또는 'sigungu' — 받은 값: {level!r}")
+    ANALYSIS_LEVEL = level
+
+
+def _sigungu_master(master):
+    """읍면동 마스터 → 시군구 단위 마스터(코드 = 시군구5 + "00000", 읍면동 비움)."""
+    m = master.assign(bjd_code=master["bjd_code"].str[:5] + "00000", emd="").drop_duplicates("bjd_code").copy()
+    m["key_raw"] = make_key(m["sido"], m["sigungu"], m["emd"])
+    m["key_norm"] = make_key(m["sido"], m["sigungu"], m["emd"], normalized=True)
+    m["region_name"] = (m["sido"] + " " + m["sigungu"]).str.replace(r"\s+", " ", regex=True).str.strip()
+    return m
+
+
 _SIDO_FULL_TO_SHORT = {
     "서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구", "인천광역시": "인천",
     "광주광역시": "광주", "대전광역시": "대전", "울산광역시": "울산", "세종특별자치시": "세종",
@@ -129,11 +151,15 @@ def match_regions(regions, master, weight_col=None, fail_warn_rate=0.30):
     반환: (지역표 + bjd_code/match_method, 매칭률표, 미매칭 목록)
     """
     out = regions.copy()
-    out["bjd_code"] = make_key(out["sido"], out["sigungu"], out["emd"]).map(_unique_lookup(master, "key_raw"))
+    sgg = ANALYSIS_LEVEL == "sigungu"
+    if sgg:  # 시군구 모드: 읍면동은 무시하고 시도+시군구로만 매칭한다(행정동 표기여도 맞는다)
+        master = _sigungu_master(master)
+    key_emd = pd.Series("", index=out.index) if sgg else out["emd"]
+    out["bjd_code"] = make_key(out["sido"], out["sigungu"], key_emd).map(_unique_lookup(master, "key_raw"))
     out["match_method"] = out["bjd_code"].notna().map({True: "원문일치", False: "미매칭"})
     miss = out["bjd_code"].isna()
     if miss.any():
-        norm = make_key(out.loc[miss, "sido"], out.loc[miss, "sigungu"], out.loc[miss, "emd"], normalized=True)
+        norm = make_key(out.loc[miss, "sido"], out.loc[miss, "sigungu"], key_emd[miss], normalized=True)
         found = norm.map(_unique_lookup(master, "key_norm"))
         hit = found.notna()
         out.loc[found[hit].index, "bjd_code"] = found[hit]
@@ -163,7 +189,8 @@ def match_regions(regions, master, weight_col=None, fail_warn_rate=0.30):
     rate_table = pd.DataFrame(rows)
 
     unmatched = out[out["bjd_code"].isna()][["sido", "sigungu", "emd"] + ([weight_col] if weight_col in out else [])]
-    unmatched = unmatched.assign(정규화키=make_key(unmatched["sido"], unmatched["sigungu"], unmatched["emd"], normalized=True))
+    unmatched = unmatched.assign(정규화키=make_key(unmatched["sido"], unmatched["sigungu"],
+                                                 key_emd[unmatched.index] if sgg else unmatched["emd"], normalized=True))
     if weight_col in unmatched:
         unmatched = unmatched.sort_values(weight_col, ascending=False)
 
@@ -222,10 +249,17 @@ def load_crosswalk(path, columns):
 
 
 def canonicalize(codes, mapping):
-    """법정동코드 시리즈를 기준코드로 바꾼다. 대응표에 없는 코드·결측은 그대로."""
-    if not mapping:
-        return codes
-    return codes.map(mapping).fillna(codes)
+    """법정동코드 시리즈를 기준코드로 바꾼다. 대응표에 없는 코드·결측은 그대로.
+
+    시군구 모드에서는 대응표를 먼저 적용한 뒤 시군구5자리+"00000"으로 접는다.
+    """
+    if mapping:
+        codes = codes.map(mapping).fillna(codes)
+    if ANALYSIS_LEVEL == "sigungu":
+        ok = codes.notna()
+        codes = codes.astype(object).copy()
+        codes[ok] = codes[ok].astype(str).str[:5] + "00000"
+    return codes
 
 
 def load_emd_centroids(path, columns):

@@ -78,3 +78,23 @@ def compute_2sfca(stations, demand_points, radii_m=(300, 500, 800), default_radi
     out["equity_need_norm"] = _minmax(raw, reverse=True)
     out["access_data_present"] = d["ev_count"].notna()
     return out
+
+
+def add_access_indicators(access, stations, demand_points):
+    """지표 1(충전기 1기당 EV 수)·지표 2(최근접 공용충전기 거리)를 8-C 표에 붙인다.
+
+    충전소는 가장 가까운 법정동 중심점에 배정하고 거리는 중심점 기준이다. 폴리곤 공간조인도 격자점도 아닌
+    근사이며, 행정경계 근처 충전소는 이웃 동네로 배정될 수 있다(경계 도형 확보 후 대체).
+    충전기가 0기인 동네는 지표 1을 NaN 으로 두고(0으로 나눔 방지) chargers_assigned=0 으로 남긴다.
+    """
+    d = demand_points.reset_index(drop=True)
+    s = stations.reset_index(drop=True)
+    dist = _distance_km(d["lat"].to_numpy()[:, None], d["lon"].to_numpy()[:, None],
+                        s["lat"].to_numpy()[None, :], s["lon"].to_numpy()[None, :])
+    chargers = pd.to_numeric(s["chargers"], errors="raise").to_numpy(float)
+    out = access.reset_index(drop=True).copy()
+    out["chargers_assigned"] = np.bincount(dist.argmin(axis=0), weights=chargers, minlength=len(d))
+    ev = pd.to_numeric(d["ev_count"], errors="coerce")
+    out["ev_per_charger"] = (ev / out["chargers_assigned"]).where(out["chargers_assigned"] > 0)
+    out["nearest_charger_km"] = dist.min(axis=1)
+    return out

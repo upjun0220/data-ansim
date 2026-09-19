@@ -29,6 +29,13 @@ QUADRANTS = {
 }
 
 
+# CATE 를 보고하지 않을 때(BLP 교정 미충족) 부하 집중도만으로 나누는 두 칸
+QUADRANTS_LOAD_ONLY = {
+    True: ("⑤ 부하 집중(CATE 미보고)", "CATE 미보고 · 충전 부하 집중 → ESS 시뮬레이션·현장 검토"),
+    False: ("⑥ 부하 분산(CATE 미보고)", "CATE 미보고 · 충전 부하 분산 → 매출 효과와 별도로 공공 필요 확인"),
+}
+
+
 def compute_concentration(kepco_mh, period):
     missing = KEPCO_COLUMNS - set(kepco_mh.columns)
     if missing:
@@ -70,12 +77,17 @@ def classify_quadrants(cate, concentration, params, reserved=None):
     lost = set(cate["bjd_code"]) - set(df["bjd_code"])
     if lost:
         log.warning("4사분면: 부하 집중도가 없는 법정동 %d곳 제외", len(lost))
-    cate_cut = _cut(df["cate"], params["cate_cut"])
     conc_cut = _cut(df["concentration"], params["conc_cut"])
-    hi_cate = df["cate"] > cate_cut
     hi_conc = df["concentration"] > conc_cut
-    df["quadrant"] = [QUADRANTS[(a, b)][0] for a, b in zip(hi_cate, hi_conc)]
-    df["처방"] = [QUADRANTS[(a, b)][1] for a, b in zip(hi_cate, hi_conc)]
+    if df["cate"].isna().all():   # CATE 미보고 — NaN 을 "효과 작음"으로 오분류하지 않는다
+        cate_cut = np.nan
+        df["quadrant"] = [QUADRANTS_LOAD_ONLY[bool(b)][0] for b in hi_conc]
+        df["처방"] = [QUADRANTS_LOAD_ONLY[bool(b)][1] for b in hi_conc]
+    else:
+        cate_cut = _cut(df["cate"], params["cate_cut"])
+        hi_cate = df["cate"] > cate_cut
+        df["quadrant"] = [QUADRANTS[(a, b)][0] for a, b in zip(hi_cate, hi_conc)]
+        df["처방"] = [QUADRANTS[(a, b)][1] for a, b in zip(hi_cate, hi_conc)]
     reserved = reserved or {}
     df["유보사유"] = df["bjd_code"].map(reserved).fillna("")
     df["reserved"] = df["유보사유"] != ""

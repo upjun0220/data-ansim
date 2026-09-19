@@ -21,7 +21,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from common import log, mi_to_ym, optional_import, ym_to_mi
+from common import log, mi_to_ym, norm_sf2, optional_import, ym_to_mi
 
 # 부하·집중도 계열 이름. load_axis.py 에서만 쓰는 정보다.
 FORBIDDEN_FEATURE = re.compile(r"(집중도|피크|부하|전력|kwh|kw$|_kw|peak|concentration|load)", re.IGNORECASE)
@@ -203,6 +203,25 @@ def _folds(df, n_folds, seed):
     return fold
 
 
+def _blp_calibration(y_star, pred):
+    """BLP 교정 검정 — y* = a + b·(예측−평균) + e 의 기울기 b 와 양측 p(HC1, 정규근사).
+
+    b>0 이고 p 가 작아야 "예측 CATE 가 실제 이질성을 따라간다". 표본이 10개 미만이거나 예측이 상수면 (NaN, NaN).
+    """
+    ok = np.isfinite(pred) & np.isfinite(y_star)
+    n = int(ok.sum())
+    if n < 10 or np.ptp(pred[ok]) == 0:
+        return np.nan, np.nan
+    x = np.column_stack([np.ones(n), pred[ok] - pred[ok].mean()])
+    y = y_star[ok]
+    xtx_inv = np.linalg.inv(x.T @ x)
+    beta = xtx_inv @ x.T @ y
+    score = x * (y - x @ beta)[:, None]
+    cov = xtx_inv @ (score.T @ score) @ xtx_inv * n / (n - 2)
+    se = float(np.sqrt(cov[1, 1]))
+    return float(beta[1]), (float(norm_sf2(beta[1] / se)) if se > 0 else np.nan)
+
+
 def validate_cate(data, feature_cols, params, forest_ok):
     """같은 교차검증 분할로 상수 ATE / 2×2 / Causal Forest 비교."""
     n_t, n_c = int((data["W"] == 1).sum()), int((data["W"] == 0).sum())
@@ -232,7 +251,7 @@ def validate_cate(data, feature_cols, params, forest_ok):
         ok = np.isfinite(pred)
         if not ok.any():
             rows.append({"방법": name, "교차검증_fold": k, "변환결과_MSE": np.nan, "GATES_상위−하위": np.nan,
-                         "비고": notes.get(name, "예측 없음")})
+                         "BLP_기울기": np.nan, "BLP_p": np.nan, "비고": notes.get(name, "예측 없음")})
             continue
         mse = float(np.mean((y_star[ok] - pred[ok]) ** 2))
         hi = pred >= np.nanmedian(pred)
@@ -242,7 +261,10 @@ def validate_cate(data, feature_cols, params, forest_ok):
                 t, c = y[mask & (w == 1)], y[mask & (w == 0)]
                 return t.mean() - c.mean() if len(t) and len(c) else np.nan
             gates = eff(hi & ok) - eff(~hi & ok)
+        # 상수 ATE 는 fold 마다 다른 상수일 뿐이라 이질성 교정 검정이 의미 없다
+        blp_b, blp_p = (np.nan, np.nan) if name == "상수 ATE" else _blp_calibration(y_star, pred)
         rows.append({"방법": name, "교차검증_fold": k, "변환결과_MSE": mse, "GATES_상위−하위": gates,
+                     "BLP_기울기": blp_b, "BLP_p": blp_p,
                      "비고": notes.get(name, "상수 예측 → 순위 정보 없음" if np.ptp(pred[ok]) == 0 else "")})
     table = pd.DataFrame(rows)
     return table, methods
@@ -281,6 +303,18 @@ def run_heterogeneity(features, outcomes, params):
         pred, cells, cuts = estimate_cate_fallback(data, data, params["split_features"])
         method = "2×2 서브그룹(폴백)"
         # 대조군에도 셀 CATE 를 배정한다(아직 활성화 안 된 곳의 처방에 쓰기 위해)
+    # BLP 교정 규칙(감사 4번): 선택한 방법의 교차검증 예측이 실제 이질성을 못 따라가면 CATE 를 보고하지 않는다.
+    chosen = "Causal Forest" if use_forest else "2×2 서브그룹"
+    alpha = float(params.get("blp_alpha", 0.10))
+    v = validation.set_index("방법")
+    blp_b = float(v.at[chosen, "BLP_기울기"]) if "BLP_기울기" in v.columns and chosen in v.index else np.nan
+    blp_p = float(v.at[chosen, "BLP_p"]) if "BLP_p" in v.columns and chosen in v.index else np.nan
+    reportable = bool(np.isfinite(blp_p) and blp_b > 0 and blp_p <= alpha)
+    report_reason = "" if reportable else (
+        f"BLP 교정 미충족(기울기 {blp_b:.3f}, p={blp_p:.3f} > {alpha})" if np.isfinite(blp_p) else "BLP 교정 검정 불가(표본·예측 부족)")
+    if not reportable:
+        pred, cells, importance = np.full(len(data), np.nan), None, None
+        log.warning("7단계 CATE 미보고: %s", report_reason)
     cate = data[["bjd_code", "W", "T_r", "delta"]].assign(cate=pred, method=method)
     if cells is not None:
         f1, f2 = params["split_features"]
@@ -288,4 +322,5 @@ def run_heterogeneity(features, outcomes, params):
     log.info("7단계 CATE: %s%s", method, f" (Causal Forest 미사용 사유: {reason})" if not use_forest else "")
     cate.attrs["feature_names"] = feature_cols
     return {"cate": cate, "validation": validation, "cells": cells, "importance": importance,
-            "method": method, "reason": reason}
+            "method": method, "reason": reason, "reportable": reportable, "report_reason": report_reason,
+            "blp_p": blp_p, "blp_slope": blp_b}

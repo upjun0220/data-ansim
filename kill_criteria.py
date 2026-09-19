@@ -23,7 +23,7 @@ import equity_access
 import identification
 import kepco_loader
 import priority_score
-from common import log, setup_logging
+from common import log, mi_to_ym, setup_logging, ym_to_mi
 from config import deep_merge, load_config
 from outputs import OutputWriter, setup_korean_font
 
@@ -41,6 +41,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     cfg = load_config(config_path, require_industry=False)
     if params_override:
         cfg["params"] = deep_merge(cfg["params"], params_override)
+    bjd_mapping.set_analysis_level(cfg["params"]["analysis_level"])
     if paths_override:
         cfg["paths"].update({k: (str(Path(v).resolve()) if v else None) for k, v in paths_override.items()})
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
@@ -144,7 +145,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         ev = f"KEPCO 지역 {kepco_state['n_regions']}곳 중 미매칭 {fail:.1%} (예: " + \
             ", ".join(kepco_state["unmatched"][["sido", "sigungu", "emd"]].head(3).agg(" ".join, axis=1)) + ")"
         if fail >= P["bjd"]["fail_warn_rate"]:
-            add(5, "한전 읍면동 매핑 실패율", "실패", ev, "행정동 기준일 가능성 — 행정동↔법정동 매핑표 필요")
+            add(5, "한전 읍면동 매핑 실패율", "실패", ev,
+                "행정동 기준일 가능성 — params.analysis_level=\"sigungu\"(시군구 폴백)로 다시 실행하거나 행정동↔법정동 매핑표 확보")
         elif fail > 0.10:
             add(5, "한전 읍면동 매핑 실패율", "경고", ev, "미매칭 목록 사람 검토")
         else:
@@ -227,12 +229,15 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     # 11. PNG 반출용 한글 폰트
     def check11():
         try:
-            name = setup_korean_font(paths["font"])
+            name = setup_korean_font(paths["font"], P["outputs"]["font_fallback"])
         except (OSError, ValueError) as exc:
             add(11, "한글 폰트", "실패", str(exc), "PNG 반출 불가 — 폰트 파일 반입 또는 서버 폰트 확인")
             return
         if name:
             add(11, "한글 폰트", "통과", f"사용 폰트: {name}")
+        elif P["outputs"]["font_fallback"] == "ascii":
+            add(11, "한글 폰트", "경고", "사용 가능한 한글 폰트 없음 — 영문 대체 라벨로 진행",
+                "PNG 한글이 영문 라벨로 나옴. 한글이 필요하면 폰트 파일 반입")
         else:
             add(11, "한글 폰트", "실패", "사용 가능한 한글 폰트 없음",
                 "PNG 반출 불가 — 폰트 파일 반입 또는 서버 폰트 확인")
@@ -252,9 +257,33 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 "데이터별 실행가능성은 8-B에서 별도 검증")
         guarded(9, "ESS LP 실행 환경", check9)
 
+    # 16. 선택한 원천의 마지막 수록 달이 활성화 창 끝보다 이른가(KEPCO_002 는 가공일자가 제공기간보다 이르다)
+    def check16():
+        src = str(P["kepco"]["source"])
+        cols = C["kepco"] if src == "001" else C["kepco_cpo"]
+        dates = kepco_loader.scan_observed_dates(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}")
+        if dates.empty:
+            add(16, "원천 수록 기간", "경고", f"KEPCO_{src} 관측 일자를 못 읽음", "period 열·컬럼 설정 확인")
+            return
+        last = ym_to_mi(dates["date"].max())
+        a = P["activation"]
+        end = ym_to_mi(a["window"][1])
+        label = f"KEPCO_{src} 마지막 수록 {mi_to_ym(last)} · 활성화 창 끝 {a['window'][1]}"
+        if last < end:
+            short = kepco_loader.window_shortfall(last, a["window"], a["ratio_months"])
+            add(16, "원천 수록 기간", "경고", f"{label} · 사후 {a['ratio_months']}개월을 못 채우는 후보 달 {short}개",
+                "activation.window 끝을 줄이거나 activation.clip_to_data=true")
+        else:
+            add(16, "원천 수록 기간", "통과", label)
+    guarded(16, "원천 수록 기간", check16)
+
     if P["priority"]["enabled"]:
         # 12. 외부 접근성 자료의 법정동 매칭
         def check12():
+            if bjd_mapping.ANALYSIS_LEVEL == "sigungu":
+                add(12, "접근성 지역키 매칭", "경고", "analysis_level=sigungu — 2SFCA(8-C)는 시군구 규모에서 의미가 없어 생략",
+                    "형평성 축은 읍면동(법정동) 모드에서만 계산")
+                return
             if not paths["access_stations"] or not paths["ev_registration"] or not paths["emd_centroids"]:
                 add(12, "접근성 지역키 매칭", "경고", "접근성 입력 경로 미설정", "공개자료 반입 후 다시 실행")
                 return
@@ -302,9 +331,14 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 add(15, "민감도 강건 상위군", "경고", "8-E 산출물 없음", "파이프라인 실행 후 재확인")
                 return
             result = pd.read_csv(path, encoding="utf-8-sig")
-            share = float(result["robust_top"].astype(str).str.lower().isin(["true", "1"]).mean())
+            pool = result[result["rank_eligible"].astype(str).str.lower().isin(["true", "1"])] \
+                if "rank_eligible" in result else result
+            if pool.empty:
+                add(15, "민감도 강건 상위군", "경고", f"순위 대상 0곳(전체 {len(result)}곳)", "min_axes·8-B 평가 대상 확인")
+                return
+            share = float(pool["robust_top"].astype(str).str.lower().isin(["true", "1"]).mean())
             verdict = "통과" if share >= K["robust_top_min_share"] else "경고"
-            add(15, "민감도 강건 상위군", verdict, f"전체 후보 중 {share:.1%}",
+            add(15, "민감도 강건 상위군", verdict, f"순위 대상 {len(pool)}곳 중 {share:.1%}",
                 "단일 결합순위 대신 축별 순위 병기" if verdict == "경고" else "")
         guarded(15, "민감도 강건 상위군", check15)
 

@@ -21,6 +21,7 @@ import re
 import numpy as np
 import pandas as pd
 
+import bjd_mapping
 from bjd_mapping import canonicalize, match_regions, sido_short
 from common import log, mi_to_ym, norm_text, optional_import, read_columns, read_header, to_num, ym_to_mi
 
@@ -162,9 +163,11 @@ def attach_bjd(agg, master, fail_warn_rate, crosswalk=None):
     if "cust_min" not in out:
         out["cust_min"] = out["cust_sum"]
     # 서로 다른 텍스트가 같은 법정동으로 모인 경우('가람제1동'·'가람1동', 개편 전/후 명칭) 합친다
+    # 시군구 모드: 서로 다른 읍면동이 한 셀로 모이므로 그 셀의 고객호수는 읍면동 고객호수의 합이다(공개 값을 만든 인원).
+    cust_min_how = "sum" if bjd_mapping.ANALYSIS_LEVEL == "sigungu" else "min"
     out = out.groupby(["bjd_code", "mi", "hour"], sort=True).agg(
         kwh=("kwh", "sum"), n_days=("n_days", "max"), cust_sum=("cust_sum", "sum"),
-        cust_min=("cust_min", "min"), region_name=("region_name", "first")
+        cust_min=("cust_min", cust_min_how), region_name=("region_name", "first")
     ).reset_index()
     return out, rate_table, unmatched, fail_rate
 
@@ -188,6 +191,27 @@ def scan_observed_dates(path, columns, params, source="KEPCO_seasonal"):
         digits = chunk["period"].fillna("").astype(str).str.replace(r"\D", "", regex=True)
         dates.update(digits[digits.str.len() >= 8].str[:8].unique())
     return pd.DataFrame({"date": sorted(dates)})
+
+
+def last_month(agg):
+    """원천에 실제로 수록된 마지막 달의 월 인덱스(원천별로 따로 부른다 — 001/002 는 수록 기간이 다를 수 있다)."""
+    return int(agg["mi"].max())
+
+
+def window_shortfall(last_mi, window, ratio_months):
+    """활성화 창 안에서 사후 ratio_months 개월을 못 채우는 후보 달 수(창 끝이 수록 끝보다 늦을 때 늘어난다)."""
+    w0, w1 = (ym_to_mi(v) for v in window)
+    return max(0, w1 - max(w0 - 1, last_mi - int(ratio_months) + 1))
+
+
+def clip_window(window, last_mi):
+    """창 끝을 수록 마지막 달로 줄인다(끝이 더 이르면 그대로)."""
+    return [window[0], mi_to_ym(min(ym_to_mi(window[1]), last_mi))]
+
+
+def activation_label(source, override=None):
+    """산출물 제목·요약에 쓰는 처치 이름. 001 은 사업자 채널로 한정되지 않으므로 "공용"이라 부르지 않는다."""
+    return override or ("공용(사업자 채널) 충전 활성화" if str(source) == "002" else "충전 활성화(전체)")
 
 
 def load_kepco_hourly(path, columns, params, master, crosswalk=None):
@@ -236,6 +260,8 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     matched["bjd_code"] = canonicalize(matched["bjd_code"], crosswalk)
     out = raw.merge(matched[KEYS + ["bjd_code"]], on=KEYS, how="left", validate="many_to_one")
     out = out.dropna(subset=["bjd_code"])[["bjd_code", "date", "hour", "kwh", "cust"]]
+    if bjd_mapping.ANALYSIS_LEVEL == "sigungu":  # 읍면동 시간별 값을 시군구로 합산(부하 kW 는 더해진다)
+        out = out.groupby(["bjd_code", "date", "hour"], as_index=False)[["kwh", "cust"]].sum()
     if out.duplicated(["bjd_code", "date", "hour"]).any():
         raise ValueError("기준코드 보정 후 시간별 셀 중복 — 합산 전 원천 범위 확인 필요")
     out["kw"] = out.pop("kwh") / 1.0  # 1시간 구간 에너지 / 1h. 순간 최대전력 아님.
