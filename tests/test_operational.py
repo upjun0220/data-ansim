@@ -133,3 +133,37 @@ def test_seasonal_coverage_scan_ignores_8a_date_window(tmp_path):
     coverage = priority_score.seasonal_coverage(scanned)
     assert coverage["season_status"] == "검증 가능"
     assert coverage["missing_seasons"] == ""
+
+
+def test_no_korean_font_falls_back_to_ascii_labels(tmp_path, monkeypatch):
+    import outputs
+    monkeypatch.setattr(outputs, "_ASCII", False)  # 테스트 뒤 원래 값으로 복원
+    monkeypatch.setattr(outputs, "_find_korean_font", lambda font_path=None: None)
+    writer = outputs.OutputWriter(tmp_path, font_fallback="ascii")
+    assert writer.font is None and "대체 라벨" in writer.font_label
+    for s in ("실행 요약 — 단계별 상태", "완료", "알 수 없는 문자열", "일평균 충전량 (kWh/일)"):
+        assert not outputs._HANGUL.search(outputs.png_text(s)), s
+    df = pd.DataFrame({"단계": ["8-E"], "상태": ["완료"], "bjd_code": ["1171010900"]})
+    _csv, png = writer.table(df, "fb", "실행 요약")
+    assert png.is_file()
+    assert outputs.OutputWriter(tmp_path, font_fallback="none").font_label == "없음"
+    assert outputs.png_text("완료") == "완료"  # fallback=none 이면 한글 그대로
+
+def test_output_min_cell_count_overrides_can_alias():
+    from config import _resolve_min_cell_count, deep_merge
+    only_can = _resolve_min_cell_count(deep_merge(DEFAULT_PARAMS, {"can": {"min_cell_count": 5}}))
+    assert only_can["output"]["min_cell_count"] == 5
+    both = _resolve_min_cell_count(deep_merge(DEFAULT_PARAMS, {"can": {"min_cell_count": 5}, "output": {"min_cell_count": 7}}))
+    assert both["output"]["min_cell_count"] == both["can"]["min_cell_count"] == 7
+
+def test_window_shortfall_clip_and_label():
+    w = ["2025-03", "2025-09"]
+    dec = 2025 * 12 + 11
+    assert kepco_loader.window_shortfall(dec, w, 3) == 0            # 12월까지 있으면 사후 3개월 충분
+    aug = 2025 * 12 + 7
+    assert kepco_loader.window_shortfall(aug, w, 3) == 3            # 8월까지면 7~9월 후보가 못 채움
+    assert kepco_loader.clip_window(w, aug) == ["2025-03", "2025-08"]
+    assert kepco_loader.clip_window(w, dec) == w
+    assert kepco_loader.activation_label("002") == "공용(사업자 채널) 충전 활성화"
+    assert kepco_loader.activation_label("001") == "충전 활성화(전체)"
+    assert kepco_loader.activation_label("002", "내 이름") == "내 이름"

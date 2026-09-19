@@ -18,10 +18,10 @@ import numpy as np
 import pandas as pd
 
 from bjd_mapping import canonicalize, shc_bjd_code
-from common import clean_label, log, mi_to_ym, parse_mi, read_columns, to_num
+from common import clean_label, filter_sido_code, log, mi_to_ym, parse_mi, read_columns, to_num
 
 
-def load_shc001_monthly(path, columns, shc001_codes, chunksize=2_000_000, crosswalk=None):
+def load_shc001_monthly(path, columns, shc001_codes, chunksize=2_000_000, crosswalk=None, sido=None):
     """SHC001 → 법정동×월 (new, closed, stock, open_rate, close_rate)."""
     new_codes = {str(c) for c in shc001_codes.get("new_status_codes", [])}
     close_codes = {str(c) for c in shc001_codes.get("close_status_codes", [])}
@@ -32,6 +32,9 @@ def load_shc001_monthly(path, columns, shc001_codes, chunksize=2_000_000, crossw
         raise ValueError("industry_codes.shc001.stock_status_codes 가 비어 있음 — 현장에서 FRNC_STAT_CD 값 확인 후 채울 것")
     parts = []
     for chunk in read_columns(path, columns["shc001"], "SHC001", chunksize=chunksize):
+        chunk = filter_sido_code(chunk, "sido_cd", sido)
+        if chunk.empty:
+            continue
         status = clean_label(chunk["status"])
         oper = clean_label(chunk["oper"])
         cnt = to_num(chunk["cnt"]).fillna(0)

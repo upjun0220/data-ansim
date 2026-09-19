@@ -27,11 +27,19 @@
   },
   "params": {
     "kepco": {"source": "002", "layout": "auto", "chunksize": 2000000, "sido": null},
+    "shc": {"sido": null, "chunksize": 2000000,
+      "_shc_sido": "RAM 8GB 이하면 시도 코드 앞 2자리 목록으로 분할(예 [\"11\"] 서울). 16GB 이상이면 null(전체).",
+      "_chunksize": "RAM 8GB 이하 500000~1000000, 16GB 이상 2000000(기본). 작을수록 메모리 적게 쓰고 느림."},
+    "activation": {"clip_to_data": false, "source_label": null,
+      "_activation": "clip_to_data=true면 창 끝을 원천의 마지막 수록 달로 줄임(KEPCO_002 가공일자가 제공기간보다 이름). source_label=null이면 source 002 공용(사업자 채널) 충전 활성화, 001 충전 활성화(전체)"},
     "_kepco_sido": "메모리 부족 시 [\"서울\"] 처럼 시도별로 나눠 실행",
     "identification": {"n_boot": 499, "use_log1p": false, "control_group": "never_treated"},
     "energy": {"enabled": true, "evaluation_start": null, "evaluation_days": 7, "holidays": {}},
-    "priority": {"enabled": true, "weights": [0.333333, 0.333333, 0.333334]},
+    "priority": {"enabled": true, "weights": [0.333333, 0.333333, 0.333334], "min_axes": 3, "redundant_corr": 0.9,
+      "_priority": "min_axes=순위 대상에 필요한 최소 유효 축 수(3=세 축 모두). redundant_corr=안전·경제성 축 상관 경고 기준."},
     "_energy": "관측기간에 맞춰 평가일 조정. 최소 12주 연속 일별 이력·공식 공휴일 확인 필요. SMP는 timestamp(KST),smp(원/kWh) 정규화 CSV. 접근성 자료는 법정동코드 매핑 완료본을 지정. 공공성 증빙 미확보는 null 유지. KEP_007 미신청이면 paths.kep007=null.",
+    "output": {"min_cell_count": 3, "_min_cell_count": "소표본 억제 기준. 사무국 답변으로 바꿀 것. can.min_cell_count 는 하위 호환 별칭(output 이 우선)"},
+    "outputs": {"font_fallback": "ascii", "_font_fallback": "한글 폰트가 없으면 ascii=영문 라벨로 PNG 생성, none=한글 그대로"},
     "kill": {"sample_rows": 2000000, "compare_rows": 1000000, "kepco_max_chunks": 3}
   }
 }

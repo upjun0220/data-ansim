@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 
 from bjd_mapping import canonicalize, shc_bjd_code
-from common import clean_label, f_sf, log, mi_to_ym, norm_sf2, parse_mi, read_columns, to_num, wald_test
+from common import clean_label, f_sf, filter_sido_code, log, mi_to_ym, norm_sf2, parse_mi, read_columns, to_num, wald_test
 
 GROUPS = ("wait", "placebo", "control_ref")
 
@@ -74,6 +74,9 @@ def scan_shc002(path, columns, industry, shc_params, snapshot_months=(), nrows=N
     reader = read_columns(path, mapping, "SHC002", chunksize=shc_params["chunksize"], nrows=nrows)
     for chunk in reader:
         stats["rows"] += len(chunk)
+        chunk = filter_sido_code(chunk, "sido_cd", shc_params.get("sido"))
+        if chunk.empty:
+            continue
         bjd = canonicalize(shc_bjd_code(chunk["sido_cd"], chunk["sgg_cd"], chunk["umd_cd"]), crosswalk)
         mi = parse_mi(chunk["ym"])
         value, masked = _value_with_mask(chunk[metric], shc_params["masked_markers"])

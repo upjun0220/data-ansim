@@ -190,6 +190,27 @@ def scan_observed_dates(path, columns, params, source="KEPCO_seasonal"):
     return pd.DataFrame({"date": sorted(dates)})
 
 
+def last_month(agg):
+    """원천에 실제로 수록된 마지막 달의 월 인덱스(원천별로 따로 부른다 — 001/002 는 수록 기간이 다를 수 있다)."""
+    return int(agg["mi"].max())
+
+
+def window_shortfall(last_mi, window, ratio_months):
+    """활성화 창 안에서 사후 ratio_months 개월을 못 채우는 후보 달 수(창 끝이 수록 끝보다 늦을 때 늘어난다)."""
+    w0, w1 = (ym_to_mi(v) for v in window)
+    return max(0, w1 - max(w0 - 1, last_mi - int(ratio_months) + 1))
+
+
+def clip_window(window, last_mi):
+    """창 끝을 수록 마지막 달로 줄인다(끝이 더 이르면 그대로)."""
+    return [window[0], mi_to_ym(min(ym_to_mi(window[1]), last_mi))]
+
+
+def activation_label(source, override=None):
+    """산출물 제목·요약에 쓰는 처치 이름. 001 은 사업자 채널로 한정되지 않으므로 "공용"이라 부르지 않는다."""
+    return override or ("공용(사업자 채널) 충전 활성화" if str(source) == "002" else "충전 활성화(전체)")
+
+
 def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     """8-A 전용: 날짜를 보존한 1시간 평균 kW. 월 집계·중복·마스킹은 거부한다.
 

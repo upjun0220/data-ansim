@@ -33,6 +33,8 @@ py -3 -m venv .venv
 5. 8-A/8-B는 날짜가 보존된 1시간 원자료와 최소 12주 연속 이력이 필요하다. `energy.evaluation_start`는 현장에서 반드시 지정하고, 공휴일 달력·후보 장치 사양을 자료에 맞춰 확인한다. 로더는 검증·교정·평가에 필요한 기간만 읽는다. 월 집계만 있으면 예측은 실패로 남기며 실측으로 대체하지 않는다.
 6. SMP는 `timestamp,smp`(KST 시간 시작, 원/kWh) CSV로 정규화한 뒤 `paths.smp`를 지정한다. 미입력은 피크 목적함수와 비용 결측이다. 과거 SMP는 사후 가격 평가이며 사전 이용 가능 시점은 별도 확인한다.
 7. 현재 신청에서 제외한 KEP_007은 현장 템플릿의 `null`을 유지한다. 해당 선택 단계 생략은 의도한 부분완료이며, mock 전체 실행은 기존 경로 회귀 검증을 위해 합성 KEP_007을 포함한다.
+8. **반입 묶음:** 코드 zip과 데이터 CSV만 가능하며 최대 10개·총 50MB다. 계산 예: 코드 zip 1 + 데이터 CSV 최대 6(법정동코드 마스터·읍면동 경계 도형·SMP·충전소 위치·행정동별 EV 등록·(선택)공동주택 단지정보) + 폰트 1 = **8개**. V9 0-5절은 데이터 6개만 세므로 코드 zip과 폰트를 더해 세어야 한다. `python tools/check_import_bundle.py <폴더>`로 개수·용량·형식을 점검한다.
+9. RAM이 8GB 이하이면 `params.shc.sido`(시도 코드 앞 2자리 목록)와 `chunksize`를 줄여 SHC를 시도별로 나눠 읽는다(`kepco.sido`와 같은 취지, 청크 단위 필터).
 
 산출물: `out_dir/png/`(반출용) · `out_dir/csv/`(현장 작업용, 반출 대상 아님) · `out_dir/pipeline.log`.
 
@@ -72,10 +74,11 @@ py -3 -m venv .venv
 | 8 처방 | `load_axis.py` | `s8_load_concentration` · `s8_quadrants` · `s8_quadrants_plot` | 격리 |
 | 8-A 일별 예측 | `load_forecast.py` · `kepco_loader.py` | `s8a_validation` | 격리·실패 표시, 실측 대체 금지 |
 | 8-B ESS | `ess_optimizer.py` | `s8b_scenarios` · `s8b_schedules` · `s8b_comparison` · `s9_public_review` | 격리·행별 제약/예측/가격 상태 기록 |
-| 8-C 접근성 | `equity_access.py` | `s8c_accessibility` | 격리·외부자료 없으면 생략 |
-| 8-E 결합점수 | `priority_score.py` | `s8e_priority` | 격리·8-B/8-C 없으면 생략 |
+| 8-C 접근성 | `equity_access.py` | `s8c_accessibility`(2SFCA + 지표 1 `ev_per_charger` + 지표 2 `nearest_charger_km`) | 격리·외부자료 없으면 생략. 지표 1·2는 **법정동 중심점 근사**다: 충전소를 가장 가까운 중심점에 배정하며 폴리곤 공간조인·격자점이 아니다(행정경계 근처 충전소는 이웃 동네로 배정될 수 있음). **지표 3(자가충전 제약 주거 비율)은 미구현 — LH KLH_001이 신청 범위에 없어 신청 범위 결정 필요.** 300/500m 커버리지 비율은 8-D 후속(미구현) |
+| 9-H 발표 3숫자 | `headline.py` | `s9_headline` | 격리·8-B 또는 8-C 결과 필요. 숫자 1 = 충전기 1기당 EV 수의 상위10%÷하위10% 배수, 숫자 2 = ESS 미적용 평균 상한 초과 kWh, 숫자 3 = 잔여 초과 kWh와 SMP 기준 비용 차이. 각 행에 "증설 N대·상한 배율·이용률 배율" 가정과 상한 배율 범위를 병기. PNG는 소표본 법정동 기여분 제외 |
+| 8-E 결합점수 | `priority_score.py` | `s8e_priority`(순위 대상만) · `s8e_not_ranked`(부하 미평가 — 접근성 부족만 확인) · `s8e_priority_summary`(풀 크기·안전/경제성 축 상관) | 격리·8-B/8-C 없으면 생략. 세 축이 모두 있는 동네만 순위·`robust_top`·킬 15번 분모에 든다(`params.priority.min_axes`, 기본 3). 결측 사유는 `not_assessed_low_concentration`(8-B 대상 아님)과 `data_missing`. 안전·경제성 상관 ≥ `params.priority.redundant_corr`(기본 0.9)이면 실행 요약에 "사실상 두 축" 경고 |
 | 9 반출 | `outputs.py` · `pipeline.py` | `s0_run_summary` · `s9_manifest` | — |
-| 킬 크라이테리아 | `kill_criteria.py` | `kill_criteria/png/k_kill_criteria` | 항목별 `오류` |
+| 킬 크라이테리아 | `kill_criteria.py` | `kill_criteria/png/k_kill_criteria` | 항목별 `오류`. 16번 = 원천 수록 기간(활성화 창 끝과 비교) |
 
 ## 폴백 경로 (현장에 없을 수 있는 패키지)
 
@@ -108,7 +111,7 @@ py -3 -m venv .venv
 | CATE 단위결과 | Δ = 사후 3개월 평균 − 사전 평균, 대조군은 코호트 시점 분포 가중 | 대조군에도 셀 CATE 를 배정해 미활성 지역 처방에 쓴다 |
 | CATE 검증 | 같은 층화 K-fold 에서 상수 ATE / 2×2 / CF 의 변환결과 MSE · GATES 비교 | CF 는 교차검증 손실이 2×2 보다 크면 채택하지 않음 |
 | 4사분면 문턱 | CATE·집중도 모두 중앙값 | `load_axis.cate_cut`/`conc_cut` (`"zero"` 또는 숫자 가능) |
-| 001/002 | 합산하지 않음. 활성화 시점은 `kepco.source`(제공 설정 002), 전력축은 001 | 실제 포괄 범위·사업자 채널 대응은 현장 명세 확인 |
+| 001/002 | 합산하지 않음. 활성화 시점은 `kepco.source`(제공 설정 002), 전력축은 001. **주의: `config.py` 기본값은 `kepco.source="001"`이고 `field_template.json`·`mock.json`은 `"002"`다(통일 여부는 팀 확인 필요).** 산출물 제목은 `activation.source_label`(기본: 002 "공용(사업자 채널) 충전 활성화", 001 "충전 활성화(전체)"). KEPCO_002는 가공일자(20250825)가 제공기간 끝(20251231)보다 이르므로 킬 크라이테리아 16번이 원천별 마지막 수록 달을 창 끝과 비교해 사후 `ratio_months`를 못 채우는 달 수를 적고, `activation.clip_to_data=true`면 창 끝을 마지막 수록 달로 줄인다 | 실제 포괄 범위·사업자 채널 대응은 현장 명세 확인 |
 
 ## 공학 산출물 해석
 
@@ -124,10 +127,19 @@ py -3 -m venv .venv
 ## 반출 규칙 (코드로 강제)
 
 - 모든 표는 CSV + PNG 동시 생성. PNG 가 반출용.
-- `paths.font`가 있으면 해당 폰트를 등록하며, 실행 요약에 실제 폰트명을 남긴다. 한글 폰트가 없으면 킬 크라이테리아 실패다.
+- `paths.font`가 있으면 해당 폰트를 등록하며, 실행 요약에 실제 폰트명을 남긴다. 한글 폰트가 없으면 `params.outputs.font_fallback`이 정한다: `"ascii"`(기본)는 PNG의 한글을 영문 라벨로 바꿔 계속 진행하고(법정동은 `bjd_code`, 사전에 없는 한글은 `?`; 실행 요약 `사용폰트` 열과 킬 크라이테리아 11번이 "영문 대체 라벨로 진행"으로 표시), `"none"`이면 킬 크라이테리아 실패로 본다.
 - 위도·경도·좌표 계열 컬럼이 든 표는 `OutputWriter` 가 저장을 거부(`ValueError`). CAN·KEP_007 좌표는 내부 계산에만 쓴다.
 - CAN 법정동 표는 차량/세션 수 3 미만 칸을 `—` 로 억제.
 - KEPCO 법정동 표는 **공개하는 값을 만든 셀의 고객호수**가 3 미만이면 PNG 수치를 `—`로 억제하고, 내부 CSV에는 원값과 `소표본억제` 열을 남긴다. 법정동 단위 기간 집계 표(s8·8-A·8-B·9·8-E)는 그 기간 시간별 고객호수의 **최댓값**(`params.kepco.suppress_basis`, 기본 `"max"`, 서로 다른 시각은 서로 다른 하한이라 하나의 저조한 시간대로 전체를 가리지 않기 위함)을, 법정동×월 단위 표(s1)는 그 달의 대표 고객호수를 기준으로 한다. `bjd_code` 열이 없는 전국 합계표(s1_kepco_monthly·s1_kepco_band_share)는 행을 가리는 대신 소표본 법정동의 기여분 자체를 PNG 집계에서 빼 차감 역산을 막고, 활성화 시점 예시 그림(s2_activation_examples)도 소표본 법정동을 후보에서 뺀다. 고객호수 정보가 없는 법정동은 보수적으로 계속 억제한다.
+
+소표본 기준 값은 `params.output.min_cell_count`(기본 3, 옛 이름 `params.can.min_cell_count`는 별칭 — 둘 다 있으면 `output`이 우선)이고, 실행 요약(`s0_run_summary`)에 실제 적용된 `min_cell_count`·`suppress_basis`가 남는다. **`suppress_basis`는 KEPCO 법정동 표에만 적용되며 CAN 표에는 적용되지 않는다.** 어느 값을 쓸지는 아래 표로 정한다(사무국 답변 후).
+
+| 고객호수 정의 | 센터 억제 규칙 | suppress_basis |
+|---|---|---|
+| 고정 등록 수 | 무관 | max (min과 같음) |
+| 시간마다 바뀜 | 최종 숫자를 만든 인원만 기준 이상이면 됨 | max |
+| 시간마다 바뀜 | 집계에 들어간 칸이 하나라도 기준 미만이면 안 됨 | min |
+
 - 경로 B 산출물 제목에는 "정황상 보조 근거, 개별 차량 식별 아님"을 붙인다.
 - CATE 피처에 부하·집중도·피크 계열 이름이 들어오면 `ValueError`, 스냅샷이 활성화 창 시작 이후 달을 포함하면 `ValueError`.
 

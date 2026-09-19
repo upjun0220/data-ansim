@@ -27,8 +27,37 @@ KOREAN_FONTS = ("Malgun Gothic", "NanumGothic", "NanumBarunGothic", "AppleGothic
 GPS_COLUMN = re.compile(r"(위도|경도|좌표|gps|latitude|longitude|^lat$|^lon$|^lng$|^ltd$|^lngt$)", re.IGNORECASE)
 _GLYPH_FALLBACK = str.maketrans({"−": "-", "≈": "~", "≥": ">=", "≤": "<=", "τ": "tau", "×": "x"})
 
+# 한글 폰트가 없고 font_fallback="ascii"일 때 png_text 가 쓰는 영문 라벨 사전. 없는 한글은 "?"로 바뀐다.
+# ponytail: 프로세스 전역 플래그(OutputWriter 하나만 쓴다는 전제), 동시에 여러 writer 를 쓰면 마지막 설정이 이긴다.
+_ASCII = False
+_HANGUL = re.compile(r"[ㄱ-ㅎㅏ-ㅣ가-힣]+")
+_LABELS = {
+    "단계": "stage", "이름": "name", "상태": "status", "소요초": "sec", "비고": "note", "사용폰트": "font",
+    "완료": "done", "생략": "skipped", "실패": "failed", "예": "yes", "아니오": "no", "없음": "none",
+    "데이터 없음": "no data", "법정동": "bjd", "소표본억제": "suppressed", "산출물": "output", "형식": "format",
+    "경로": "path", "항목": "item", "값": "value", "순위 대상": "ranked", "순위 밖": "not ranked",
+    "일평균 충전량": "daily kWh", "활성화 후 개월": "months since activation", "활성화 시점 예시": "activation examples",
+    "유보": "held", "상위": "top", "전체": "total", "행": "rows", "세션 수": "sessions",
+    "부하 미평가 — 접근성 부족만 확인": "load not assessed - access gap only",
+    "실행 요약": "run summary", "킬 크라이테리아": "kill criteria", "판정": "verdict",
+    "① 접근성·수요 확인": "1 access/demand", "② 부하 완화 검토": "2 load relief",
+    "③ 공공 필요 확인": "3 public need", "④ 부하 완화·공공 필요 검토": "4 load relief + public need",
+    "4사분면 처방": "4-quadrant", "부하 집중도": "load concentration", "상권 효과": "commercial effect",
+}
+_LABEL_KEYS = sorted(_LABELS, key=len, reverse=True)
 
-def setup_korean_font(font_path=None):
+
+def setup_korean_font(font_path=None, fallback="none"):
+    """폰트를 못 찾으면 None. fallback="ascii"면 png_text 가 한글을 영문 라벨로 바꾼다."""
+    global _ASCII
+    name = _find_korean_font(font_path)
+    _ASCII = name is None and fallback == "ascii"
+    if _ASCII:
+        log.warning("한글 폰트 없음 — 영문 대체 라벨로 PNG 를 만든다(font_fallback=ascii)")
+    return name
+
+
+def _find_korean_font(font_path=None):
     if font_path:
         path = Path(font_path)
         if not path.is_file():
@@ -44,7 +73,7 @@ def setup_korean_font(font_path=None):
             rcParams["font.family"] = name
             rcParams["axes.unicode_minus"] = False
             return name
-    log.warning("한글 폰트를 찾지 못함 — PNG 의 한글이 네모로 깨질 수 있음 (후보: %s)", ", ".join(KOREAN_FONTS))
+    log.warning("한글 폰트를 찾지 못함 (후보: %s)", ", ".join(KOREAN_FONTS))
     return None
 
 
@@ -55,7 +84,12 @@ def new_figure(width=8.0, height=4.5):
 
 
 def png_text(text):
-    return str(text).translate(_GLYPH_FALLBACK)
+    s = str(text)
+    if _ASCII:
+        for ko in _LABEL_KEYS:
+            s = s.replace(ko, _LABELS[ko])
+        s = _HANGUL.sub("?", s)
+    return s.translate(_GLYPH_FALLBACK)
 
 
 def _text_units(text):
@@ -97,7 +131,7 @@ def suppress_small(df, count_col, min_count, cols=None):
 
 
 class OutputWriter:
-    def __init__(self, out_dir, dpi=150, png_max_rows=30, font_path=None):
+    def __init__(self, out_dir, dpi=150, png_max_rows=30, font_path=None, font_fallback="ascii"):
         self.out_dir = Path(out_dir)
         self.csv_dir = self.out_dir / "csv"
         self.png_dir = self.out_dir / "png"
@@ -106,7 +140,8 @@ class OutputWriter:
         self.dpi = dpi
         self.png_max_rows = png_max_rows
         self.manifest = []
-        self.font = setup_korean_font(font_path)
+        self.font = setup_korean_font(font_path, font_fallback)
+        self.font_label = self.font or ("없음(영문 대체 라벨로 진행)" if _ASCII else "없음")
 
     @staticmethod
     def assert_no_gps(df, name):
@@ -136,7 +171,7 @@ class OutputWriter:
         ax.axis("off")
         ax.set_title(png_text(header), fontsize=10, loc="left")
         if nrows == 0:
-            ax.text(0.5, 0.5, "데이터 없음", ha="center", va="center", fontsize=12)
+            ax.text(0.5, 0.5, png_text("데이터 없음"), ha="center", va="center", fontsize=12)
         else:
             tbl = ax.table(cellText=cells, colLabels=labels, cellLoc="center", bbox=[0, 0, 1, 1],
                            colWidths=[u / sum(units) for u in units])
@@ -175,8 +210,8 @@ def plot_activation_examples(daily, activation, max_regions=6):
     from common import mi_to_ym
 
     ax.set_xticks(ticks, [mi_to_ym(t) for t in ticks], rotation=45, fontsize=7)
-    ax.set_ylabel("일평균 충전량 (kWh/일)")
-    ax.set_title("2단계 활성화 시점 예시 (점선 = T_r)")
+    ax.set_ylabel(png_text("일평균 충전량 (kWh/일)"))
+    ax.set_title(png_text("2단계 활성화 시점 예시 (점선 = T_r)"))
     ax.legend(fontsize=7)
     return fig
 
@@ -193,8 +228,8 @@ def plot_event_study(series, title):
                     fmt="o-", ms=4, capsize=3, lw=1, label=png_text(label))
     ax.axhline(0, color="gray", lw=0.8)
     ax.axvline(-0.5, color="gray", ls=":", lw=0.8)
-    ax.set_xlabel("활성화 후 개월 k (k=-1 기준)")
-    ax.set_ylabel("tau(k)  (Y_ddd 로그차)")
+    ax.set_xlabel(png_text("활성화 후 개월 k (k=-1 기준)"))
+    ax.set_ylabel(png_text("tau(k)  (Y_ddd 로그차)"))
     ax.set_title(png_text(title))
     ax.legend(fontsize=8)
     return fig
@@ -215,9 +250,9 @@ def plot_quadrants(df, cate_cut, conc_cut):
                        linewidths=1.5, label=png_text(f"{label} (유보)"))
     ax.axvline(cate_cut, color="gray", ls="--", lw=0.8)
     ax.axhline(conc_cut, color="gray", ls="--", lw=0.8)
-    ax.set_xlabel("CATE 추정치 (상권 효과)")
-    ax.set_ylabel("부하 집중도 = max_h 평균kW / Σ_h 평균kW")
-    ax.set_title("8단계 4사분면 처방 (빈 원 = 처치오염·사전추세 유보)")
+    ax.set_xlabel(png_text("CATE 추정치 (상권 효과)"))
+    ax.set_ylabel(png_text("부하 집중도 = max_h 평균kW / Σ_h 평균kW"))
+    ax.set_title(png_text("8단계 4사분면 처방 (빈 원 = 처치오염·사전추세 유보)"))
     ax.legend(fontsize=7, loc="best")
     return fig
 
@@ -228,8 +263,8 @@ def plot_histogram(counts, title, xlabel):
     ax = fig.add_subplot(111)
     ax.bar(range(len(counts)), counts["n"], color="#4C72B0")
     ax.set_xticks(range(len(counts)), [png_text(b) for b in counts["bin"]], rotation=45, fontsize=7)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel("세션 수")
+    ax.set_xlabel(png_text(xlabel))
+    ax.set_ylabel(png_text("세션 수"))
     ax.set_title(png_text(title))
     return fig
 

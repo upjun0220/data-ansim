@@ -82,7 +82,7 @@ def test_all_stages_complete(pipeline_result):
 
 def test_energy_environment_check_is_added_when_enabled(mock_env):
     table = run_checks(mock_env["config"], params_override={"energy": {"enabled": True}}, write=False)
-    assert table["번호"].tolist() == list(range(1, 12))
+    assert table["번호"].tolist() == list(range(1, 12)) + [16]
     assert table.set_index("번호").at[9, "판정"] == "통과"
 
 
@@ -163,7 +163,7 @@ def test_no_gps_in_exports(pipeline_result):
 
 def test_kill_criteria(mock_env):
     table = run_checks(mock_env["config"])
-    assert list(table["번호"]) == list(range(1, 9)) + [10, 11]
+    assert list(table["번호"]) == list(range(1, 9)) + [10, 11, 16]
     assert set(table["판정"]) <= {"통과", "경고", "실패", "오류"}
     assert not (table["판정"] == "오류").any(), table.to_string()
     v = table.set_index("번호")["판정"]

@@ -20,6 +20,14 @@ log = logging.getLogger(LOGGER_NAME)
 EARTH_RADIUS_KM = 6371.0088
 
 
+def filter_sido_code(chunk, col, sidos):
+    """시도 코드 앞 2자리가 sidos 에 든 행만 남긴다. 청크마다 불러 메모리를 줄인다(sidos 가 비면 그대로)."""
+    if not sidos:
+        return chunk
+    keep = {str(s)[:2] for s in sidos}
+    return chunk[chunk[col].astype(str).str.replace(r"\D", "", regex=True).str[:2].isin(keep)]
+
+
 def setup_logging(out_dir=None, level=logging.INFO):
     """콘솔 + out_dir/pipeline.log. 여러 번 호출해도 핸들러가 중복되지 않는다."""
     logger = logging.getLogger(LOGGER_NAME)
