@@ -88,7 +88,7 @@ DEFAULT_PARAMS = {
         "control_group": "never_treated",  # never_treated | not_yet_treated
         "estimator": "auto",               # auto(CS→실패 시 회귀) | cs | regression
         "n_boot": 499, "seed": 42, "alpha": 0.05,
-        "pretrend_action": "flag",         # flag(유보 표시) | exclude(표본 제외 후 재추정)
+        "pretrend_action": "flag",         # 유보 표시만 지원. exclude(표본 제외)는 삭제(사전추세로 표본을 고르면 추론이 왜곡됨, Roth 2022)
     },
     "mde": {"repetitions": 50, "seed": 42, "bias_se_multiple": 2.0},
     # ⚠ [9/15 mock] 초과비율 1.5 · 증가폭 0.5%p 는 월 개설 Poisson 잡음만으로 처치 17곳 중 3곳을 오탐했다.
@@ -99,6 +99,7 @@ DEFAULT_PARAMS = {
         "post_months": 3,
         "top_k_bidvs": 5,
         "min_treated_cf": 30,
+        "blp_alpha": 0.10,   # BLP 교정 검정 p 가 이보다 크면 CATE 를 보고하지 않는다(4사분면은 부하 집중도만으로)
         "n_folds": 5, "seed": 42,
         "cf_params": {"n_estimators": 400, "min_samples_leaf": 3, "max_depth": None},
         "split_features": ["wait_share", "outsider_share"],  # 폴백 2×2 서브그룹 축

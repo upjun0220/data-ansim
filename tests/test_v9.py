@@ -134,3 +134,39 @@ def test_import_bundle_check_rules(tmp_path):
     for i in range(6):
         (tmp_path / f"d{i}.csv").write_bytes(b"x")
     assert any("최대 10개" in p for p in check(collect([tmp_path]))[1])
+
+def test_blp_calibration_separates_real_from_noise_heterogeneity():
+    from heterogeneity import _blp_calibration
+    rng = np.random.default_rng(0)
+    signal = rng.normal(size=200)
+    y_star = 2.0 * signal + rng.normal(size=200)
+    b, p = _blp_calibration(y_star, signal)                      # 예측이 실제 이질성을 따라감
+    assert b > 1.5 and p < 0.01
+    b2, p2 = _blp_calibration(y_star, rng.normal(size=200))      # 예측이 잡음 → 보고하지 않아야 함
+    assert p2 > 0.10
+    assert np.isnan(_blp_calibration(y_star, np.ones(200))[1]) and np.isnan(_blp_calibration(y_star[:5], signal[:5])[1])
+
+
+def test_quadrants_without_cate_use_load_only_labels():
+    from load_axis import classify_quadrants
+    cate = pd.DataFrame({"bjd_code": list("ABCD"), "cate": np.nan, "W": [1, 1, 0, 0], "method": "x"})
+    conc = pd.DataFrame({"bjd_code": list("ABCD"), "concentration": [0.2, 0.3, 0.1, 0.05]})
+    quad, cate_cut, _ = classify_quadrants(cate, conc, {"cate_cut": "median", "conc_cut": "median"})
+    assert np.isnan(cate_cut) and quad["quadrant"].str.contains("CATE 미보고").all()
+    assert set(quad["quadrant"]) == {"⑤ 부하 집중(CATE 미보고)", "⑥ 부하 분산(CATE 미보고)"}
+
+
+def test_placebo_verdict_uses_zero_test_and_reports_ci():
+    from identification import discount_by_placebo
+    ks = [-2, -1, 0, 1]
+
+    def result(tau, se, p, att, att_se):
+        ev = pd.DataFrame({"k": ks, "tau": tau, "se": se, "p": p})
+        return {"event": ev, "post": {"att": att, "se": att_se, "p": p[-1]}}
+    main = result([0, 0, 0.5, 0.6], [0.1] * 4, [1, 1, 0.01, 0.01], 0.55, 0.1)
+    bad = result([0, 0, 0.3, 0.3], [0.1] * 4, [1, 1, 0.01, 0.01], 0.3, 0.1)      # 위약이 0과 구분됨
+    ok = result([0, 0, 0.0, 0.01], [0.1] * 4, [1, 1, 0.9, 0.9], 0.005, 0.1)
+    _, s_bad = discount_by_placebo(main, bad)
+    _, s_ok = discount_by_placebo(main, ok)
+    assert s_bad.attrs["placebo_fails"] and "해석 유보" in s_bad.set_index("구분").at["위약(대조 업종)", "판정"]
+    assert not s_ok.attrs["placebo_fails"] and {"CI_하한", "CI_상한"} <= set(s_ok.columns)

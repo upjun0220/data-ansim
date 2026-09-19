@@ -183,6 +183,7 @@ section[id]{scroll-margin-top:16px}
       <li><strong>KEPCO 수록 기간 점검(16번):</strong> 고른 원천이 분석 창 끝보다 일찍 끝나는지 확인하고, 창을 줄이는 옵션(<code>activation.clip_to_data</code>)을 넣었다.</li>
       <li><strong>발표 숫자 3개 표(<code>s9_headline</code>)</strong>와 접근성 지표 1·2 추가. 신한카드 시도별 분할(<code>shc.sido</code>), 반입 묶음 점검 도구도 추가.</li>
       <li><strong>설계 원본 V9를 9/19 수정본으로 교체.</strong> LH 자료는 신청 범위 밖으로 정정, 지표 3과 300/500m 커버리지는 후속.</li>
+      <li><strong>방법론 감사 반영:</strong> 사전추세로 지역을 제외하는 옵션 삭제, CATE는 BLP 교정 검정을 통과해야 보고(미충족이면 4사분면은 부하 집중도만으로), 위약은 “0과 구분되는가”로 판정, 추정량 이름 정정(“충전 활동 활성화 시점의 외지 대기소비 매출 변화”).</li>
       <li><strong>결정이 필요한 것:</strong> 행정동 기준일 때의 대응 방식, <code>kepco.source</code> 기본값 통일(<a href="#ch10">10장</a>).</li>
     </ul>
   </div>
@@ -341,7 +342,7 @@ section[id]{scroll-margin-top:16px}
 
   <h3>직접 실행하는 파일</h3>
   <div class="files">
-    <div class="file"><h4>pipeline.py <small>666줄 · 총감독</small></h4>
+    <div class="file"><h4>pipeline.py <small>668줄 · 총감독</small></h4>
       <p class="one">0~9단계를 순서대로 부르는 지휘자.</p>
       <p class="like">비유: 요리 레시피 순서표. 재료 손질부터 담기까지 차례대로 시킨다.</p>
       <dl><dt>넣는 것</dt><dd>config/field.json</dd><dt>나오는 것</dt><dd>out/…/csv, png, pipeline.log</dd></dl></div>
@@ -598,6 +599,7 @@ summary</code></pre></li>
       <tr><td class="num">12</td><td><code>kepco.source</code> 기본값이 코드는 <code>"001"</code>, 현장 템플릿·mock은 <code>"002"</code></td><td>설정 안 적으면 다른 원천으로 돌 수 있음</td><td><span class="pill p-opt">결정 필요</span> 지금은 README에 명시만</td></tr>
       <tr><td class="num">13</td><td>형평성 지표 3(자가충전 제약 주거 비율)과 300/500m 커버리지 미구현</td><td>V9에 적힌 지표 일부가 아직 없음</td><td><span class="pill p-opt">결정 필요</span> LH 자료를 신청 범위에 넣을지</td></tr>
       <tr><td class="num">14</td><td>저장소가 아주 긴 폴더 경로에 있으면 이름이 긴 결과 파일(예: <code>s3_can_spatial_agreement.csv</code>) 저장이 실패할 수 있음(윈도우 경로 260자 제한)</td><td>로컬 실행에서 일부 표가 빠짐. 코드 문제 아님</td><td><span class="pill p-info">환경</span> 짧은 경로(<code>C:\dev\…</code>)에서 실행</td></tr>
+      <tr><td class="num">15</td><td>방법론 감사(리플맵4.2) 지적 중 미반영: 방문객 계절성에 따른 처치 시점 오염(계절 조정·순열 추론), 동적 TWFE 폴백 교체(BJS imputation), 처치 인접 지역 통제군 오염(도넛·시군구 클러스터·wild bootstrap), 심은 효과 복원 테스트</td><td>상권(부가) 결과의 신뢰도. 주 결과(안전·형평성·경제성)에는 영향 없음</td><td><span class="pill p-opt">후속</span> 상권은 “MDE 이상 효과는 관측되지 않음”으로만 보고</td></tr>
     </tbody>
   </table></div>
 </section>

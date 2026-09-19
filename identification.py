@@ -534,14 +534,31 @@ def discount_by_placebo(main, placebo):
     else:
         post_se = float(np.sqrt(mp["se"] ** 2 + pp["se"] ** 2))
     post_adj = mp["att"] - pp["att"]
+
+    def ci(draws, est, se):
+        """부트스트랩 분포가 있으면 백분위수 95% 구간, 없으면 정규근사."""
+        if draws is not None and len(draws) > 2 and np.isfinite(draws[1:]).any():
+            lo, hi = np.nanpercentile(draws[1:], [2.5, 97.5])
+            return float(lo), float(hi)
+        return est - 1.96 * se, est + 1.96 * se
+
+    adj_draws = mp["draws"] - pp["draws"] if paired and mp.get("draws") is not None and pp.get("draws") is not None \
+        and len(mp["draws"]) == len(pp["draws"]) else None
+    placebo_fails = bool(np.isfinite(pp["p"]) and pp["p"] < 0.05)
+    # 감사 1번: 판정 기준은 "위약이 0과 구분되는가"다. 할인 값은 참고로 보고하고 부트스트랩 CI 를 붙인다.
+    verdict = {"주 결과(할인 전)": "", "위약(대조 업종)": ("위약이 0과 구분됨 — 식별 가정 의심, 주 결과 해석 유보"
+                                                           if placebo_fails else "위약이 0과 구분되지 않음"),
+               "할인 후 = 주 − 위약": "참고값(판정은 위약 행 기준)"}
     summary = pd.DataFrame([
-        {"구분": "주 결과(할인 전)", "사후평균": mp["att"], "SE": mp["se"], "p": mp["p"]},
-        {"구분": "위약(대조 업종)", "사후평균": pp["att"], "SE": pp["se"], "p": pp["p"]},
+        {"구분": "주 결과(할인 전)", "사후평균": mp["att"], "SE": mp["se"], "p": mp["p"], **dict(zip(("CI_하한", "CI_상한"), ci(mp.get("draws"), mp["att"], mp["se"])))},
+        {"구분": "위약(대조 업종)", "사후평균": pp["att"], "SE": pp["se"], "p": pp["p"], **dict(zip(("CI_하한", "CI_상한"), ci(pp.get("draws"), pp["att"], pp["se"])))},
         {"구분": "할인 후 = 주 − 위약", "사후평균": post_adj, "SE": post_se,
-         "p": norm_sf2(post_adj / post_se) if post_se > 0 else np.nan},
+         "p": norm_sf2(post_adj / post_se) if post_se > 0 else np.nan, **dict(zip(("CI_하한", "CI_상한"), ci(adj_draws, post_adj, post_se)))},
     ])
-    if np.isfinite(pp["p"]) and pp["p"] < 0.05:
-        log.warning("⚠ 위약 효과가 0 과 유의하게 다름(p=%.3f, %.4f) — 주 결과를 그만큼 할인해 보고", pp["p"], pp["att"])
+    summary["판정"] = summary["구분"].map(verdict)
+    summary.attrs["placebo_fails"] = placebo_fails
+    if placebo_fails:
+        log.warning("⚠ 위약 효과가 0 과 유의하게 다름(p=%.3f, %.4f) — 식별 가정 의심, 주 결과 해석 유보(할인 후 값은 참고)", pp["p"], pp["att"])
     log.info("6단계 위약 할인: 사후평균 %.4f → %.4f (위약 %.4f)", mp["att"], post_adj, pp["att"])
     return table, summary
 

@@ -330,7 +330,7 @@ def run(config_path, params_override=None, paths_override=None):
             ip = P["identification"]
             main = identification.run_event_study(panel, "y_main", S["activation"], ip, units)
             writer.table(identification.event_table(main), "s5_event_main", "5단계 이벤트 스터디 tau(k) — 주 결과",
-                         note=f"처치 {main['n_treated']} · 대조 {main['n_control']} · {ip['control_group']}"
+                         note=f"추정량: 충전 활동 활성화 시점의 외지 대기소비 매출 변화(충전소 설치 효과가 아님) · 처치 {main['n_treated']} · 대조 {main['n_control']} · {ip['control_group']}"
                               + (f" · 폴백 사유: {main['fallback_reason']}" if main["fallback_reason"] else ""))
             if len(main["att_gt"]):
                 writer.table(main["att_gt"], "s5_att_gt", "5단계 ATT(g,t) 원표")
@@ -340,14 +340,12 @@ def run(config_path, params_override=None, paths_override=None):
                                         if np.isfinite(pre["p"]) else "검정불가(사전기간 부족)"}]),
                          "s5_pretrend_overall", "5단계 사전 추세 검정")
             unit_pre = main["unit_pretrend"]
-            writer.table(unit_pre, "s5_pretrend_region", "5단계 법정동별 사전 추세 (유보 표시)")
+            writer.table(unit_pre, "s5_pretrend_region", "5단계 법정동별 사전 추세 (표시만 · 제외하지 않음, 지역별 검정은 검정력이 낮음)")
             flagged = set(unit_pre.loc[unit_pre["판정"].str.startswith("유보"), "bjd_code"]) if len(unit_pre) else set()
-            if ip["pretrend_action"] == "exclude" and flagged:
-                log.info("사전추세 유보 %d곳 제외 후 재추정", len(flagged))
-                main = identification.run_event_study(panel, "y_main", S["activation"], ip, units - flagged)
-                writer.table(identification.event_table(main), "s5_event_main_excl_pretrend",
-                             "5단계 tau(k) — 사전추세 유보 지역 제외")
-                units = units - flagged
+            if ip.get("pretrend_action", "flag") != "flag":
+                # 사전추세 검정으로 표본을 고르면 이후 추론이 왜곡된다(Roth 2022). 지역별 검정은 검정력도 낮아 표시만 한다.
+                log.warning("params.identification.pretrend_action=%r 는 지원하지 않음 — 지역 제외 옵션은 삭제됨. flag(표시만)로 진행",
+                            ip["pretrend_action"])
             if main["estimator"].startswith("Callaway"):
                 try:
                     reg = identification.regression_event_study(panel, "y_main", S["activation"], ip, units)
@@ -367,7 +365,8 @@ def run(config_path, params_override=None, paths_override=None):
             by_k, post = identification.discount_by_placebo(main, plc)
             writer.table(identification.event_table(plc), "s6_event_placebo", "6단계 위약(대조 업종) tau(k)")
             writer.table(by_k, "s6_discount_by_k", "6단계 위약 할인 — k별 할인 전/후 (둘 다 보고)")
-            writer.table(post, "s6_post_summary", "6단계 사후 평균효과 — 할인 전 · 위약 · 할인 후")
+            writer.table(post, "s6_post_summary", "6단계 사후 평균효과 — 할인 전 · 위약 · 할인 후",
+                         note="판정 기준 = 위약이 0과 구분되는가(p<0.05이면 주 결과 해석 유보). 할인 후 값은 참고이며 CI 는 부트스트랩 백분위수")
             adj = by_k.rename(columns={"tau_할인후": "tau"}).assign(
                 ci_lo=lambda d: d["tau"] - 1.96 * d["se_할인후"], ci_hi=lambda d: d["tau"] + 1.96 * d["se_할인후"])
             writer.figure(plot_event_study({"주 결과(할인 전)": main["event"], "위약(대조 업종)": plc["event"],
@@ -400,10 +399,12 @@ def run(config_path, params_override=None, paths_override=None):
             het = heterogeneity.run_heterogeneity(feats, outcomes, hp)
             writer.table(feats, "s7_features", f"7단계 이질성 변수 (스냅샷 {'~'.join(hp['snapshot_months'])} 고정)")
             cate = het["cate"].assign(유보사유=lambda d: d["bjd_code"].map(reserved).fillna(""))
-            writer.table(cate, "s7_cate_region", f"7단계 법정동별 CATE — {het['method']}",
-                         note=f"Causal Forest 미사용 사유: {het['reason']}" if het["reason"] else "")
+            notes = [f"Causal Forest 미사용 사유: {het['reason']}"] if het["reason"] else []
+            if not het["reportable"]:
+                notes.append(f"CATE 미보고 — {het['report_reason']}")
+            writer.table(cate, "s7_cate_region", f"7단계 법정동별 CATE — {het['method']}", note=" · ".join(notes))
             writer.table(het["validation"], "s7_cate_validation", "7단계 CATE 검증 — 같은 교차검증 분할에서 방법 비교",
-                         note="변환결과 MSE 낮을수록 · GATES 상위−하위 클수록 좋음")
+                         note=f"변환결과 MSE 낮을수록 · GATES 클수록 좋음 · BLP 기울기>0 이고 p<={P['heterogeneity']['blp_alpha']}여야 CATE 보고")
             if het["importance"] is not None:
                 writer.table(het["importance"], "s7_importance", "7단계 Causal Forest 변수 중요도")
             if het["cells"] is not None:
@@ -435,10 +436,11 @@ def run(config_path, params_override=None, paths_override=None):
                 export, customer_min, P["can"]["min_cell_count"],
                 ["concentration", "peak_avg_kw", "daily_kwh"])
             writer.table(export_csv, "s8_quadrants", "8단계 4사분면 처방 표", png_df=export_png,
-                         note="유보사유가 있는 지역은 해석 유보")
+                         note="유보사유가 있는 지역은 해석 유보" + (" · CATE 미보고: 부하 집중도만으로 분류" if not quad["cate"].notna().any() else ""))
             counts = quad.groupby("quadrant").agg(법정동수=("bjd_code", "size"), 유보수=("reserved", "sum")).reset_index()
             writer.table(counts, "s8_quadrant_counts", "8단계 사분면별 법정동 수")
-            writer.figure(plot_quadrants(quad, cc, kc), "s8_quadrants_plot")
+            if quad["cate"].notna().any():
+                writer.figure(plot_quadrants(quad, cc, kc), "s8_quadrants_plot")
             writer.figure(plot_bar(counts, "quadrant", "법정동수", "사분면별 법정동 수", "법정동 수"), "s8_quadrant_counts_bar")
             S["quadrants"] = quad
         runner.run("8", "전력축·처방", stage8, ISOLATED)
