@@ -33,14 +33,14 @@ py -3 -m venv .venv
 5. 8-A/8-B는 날짜가 보존된 1시간 원자료와 최소 12주 연속 이력이 필요하다. `energy.evaluation_start`는 현장에서 반드시 지정하고, 공휴일 달력·후보 장치 사양을 자료에 맞춰 확인한다. 로더는 검증·교정·평가에 필요한 기간만 읽는다. 월 집계만 있으면 예측은 실패로 남기며 실측으로 대체하지 않는다.
 6. SMP는 `timestamp,smp`(KST 시간 시작, 원/kWh) CSV로 정규화한 뒤 `paths.smp`를 지정한다. 미입력은 피크 목적함수와 비용 결측이다. 과거 SMP는 사후 가격 평가이며 사전 이용 가능 시점은 별도 확인한다.
 7. 현재 신청에서 제외한 KEP_007은 현장 템플릿의 `null`을 유지한다. 해당 선택 단계 생략은 의도한 부분완료이며, mock 전체 실행은 기존 경로 회귀 검증을 위해 합성 KEP_007을 포함한다.
-8. **반입 묶음:** 코드 zip과 데이터 CSV만 가능하며 최대 10개·총 50MB다. 계산 예: 코드 zip 1 + 데이터 CSV 최대 6(법정동코드 마스터·읍면동 경계 도형·SMP·충전소 위치·행정동별 EV 등록·(선택)공동주택 단지정보) + 폰트 1 = **8개**. V9 0-5절은 데이터 6개만 세므로 코드 zip과 폰트를 더해 세어야 한다. `python tools/check_import_bundle.py <폴더>`로 개수·용량·형식을 점검한다.
+8. **반입 묶음:** 코드 zip과 데이터 CSV만 가능하며 최대 10개·총 50MB다. **파일명은 영문 대·소문자와 숫자만** 쓸 수 있다(포털 경고: 공백·한글 불가, `_`·`-`도 쓰지 않는다). 권장 이름: `dataansimcodev10.zip`, `bjdmaster.csv`, `bjdcrosswalk.csv`, `bjdcentroids.csv`, `smp.csv`, `evstations.csv`, `evregistration.csv`, `koreanfont.ttf`. 계산 예: 코드 zip 1 + 데이터 CSV 최대 6(법정동코드 마스터·읍면동 경계 도형·SMP·충전소 위치·행정동별 EV 등록·(선택)공동주택 단지정보) + 폰트 1 = **8개**. V9 0-5절은 데이터 6개만 세므로 코드 zip과 폰트를 더해 세어야 한다. `python tools/check_import_bundle.py <폴더>`로 개수·용량·형식을 점검한다.
 9. RAM이 8GB 이하이면 `params.shc.sido`(시도 코드 앞 2자리 목록)와 `chunksize`를 줄여 SHC를 시도별로 나눠 읽는다(`kepco.sido`와 같은 취지, 청크 단위 필터).
 
 산출물: `out_dir/png/`(반출용) · `out_dir/csv/`(현장 작업용, 반출 대상 아님) · `out_dir/pipeline.log`.
 
 ## 참고자료 생성
 
-법정동 마스터·코드대응·중심점 참고자료는 `data/ref/` 원본에서 `tools/build_reference_files.py`로 필요할 때 생성한다. 이전 `dist/` 반입 ZIP은 V9 코드와 일치하지 않아 보관하지 않는다.
+법정동 마스터·코드대응·중심점 참고자료는 `data/ref/` 원본에서 `tools/build_reference_files.py`로 필요할 때 생성한다. 출력 파일명은 반입 규정(영문·숫자만)에 맞춰 `bjdmaster.csv`·`bjdcrosswalk.csv`·`bjdcentroids.csv`로 고정이며 세 파일을 각각 반입한다(zip은 코드만). 이전 `dist/` 반입 ZIP은 V9 코드와 일치하지 않아 보관하지 않는다.
 
 ### 법정동 코드 개편 — 기준코드
 

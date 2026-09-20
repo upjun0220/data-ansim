@@ -170,3 +170,14 @@ def test_placebo_verdict_uses_zero_test_and_reports_ci():
     _, s_ok = discount_by_placebo(main, ok)
     assert s_bad.attrs["placebo_fails"] and "해석 유보" in s_bad.set_index("구분").at["위약(대조 업종)", "판정"]
     assert not s_ok.attrs["placebo_fails"] and {"CI_하한", "CI_상한"} <= set(s_ok.columns)
+
+def test_import_bundle_rejects_unsafe_file_names(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from check_import_bundle import check, collect
+    (tmp_path / "dataansimcodev10.zip").write_bytes(b"x")
+    (tmp_path / "bjdmaster.csv").write_bytes(b"x")
+    assert check(collect([tmp_path]))[1] == []
+    for bad in ("data-ansim.csv", "bjd_master.csv", "법정동마스터.csv", "my file.csv"):
+        (tmp_path / bad).write_bytes(b"x")
+    problems = check(collect([tmp_path]))[1]
+    assert sum("파일명 규칙 위반" in x for x in problems) == 4

@@ -4,11 +4,14 @@
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 MAX_FILES, MAX_BYTES = 10, 50 * 1024 * 1024
 FONT_EXT = {".ttf", ".otf", ".ttc"}
+# 반입 포털 규칙: 파일명에는 영문 대·소문자와 숫자만(공백·한글·특수문자 불가). 확장자 앞의 점 하나만 허용한다.
+SAFE_NAME = re.compile(r"^[A-Za-z0-9]+\.[A-Za-z0-9]+$")
 
 
 def collect(paths):
@@ -36,6 +39,7 @@ def check(files):
     if kinds.count("code") != 1:
         problems.append(f"코드 zip {kinds.count('code')}개(정확히 1개여야 함)")
     problems += [f"허용되지 않는 형식: {n}" for n, k, _ in rows if k == "other"]
+    problems += [f"파일명 규칙 위반(영문·숫자만): {n}" for n, _, _ in rows if not SAFE_NAME.match(n)]
     return rows, problems
 
 

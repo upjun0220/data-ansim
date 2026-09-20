@@ -21,18 +21,18 @@
   파이프라인이 코드대응표로 기준코드 하나로 묶는다(시계열 단절·SHC 조인 끊김 방지).
   ⚠ [9/16 확인] 경계 2023-07 ↔ 마스터 2026-07 사이 개편: 전남광주 623 · 인천 중·동·서구 80 · 화성 37 · 부천 24 · 기타 4
 
-출력(dist/field_refs/):
-  법정동코드_마스터_<기준일>.txt       — 파이프라인 기본 형식(법정동코드 · 법정동명 · 폐지여부, 탭)
-  법정동_코드대응_기준<as-of>.csv      — 코드 · 기준코드 (+ 구코드 · 신코드 · 변경일 · 명칭)
-  법정동_중심점_<경계기준일>.csv        — 법정동코드(기준코드) · 위도 · 경도(WGS84) · 산출방식 · 코드보정
-  중심점_마스터_대조.csv                — 중심점 없는 기준코드 · 대응 실패 코드
-  참고자료_안내.txt                     — 출처 · 기준일 · 한계
+출력(dist/field_refs/) — 반입 포털은 파일명에 영문 대소문자·숫자만 허용한다(공백·한글·_·- 불가). 그래서 이름을 고정한다:
+  bjdmaster.csv      — 법정동코드 마스터(법정동코드 · 법정동명 · 폐지여부, 쉼표)   → paths.bjd_master
+  bjdcrosswalk.csv   — 코드 · 기준코드 (+ 구코드 · 신코드 · 변경일 · 명칭)            → paths.bjd_crosswalk
+  bjdcentroids.csv   — 법정동코드(기준코드) · 위도 · 경도(WGS84) · 산출방식 · 코드보정 → paths.emd_centroids
+  centroiddiff.csv   — 중심점 없는 기준코드 · 대응 실패 코드 (반입하지 않는 확인용)
+  refguide.txt       — 출처 · 기준일 · 한계 (반입하지 않는 확인용)
+반입은 위 CSV 3개를 각각 올린다(zip은 코드만). 기준일은 refguide.txt 에 적는다.
 """
 from __future__ import annotations
 
 import argparse
 import sys
-import zipfile
 from collections import Counter
 from pathlib import Path
 
@@ -165,7 +165,7 @@ def build_master(master, cw, out_txt):
     out = pd.concat([out, pd.DataFrame(extra).assign(폐지여부="존재")], ignore_index=True)
     if out["법정동코드"].duplicated().any():
         raise ValueError(f"복원한 구코드가 현행 코드와 겹침: {out.loc[out['법정동코드'].duplicated(), '법정동코드'].head().tolist()}")
-    out.to_csv(out_txt, sep="\t", index=False, encoding="utf-8-sig")
+    out.to_csv(out_txt, index=False, encoding="utf-8-sig")
     return out, len(extra)
 
 
@@ -272,15 +272,15 @@ def main():
         shp_items.append((code, str(r[i_nm]).strip()))
 
     cw, fails = build_crosswalk(master, shp_items, args.as_of)
-    cw_csv = out / f"법정동_코드대응_기준{tag}.csv"
+    cw_csv = out / "bjdcrosswalk.csv"
     cw[["코드", "기준코드", "기준", "구코드", "신코드", "변경일", "구_시도명", "구_시군구명", "신_시도명", "신_시군구명",
         "읍면동명"]].sort_values(["변경일", "구코드"]).to_csv(cw_csv, index=False, encoding="utf-8-sig")
-    master_txt = out / f"법정동코드_마스터_{args.master_date}.txt"
+    master_txt = out / "bjdmaster.csv"
     master_out, n_restored = build_master(master, cw, master_txt)
 
     to_canonical = dict(zip(cw["코드"], cw["기준코드"]))
     all_codes = master_emd_codes | set(cw["구코드"])
-    cent_csv = out / f"법정동_중심점_{args.emd_date}.csv"
+    cent_csv = out / "bjdcentroids.csv"
     cent, n_dup = build_centroids(reader, i_cd, all_codes, to_canonical, cent_csv)
 
     # 파이프라인 로더로 그대로 읽히는지 · 기준코드 기준 보유율
@@ -298,7 +298,7 @@ def main():
         pd.DataFrame({"구분": "마스터에 없는 중심점 코드", "법정동코드": stray, "이름_또는_경계코드": ""}),
         fails,
     ], ignore_index=True)
-    diff.to_csv(out / "중심점_마스터_대조.csv", index=False, encoding="utf-8-sig")
+    diff.to_csv(out / "centroiddiff.csv", index=False, encoding="utf-8-sig")
 
     summary = cw.groupby(["변경일", "기준", cw["구코드"].str[:5]]).agg(
         읍면동수=("구코드", "size"), 구=("구_시군구명", "first"), 신=("신_시군구명", lambda s: "·".join(sorted(set(s))))
@@ -306,17 +306,17 @@ def main():
     how = cent["산출방식"].value_counts().to_dict()
     guide = f"""충전 리플맵 4.2 — 현장 참고자료 (config/field_template.json 이 이 파일 이름을 가리킨다)
 
-1) 법정동코드_마스터_{args.master_date}.txt   → paths.bjd_master
+1) bjdmaster.csv   → paths.bjd_master  (기준일 {args.master_date})
    출처: 국토교통부_전국 법정동 (공공데이터포털 https://www.data.go.kr/data/15063424/fileData.do), 기준 {args.master_date}
    현행 {len(master):,}행 + 개편 전 코드 복원 {n_restored:,}행 = {len(master_out):,}행 · 로더 기준 읍면동 {len(loaded_master):,}곳
    원천 텍스트가 개편 전 명칭이든 후 명칭이든 매칭되도록 둘 다 넣었다.
 
-2) 법정동_코드대응_기준{tag}.csv   → paths.bjd_crosswalk
+2) bjdcrosswalk.csv   → paths.bjd_crosswalk  (기준코드 기준일 {tag})
    기준코드 = {args.as_of}(분석 데이터 끝)에 유효한 코드. 파이프라인이 KEPCO·SHC001·SHC002·중심점 코드를 모두 이 코드로 묶는다.
    대응 {len(cw):,}쌍 · 대응 실패 {len(fails)}건
 {summary.to_string(index=False)}
 
-3) 법정동_중심점_{args.emd_date}.csv   → paths.emd_centroids
+3) bjdcentroids.csv   → paths.emd_centroids  (경계 기준일 {args.emd_date})
    출처: GIS Developer 읍면동 경계 SHP emd_{args.emd_date}.zip (http://www.gisdeveloper.co.kr/?p=2332)
    좌표: UTM-K(EPSG:5179) → WGS84 · 법정동코드는 기준코드 · 산출방식 {how} · 중복 도형 {n_dup}
    기준코드 법정동 대비 중심점 보유 {coverage:.2%} (파이프라인 로더로 읽어 확인)
@@ -326,20 +326,16 @@ def main():
  - SHC 코드가 기준코드 체계와 다르면(예: 2025 자료가 이미 12 로 재코딩돼 있으면) 코드대응표가 그대로 흡수한다.
 
 한계
- - 경계({args.emd_date})와 마스터({args.master_date}) 사이 동 이름까지 바뀐 경우는 대응하지 못한다 → 중심점_마스터_대조.csv.
+ - 경계({args.emd_date})와 마스터({args.master_date}) 사이 동 이름까지 바뀐 경우는 대응하지 못한다 → centroiddiff.csv.
  - 중심점 최근접 근사다. 현장 QGIS 에서 최신 경계로 공간조인할 수 있으면 그 결과가 정확하다.
  - 오목한 동은 면적중심이 경계 밖이라 도형 내부 점으로 보정했다(산출방식=내부점보정).
  - 개편 전 코드는 리 단위를 복원하지 않았다(파이프라인은 읍면동 단위만 사용).
 """
-    (out / "참고자료_안내.txt").write_text(guide, encoding="utf-8")
-    zip_path = ROOT / "dist" / "ev-ripplemap_참고자료_반입.zip"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in sorted(out.glob("*")):
-            z.write(f, f"ev-ripplemap_참고자료/{f.name}")
+    (out / "refguide.txt").write_text(guide, encoding="utf-8")
     print(guide)
     print("대조:", diff["구분"].value_counts().to_dict())
     print(diff.groupby("구분").head(8).to_string(index=False))
-    print("zip:", zip_path, zip_path.stat().st_size, "bytes")
+    print("출력:", out)
 
 
 if __name__ == "__main__":
