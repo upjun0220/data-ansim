@@ -23,7 +23,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from bjd_mapping import canonicalize, shc_bjd_code
+from bjdmapping import canonicalize, shc_bjd_code
 from common import clean_label, f_sf, filter_sido_code, log, mi_to_ym, norm_sf2, parse_mi, read_columns, to_num, wald_test
 
 GROUPS = ("wait", "placebo", "control_ref")

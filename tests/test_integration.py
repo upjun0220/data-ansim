@@ -17,15 +17,15 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import can_loader  # noqa: E402
+import canloader  # noqa: E402
 import heterogeneity  # noqa: E402
 import identification  # noqa: E402
-import kepco_loader  # noqa: E402
-import load_axis  # noqa: E402
+import kepcoloader  # noqa: E402
+import loadaxis  # noqa: E402
 import mock_data  # noqa: E402
-from bjd_mapping import load_bjd_master, match_regions, shc_bjd_code  # noqa: E402
+from bjdmapping import load_bjd_master, match_regions, shc_bjd_code  # noqa: E402
 from config import DEFAULT_COLUMNS, DEFAULT_PARAMS  # noqa: E402
-from kill_criteria import run_checks  # noqa: E402
+from killcriteria import run_checks  # noqa: E402
 from outputs import OutputWriter  # noqa: E402
 from pipeline import run  # noqa: E402
 
@@ -226,21 +226,21 @@ def test_can_failure_is_isolated(mock_env, tmp_path):
 
 def test_can_model_path_b(mock_env):
     params = DEFAULT_PARAMS["can"]
-    can = can_loader.load_can_m(mock_env["data"] / "can_m_model.csv", DEFAULT_COLUMNS, params)
-    verdict, _ = can_loader.verify_join_key(can, params)
+    can = canloader.load_can_m(mock_env["data"] / "can_m_model.csv", DEFAULT_COLUMNS, params)
+    verdict, _ = canloader.verify_join_key(can, params)
     assert verdict == "model"
-    from bjd_mapping import load_emd_centroids
+    from bjdmapping import load_emd_centroids
     cent = load_emd_centroids(mock_env["data"] / "bjd_centroids.csv", DEFAULT_COLUMNS["centroid"])
     act = pd.DataFrame({"bjd_code": [], "status": [], "T_r": []})
-    res = can_loader.run_can_stage(mock_env["data"] / "can_m_model.csv", DEFAULT_COLUMNS, params, cent, None, act, "2025-03")
+    res = canloader.run_can_stage(mock_env["data"] / "can_m_model.csv", DEFAULT_COLUMNS, params, cent, None, act, "2025-03")
     assert res["path"].startswith("B") and res["treated_excl_base"] is None
     assert "밀집도_일평균세션" in res["region_table"].columns
 
 
 def test_can_small_sample_unknown(mock_env):
     params = DEFAULT_PARAMS["can"]
-    can = can_loader.load_can_m(mock_env["data"] / "can_m_individual.csv", DEFAULT_COLUMNS, params, nrows=30)
-    assert can_loader.verify_join_key(can, params)[0] == "unknown"
+    can = canloader.load_can_m(mock_env["data"] / "can_m_individual.csv", DEFAULT_COLUMNS, params, nrows=30)
+    assert canloader.verify_join_key(can, params)[0] == "unknown"
 
 
 def test_regression_fallback_positive(pipeline_result):
@@ -266,12 +266,12 @@ def test_load_feature_forbidden():
     cate.attrs["feature_names"] = ["concentration"]
     conc = pd.DataFrame({"bjd_code": ["1"], "concentration": [0.1]})
     with pytest.raises(ValueError):
-        load_axis.classify_quadrants(cate, conc, DEFAULT_PARAMS["load_axis"])
+        loadaxis.classify_quadrants(cate, conc, DEFAULT_PARAMS["load_axis"])
 
 
 def test_load_axis_rejects_non_kepco_input():
     with pytest.raises(ValueError, match="KEPCO"):
-        load_axis.compute_concentration(pd.DataFrame({"bjd_code": ["1"], "wait_share": [0.3]}), ["2025-01", "2025-12"])
+        loadaxis.compute_concentration(pd.DataFrame({"bjd_code": ["1"], "wait_share": [0.3]}), ["2025-01", "2025-12"])
 
 
 def test_gps_guard(tmp_path):
@@ -300,7 +300,7 @@ def test_bjd_matching_rules(mock_env, caplog):
 
 
 def test_crosswalk_load_and_canonicalize(tmp_path):
-    from bjd_mapping import canonicalize, load_crosswalk
+    from bjdmapping import canonicalize, load_crosswalk
     p = tmp_path / "cw.csv"
     p.write_text("코드,기준코드\n1211010100,4611010100\n4611010100,4611010100\n", encoding="utf-8-sig")
     cw = load_crosswalk(p, DEFAULT_COLUMNS["crosswalk"])
@@ -325,7 +325,7 @@ def test_attach_bjd_merges_renamed_region(tmp_path):
     agg = pd.DataFrame({"sido": ["전라남도", "전남광주통합특별시"], "sigungu": ["목포시", "목포시"],
                         "emd": ["용당동", "용당동"], "mi": [24299, 24318], "hour": [0, 0],
                         "kwh": [10.0, 12.0], "n_days": [1.0, 1.0], "cust_sum": [1.0, 1.0]})
-    out, _, unmatched, fail = kepco_loader.attach_bjd(agg, master, 0.3, {"1211010100": "4611010100"})
+    out, _, unmatched, fail = kepcoloader.attach_bjd(agg, master, 0.3, {"1211010100": "4611010100"})
     assert fail == 0 and unmatched.empty
     assert out["bjd_code"].unique().tolist() == ["4611010100"] and len(out) == 2
 
@@ -369,11 +369,11 @@ def test_unit_pretrend_power_and_size():
 def test_pelt_builtin_finds_step():
     rng = np.random.default_rng(0)
     y = np.concatenate([rng.normal(0, 0.05, 20), rng.normal(1, 0.05, 16)])
-    assert kepco_loader.pelt_builtin(y, pen=0.05 * np.log(36), min_size=2) == [20]
+    assert kepcoloader.pelt_builtin(y, pen=0.05 * np.log(36), min_size=2) == [20]
 
 
 def test_sigungu_mode_matches_admin_dong_names_and_folds_codes():
-    from bjd_mapping import canonicalize, make_key, match_regions, set_analysis_level
+    from bjdmapping import canonicalize, make_key, match_regions, set_analysis_level
     master = pd.DataFrame({"bjd_code": ["1168010100", "1168010300"], "sido": ["서울", "서울"],
                            "sigungu": ["강남구", "강남구"], "emd": ["역삼동", "개포동"]})
     master["key_raw"] = make_key(master["sido"], master["sigungu"], master["emd"])

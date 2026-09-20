@@ -167,7 +167,7 @@ section[id]{scroll-margin-top:16px}
     <li><strong>상권(카드 매출)은?</strong> 충전이 늘면 동네 가게 매출이 느는지도 보지만, <em>참고용 부가 결과</em>다. 순위 점수에는 넣지 않는다.</li>
     <li><strong>어디서 하나:</strong> 데이터안심구역 센터(인터넷 없는 보안 PC). 원자료는 밖으로 못 가져오고, 동네 단위로 묶은 표·그림만 심사를 받고 반출한다.</li>
     <li><strong>코드는?</strong> 이미 다 짜 두었다. 가상 데이터로 전 과정이 돌아가는 것까지 확인했다(테스트 72개 통과). 센터에서는 경로와 설정값만 바꿔서 돌린다.</li>
-    <li><strong>첫날 가장 중요한 일:</strong> <code>kill_criteria</code>(첫날 점검)를 돌려서 “이 데이터로 계획대로 갈 수 있는지”를 판정받는 것. 분석은 그다음이다.</li>
+    <li><strong>첫날 가장 중요한 일:</strong> <code>killcriteria</code>(첫날 점검)를 돌려서 “이 데이터로 계획대로 갈 수 있는지”를 판정받는 것. 분석은 그다음이다.</li>
   </ul>
   <div class="warn">
     <b class="tag">솔직하게 알고 가야 할 것</b>
@@ -238,8 +238,8 @@ section[id]{scroll-margin-top:16px}
 │   └── _이전버전/                            <span class="c">← 9/17 연구계획서 등, 안 봐도 됨</span>
 ├── pipeline.py 외 .py 파일 18개              <span class="c">← 분석 코드 (05장)</span>
 ├── <span class="h">config/</span>                                  <span class="c">← 설정 파일 (08장)</span>
-│   ├── field_template.json                  <span class="c">← 센터용 설정 원본(복사해서 씀)</span>
-│   ├── industry_codes_template.json         <span class="c">← 업종 코드 원본(센터에서 채움)</span>
+│   ├── fieldtemplate.json                  <span class="c">← 센터용 설정 원본(복사해서 씀)</span>
+│   ├── industrycodestemplate.json         <span class="c">← 업종 코드 원본(센터에서 채움)</span>
 │   └── mock.json                            <span class="c">← 가상 데이터 연습용</span>
 ├── <span class="h">tests/</span>                                   <span class="c">← 코드가 맞게 도는지 자동 검사</span>
 ├── <span class="h">tools/</span>build_reference_files.py · check_import_bundle.py <span class="c">← 참고자료 만들기 · 반입 묶음 점검</span>
@@ -338,7 +338,7 @@ section[id]{scroll-margin-top:16px}
 <section class="ch" id="ch5">
   <p class="chno">05</p>
   <h2>코드 파일 사전</h2>
-  <p>파일마다 “한 줄 역할 · 비유 · 넣는 것 · 나오는 것”. 단독으로 실행하는 파일은 <code>pipeline.py</code>, <code>kill_criteria.py</code>, <code>mock_data.py</code> 세 개뿐이고 나머지는 부품이다.</p>
+  <p>파일마다 “한 줄 역할 · 비유 · 넣는 것 · 나오는 것”. 단독으로 실행하는 파일은 <code>pipeline.py</code>, <code>killcriteria.py</code>, <code>mock_data.py</code> 세 개뿐이고 나머지는 부품이다.</p>
 
   <h3>직접 실행하는 파일</h3>
   <div class="files">
@@ -346,7 +346,7 @@ section[id]{scroll-margin-top:16px}
       <p class="one">0~9단계를 순서대로 부르는 지휘자.</p>
       <p class="like">비유: 요리 레시피 순서표. 재료 손질부터 담기까지 차례대로 시킨다.</p>
       <dl><dt>넣는 것</dt><dd>config/field.json</dd><dt>나오는 것</dt><dd>out/…/csv, png, pipeline.log</dd></dl></div>
-    <div class="file"><h4>kill_criteria.py <small>365줄 · 첫날 점검</small></h4>
+    <div class="file"><h4>killcriteria.py <small>365줄 · 첫날 점검</small></h4>
       <p class="one">데이터가 계획대로 쓸 수 있는 상태인지 16개 항목을 판정.</p>
       <p class="like">비유: 수술 전 건강검진. 여기서 걸리면 계획을 줄인다.</p>
       <dl><dt>넣는 것</dt><dd>config/field.json (원자료 일부만 읽음)</dd><dt>나오는 것</dt><dd>k_kill_criteria 표 (통과/경고/실패/오류)</dd></dl></div>
@@ -364,18 +364,18 @@ section[id]{scroll-margin-top:16px}
     <div class="file"><h4>common.py <small>공구함</small></h4>
       <p class="one">CSV 읽기(인코딩·구분자 자동 판별), 날짜 변환, 거리 계산, p값 계산.</p>
       <p class="like">비유: 모든 파일이 빌려 쓰는 드라이버·망치.</p></div>
-    <div class="file"><h4>bjd_mapping.py <small>0단계</small></h4>
+    <div class="file"><h4>bjdmapping.py <small>0단계</small></h4>
       <p class="one">한전 동네 이름 ↔ 법정동 10자리 코드 맞추기.</p>
       <p class="like">비유: “역삼동”이라고 쓴 편지와 우편번호 06234를 짝짓는 우체국 직원. “역삼제1동”처럼 표기가 다르면 한 번 더 다듬어서 맞춘다.</p>
       <dl><dt>나오는 것</dt><dd>매칭률표, 못 맞춘 동네 목록</dd></dl></div>
-    <div class="file"><h4>kepco_loader.py <small>1·2단계</small></h4>
+    <div class="file"><h4>kepcoloader.py <small>1·2단계</small></h4>
       <p class="one">한전 충전 파일을 읽어 동네×월×시간으로 묶고, 충전이 확 뛴 달을 찾는다.</p>
       <p class="like">비유: 동네별 키 성장 기록표에서 “갑자기 큰 해”를 찾는 것.</p>
       <dl><dt>나오는 것</dt><dd>s1 월별 집계, s2 활성화 시점</dd></dl></div>
-    <div class="file"><h4>can_loader.py <small>3단계 · 선택</small></h4>
+    <div class="file"><h4>canloader.py <small>3단계 · 선택</small></h4>
       <p class="one">차량 기록으로 충전 세션을 재구성하고 시간대 모양을 만든다.</p>
       <p class="like">비유: 블랙박스 기록으로 “이 차는 매일 저녁 7시에 충전하네”를 알아내는 것. 개별 차량인지 차종 코드인지 먼저 판정한다.</p></div>
-    <div class="file"><h4>kep007_loader.py <small>3단계 · 이번엔 안 씀</small></h4>
+    <div class="file"><h4>kep007loader.py <small>3단계 · 이번엔 안 씀</small></h4>
       <p class="one">한전 충전소 설치현황(KEP_007) 읽기.</p>
       <p class="like">이번 신청에서 뺀 데이터라 현장 설정에서는 꺼 둔다(null).</p></div>
   </div>
@@ -396,19 +396,19 @@ section[id]{scroll-margin-top:16px}
 
   <h3>전력·형평성 (주 결과)</h3>
   <div class="files">
-    <div class="file"><h4>load_axis.py <small>8단계</small></h4>
+    <div class="file"><h4>loadaxis.py <small>8단계</small></h4>
       <p class="one">하루 중 가장 붐비는 시간의 비중(집중도) 계산 + 4사분면 분류.</p>
       <p class="like">비유: 급식실이 12시 10분에만 미어터지는지, 하루 종일 고르게 오는지 재는 것.</p></div>
-    <div class="file"><h4>load_forecast.py <small>8-A</small></h4>
+    <div class="file"><h4>loadforecast.py <small>8-A</small></h4>
       <p class="one">내일 충전량 예측 = 지난 4주 같은 요일·같은 시간의 가운데 값.</p>
       <p class="like">비유: “지난 4번의 월요일 저녁이 이랬으니 이번 월요일도 비슷하겠지.” AI 모델이 아니라 기준 모델이다.</p></div>
-    <div class="file"><h4>ess_optimizer.py <small>8-B</small></h4>
+    <div class="file"><h4>essoptimizer.py <small>8-B</small></h4>
       <p class="one">배터리를 언제 충전하고 언제 내보낼지 하루 단위로 계산(선형계획, 없으면 그리디).</p>
       <p class="like">비유: 물탱크. 물이 남는 새벽에 채워 두고, 다들 샤워하는 저녁에 보태 준다. 탱크 크기 후보 7개 중 넘치지 않는 가장 작은 걸 고른다.</p></div>
-    <div class="file"><h4>equity_access.py <small>8-C</small></h4>
+    <div class="file"><h4>equityaccess.py <small>8-C</small></h4>
       <p class="one">2SFCA로 동네별 충전기 접근성 점수 계산 + 충전기 1기당 전기차 수·최근접 충전기 거리(지표 1·2, 중심점 근사).</p>
       <p class="like">비유: 우리 동네 반경 500m 안 충전기 한 대를 몇 대의 전기차가 나눠 쓰는지. 옆 동네 충전기도 가까우면 같이 센다.</p></div>
-    <div class="file"><h4>priority_score.py <small>8-E</small></h4>
+    <div class="file"><h4>priorityscore.py <small>8-E</small></h4>
       <p class="one">세 점수를 0~1로 맞춰 합치고, 비중을 흔들어 순위가 버티는지 확인. 세 점수가 다 있는 동네만 순위에 넣고, 안전·경제성 점수의 상관도 잰다.</p>
       <p class="like">비유: 국·수·영 점수를 합쳐 석차를 내되, 과목 비중을 바꿔도 상위권인 학생을 따로 표시.</p></div>
     <div class="file"><h4>outputs.py <small>9단계 · 반출 문지기</small></h4>
@@ -431,7 +431,7 @@ section[id]{scroll-margin-top:16px}
 <section class="ch" id="ch6">
   <p class="chno">06</p>
   <h2>첫날 점검 16항목</h2>
-  <p><code>kill_criteria</code>가 한 번에 판정한다. 번호는 <strong>코드가 실제로 내는 표 번호</strong>다(V9 문서 4절 번호와 다르니 이 표를 기준으로).</p>
+  <p><code>killcriteria</code>가 한 번에 판정한다. 번호는 <strong>코드가 실제로 내는 표 번호</strong>다(V9 문서 4절 번호와 다르니 이 표를 기준으로).</p>
   <div class="tbl"><table>
     <thead><tr><th>#</th><th>무엇을 보나</th><th>기준</th><th>걸리면</th></tr></thead>
     <tbody>
@@ -473,11 +473,11 @@ section[id]{scroll-margin-top:16px}
 
   <p class="day">첫날 — 분석이 아니라 “판정”</p>
   <ol class="steps">
-    <li><strong>설정 파일 복사.</strong> <code>config/field_template.json</code> → <code>config/field.json</code>, <code>config/industry_codes_template.json</code> → <code>config/industry_codes.json</code>.</li>
+    <li><strong>설정 파일 복사.</strong> <code>config/fieldtemplate.json</code> → <code>config/field.json</code>, <code>config/industrycodestemplate.json</code> → <code>config/industry_codes.json</code>.</li>
     <li><strong>경로 채우기.</strong> <code>field.json</code>의 <code>paths</code>에 센터가 알려준 실제 파일 경로를 적는다. 열 이름이 다르면 <code>columns</code>에 그것만 적는다.</li>
     <li><strong>첫날 점검 실행.</strong>
       <div><span class="env">센터 JupyterLab (Python)</span></div>
-<pre><code>from kill_criteria import run_checks
+<pre><code>from killcriteria import run_checks
 run_checks("config/field.json")</code></pre>
       업종 코드가 비어 있어도 돈다. 결과는 <code>out/field/kill_criteria/</code>에 저장된다.</li>
     <li><strong>코드표 보고 업종 채우기.</strong> 신한카드가 같이 주는 <code>TB_SHC_TOBU_CODE.csv</code>, <code>TB_SHC_CODE.csv</code>를 열어 <code>industry_codes.json</code>을 채운다.

@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import heterogeneity
-import kepco_loader
+import kepcoloader
 from config import DEFAULT_PARAMS
 
 
@@ -39,5 +39,5 @@ def test_ruptures_matches_builtin_on_known_changes():
     rpt = pytest.importorskip("ruptures")
     y = np.repeat([1.0, 5.0, 2.0], 12)
     external = rpt.Pelt(model="l2", min_size=2, jump=1).fit(y).predict(pen=5)[:-1]
-    internal = kepco_loader.pelt_builtin(y, 5, min_size=2)
+    internal = kepcoloader.pelt_builtin(y, 5, min_size=2)
     assert external == internal == [12, 24]

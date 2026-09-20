@@ -8,9 +8,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from equity_access import add_access_indicators, compute_2sfca
+from equityaccess import add_access_indicators, compute_2sfca
 from headline import ev_per_charger_multiple, headline_table
-from priority_score import ahp_consistency_ratio, axes_correlation, build_priority, combine_scores
+from priorityscore import ahp_consistency_ratio, axes_correlation, build_priority, combine_scores
 
 
 def test_2sfca_is_reversed_into_equity_need():
@@ -125,7 +125,9 @@ def test_filter_sido_code_keeps_only_listed_prefixes():
 def test_import_bundle_check_rules(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import check, collect
-    for name in ("code.zip", "a.csv", "b.csv", "font.ttf"):
+    import zipfile
+    zipfile.ZipFile(tmp_path / "code.zip", "w").close()
+    for name in ("a.csv", "b.csv", "font.ttf"):
         (tmp_path / name).write_bytes(b"x")
     rows, problems = check(collect([tmp_path]))
     assert len(rows) == 4 and problems == []                 # 코드 1 + 데이터 2 + 폰트 1
@@ -148,7 +150,7 @@ def test_blp_calibration_separates_real_from_noise_heterogeneity():
 
 
 def test_quadrants_without_cate_use_load_only_labels():
-    from load_axis import classify_quadrants
+    from loadaxis import classify_quadrants
     cate = pd.DataFrame({"bjd_code": list("ABCD"), "cate": np.nan, "W": [1, 1, 0, 0], "method": "x"})
     conc = pd.DataFrame({"bjd_code": list("ABCD"), "concentration": [0.2, 0.3, 0.1, 0.05]})
     quad, cate_cut, _ = classify_quadrants(cate, conc, {"cate_cut": "median", "conc_cut": "median"})
@@ -174,10 +176,25 @@ def test_placebo_verdict_uses_zero_test_and_reports_ci():
 def test_import_bundle_rejects_unsafe_file_names(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import check, collect
-    (tmp_path / "dataansimcodev10.zip").write_bytes(b"x")
+    import zipfile
+    zipfile.ZipFile(tmp_path / "dataansimcodev10.zip", "w").close()
     (tmp_path / "bjdmaster.csv").write_bytes(b"x")
     assert check(collect([tmp_path]))[1] == []
     for bad in ("data-ansim.csv", "bjd_master.csv", "법정동마스터.csv", "my file.csv"):
         (tmp_path / bad).write_bytes(b"x")
     problems = check(collect([tmp_path]))[1]
     assert sum("파일명 규칙 위반" in x for x in problems) == 4
+
+
+def test_import_bundle_checks_names_inside_zip(tmp_path):
+    import zipfile
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from check_import_bundle import check, collect
+    good = tmp_path / "goodcode.zip"
+    with zipfile.ZipFile(good, "w") as z:
+        z.writestr("dataansim/kepcoloader.py", "x")
+    assert check(collect([good]))[1] == []
+    bad = tmp_path / "badcode.zip"
+    with zipfile.ZipFile(bad, "w") as z:
+        z.writestr("dataansim/kepco_loader.py", "x")
+    assert any("안의 파일명 규칙 위반" in p for p in check(collect([bad]))[1])

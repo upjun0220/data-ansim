@@ -18,22 +18,22 @@ V9 현재 회귀 검증은 55개 성공·실패 0개·선택 패키지 2개 생�
 py -3 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe mock_data.py --out data/mock --energy
-.venv\Scripts\python.exe kill_criteria.py --config config/mock.json
+.venv\Scripts\python.exe killcriteria.py --config config/mock.json
 .venv\Scripts\python.exe pipeline.py --config config/mock.json
 .venv\Scripts\python.exe -m pytest -q tests
 ```
 
 현장(안심구역 JupyterLab):
 
-1. `config/field_template.json` → `config/field.json`, `config/industry_codes_template.json` → `config/industry_codes.json` 복사.
+1. `config/fieldtemplate.json` → `config/field.json`, `config/industrycodestemplate.json` → `config/industry_codes.json` 복사.
 2. `field.json` 의 `paths` 를 실제 경로로 바꾸고, 헤더가 다르면 `columns` 에 그 항목만 적는다(접두 일치 허용).
-3. **첫날:** `from kill_criteria import run_checks; run_checks("config/field.json")` — 업종 코드가 비어 있어도 돈다.
+3. **첫날:** `from killcriteria import run_checks; run_checks("config/field.json")` — 업종 코드가 비어 있어도 돈다.
 4. `TB_SHC_TOBU_CODE.csv` · `TB_SHC_CODE.csv` 로 `industry_codes.json` 을 채운 뒤 `from pipeline import run; run("config/field.json")`.
 
 5. 8-A/8-B는 날짜가 보존된 1시간 원자료와 최소 12주 연속 이력이 필요하다. `energy.evaluation_start`는 현장에서 반드시 지정하고, 공휴일 달력·후보 장치 사양을 자료에 맞춰 확인한다. 로더는 검증·교정·평가에 필요한 기간만 읽는다. 월 집계만 있으면 예측은 실패로 남기며 실측으로 대체하지 않는다.
 6. SMP는 `timestamp,smp`(KST 시간 시작, 원/kWh) CSV로 정규화한 뒤 `paths.smp`를 지정한다. 미입력은 피크 목적함수와 비용 결측이다. 과거 SMP는 사후 가격 평가이며 사전 이용 가능 시점은 별도 확인한다.
 7. 현재 신청에서 제외한 KEP_007은 현장 템플릿의 `null`을 유지한다. 해당 선택 단계 생략은 의도한 부분완료이며, mock 전체 실행은 기존 경로 회귀 검증을 위해 합성 KEP_007을 포함한다.
-8. **반입 묶음:** 코드 zip과 데이터 CSV만 가능하며 최대 10개·총 50MB다. **파일명은 영문 대·소문자와 숫자만** 쓸 수 있다(포털 경고: 공백·한글 불가, `_`·`-`도 쓰지 않는다). 권장 이름: `dataansimcodev10.zip`, `bjdmaster.csv`, `bjdcrosswalk.csv`, `bjdcentroids.csv`, `smp.csv`, `evstations.csv`, `evregistration.csv`, `koreanfont.ttf`. 계산 예: 코드 zip 1 + 데이터 CSV 최대 6(법정동코드 마스터·읍면동 경계 도형·SMP·충전소 위치·행정동별 EV 등록·(선택)공동주택 단지정보) + 폰트 1 = **8개**. V9 0-5절은 데이터 6개만 세므로 코드 zip과 폰트를 더해 세어야 한다. `python tools/check_import_bundle.py <폴더>`로 개수·용량·형식을 점검한다.
+8. **반입 묶음:** 코드 zip과 데이터 CSV만 가능하며 최대 10개·총 50MB다. **파일명은 영문 대·소문자와 숫자만** 쓸 수 있다(포털 경고: 공백·한글 불가, `_`·`-`도 쓰지 않는다). 그래서 코드 모듈도 밑줄 없이 `bjdmapping.py` `canloader.py` `equityaccess.py` `essoptimizer.py` `kep007loader.py` `kepcoloader.py` `killcriteria.py` `loadaxis.py` `loadforecast.py` `priorityscore.py`, 설정 템플릿은 `fieldtemplate.json` `industrycodestemplate.json`이다(실행: `from killcriteria import run_checks`). `tools/check_import_bundle.py`가 zip 안의 이름까지 검사한다. 권장 이름: `dataansimcodev10.zip`, `bjdmaster.csv`, `bjdcrosswalk.csv`, `bjdcentroids.csv`, `smp.csv`, `evstations.csv`, `evregistration.csv`, `koreanfont.ttf`. 계산 예: 코드 zip 1 + 데이터 CSV 최대 6(법정동코드 마스터·읍면동 경계 도형·SMP·충전소 위치·행정동별 EV 등록·(선택)공동주택 단지정보) + 폰트 1 = **8개**. V9 0-5절은 데이터 6개만 세므로 코드 zip과 폰트를 더해 세어야 한다. `python tools/check_import_bundle.py <폴더>`로 개수·용량·형식을 점검한다.
 9. RAM이 8GB 이하이면 `params.shc.sido`(시도 코드 앞 2자리 목록)와 `chunksize`를 줄여 SHC를 시도별로 나눠 읽는다(`kepco.sido`와 같은 취지, 청크 단위 필터).
 
 산출물: `out_dir/png/`(반출용) · `out_dir/csv/`(현장 작업용, 반출 대상 아님) · `out_dir/pipeline.log`.
@@ -61,24 +61,24 @@ py -3 -m venv .venv
 
 | 단계 | 파일 | 주요 산출물 | 실패 시 |
 |---|---|---|---|
-| 0 지역키 정합 | `bjd_mapping.py` | `s0_bjd_match_rate` · `s0_bjd_unmatched` | 중단 |
-| 1 시계열 집계 | `kepco_loader.py` | `s1_kepco_monthly` · `s1_kepco_band_share` | 중단 |
-| 2 변화점 | `kepco_loader.py` | `s2_activation` · `s2_activation_examples` | 중단 |
-| 3 처치 정제 | `can_loader.py` · `kep007_loader.py` | `s3_can_*` · `s3_treated_excl_base` · `s3_kep007_stock` | **격리**(`s3_can_skipped`) |
+| 0 지역키 정합 | `bjdmapping.py` | `s0_bjd_match_rate` · `s0_bjd_unmatched` | 중단 |
+| 1 시계열 집계 | `kepcoloader.py` | `s1_kepco_monthly` · `s1_kepco_band_share` | 중단 |
+| 2 변화점 | `kepcoloader.py` | `s2_activation` · `s2_activation_examples` | 중단 |
+| 3 처치 정제 | `canloader.py` · `kep007loader.py` | `s3_can_*` · `s3_treated_excl_base` · `s3_kep007_stock` | **격리**(`s3_can_skipped`) |
 | 4 Y_ddd | `identification.py` | `s4_ydd_panel` · `s4_skipped_*` · `s4_shc002_quality` | 중단 |
 | 4.5 MDE | `identification.py` | `s45_mde` — 실제 처치 수 가정의 주·위약·할인 후 경험 SE와 MDE | 격리 |
 | 5 이벤트 스터디 | `identification.py` | `s5_event_main` · `s5_pretrend_*` · `s5_event_regression` · `s5_s6_event_study` | 중단 |
 | 6 위약 | `identification.py` | `s6_event_placebo` · `s6_discount_by_k` · `s6_post_summary` | 중단 |
 | 6.5 처치오염 | `diagnostics.py` | `s65_contamination` | 격리 |
 | 7 CATE | `heterogeneity.py` | `s7_features` · `s7_cate_region` · `s7_cate_validation` · `s7_subgroup_cells`/`s7_importance` | 격리 |
-| 8 처방 | `load_axis.py` | `s8_load_concentration` · `s8_quadrants` · `s8_quadrants_plot` | 격리 |
-| 8-A 일별 예측 | `load_forecast.py` · `kepco_loader.py` | `s8a_validation` | 격리·실패 표시, 실측 대체 금지 |
-| 8-B ESS | `ess_optimizer.py` | `s8b_scenarios` · `s8b_schedules` · `s8b_comparison` · `s9_public_review` | 격리·행별 제약/예측/가격 상태 기록 |
-| 8-C 접근성 | `equity_access.py` | `s8c_accessibility`(2SFCA + 지표 1 `ev_per_charger` + 지표 2 `nearest_charger_km`) | 격리·외부자료 없으면 생략. 지표 1·2는 **법정동 중심점 근사**다: 충전소를 가장 가까운 중심점에 배정하며 폴리곤 공간조인·격자점이 아니다(행정경계 근처 충전소는 이웃 동네로 배정될 수 있음). **지표 3(자가충전 제약 주거 비율)은 미구현 — LH KLH_001이 신청 범위에 없어 신청 범위 결정 필요.** 300/500m 커버리지 비율은 8-D 후속(미구현) |
+| 8 처방 | `loadaxis.py` | `s8_load_concentration` · `s8_quadrants` · `s8_quadrants_plot` | 격리 |
+| 8-A 일별 예측 | `loadforecast.py` · `kepcoloader.py` | `s8a_validation` | 격리·실패 표시, 실측 대체 금지 |
+| 8-B ESS | `essoptimizer.py` | `s8b_scenarios` · `s8b_schedules` · `s8b_comparison` · `s9_public_review` | 격리·행별 제약/예측/가격 상태 기록 |
+| 8-C 접근성 | `equityaccess.py` | `s8c_accessibility`(2SFCA + 지표 1 `ev_per_charger` + 지표 2 `nearest_charger_km`) | 격리·외부자료 없으면 생략. 지표 1·2는 **법정동 중심점 근사**다: 충전소를 가장 가까운 중심점에 배정하며 폴리곤 공간조인·격자점이 아니다(행정경계 근처 충전소는 이웃 동네로 배정될 수 있음). **지표 3(자가충전 제약 주거 비율)은 미구현 — LH KLH_001이 신청 범위에 없어 신청 범위 결정 필요.** 300/500m 커버리지 비율은 8-D 후속(미구현) |
 | 9-H 발표 3숫자 | `headline.py` | `s9_headline` | 격리·8-B 또는 8-C 결과 필요. 숫자 1 = 충전기 1기당 EV 수의 상위10%÷하위10% 배수, 숫자 2 = ESS 미적용 평균 상한 초과 kWh, 숫자 3 = 잔여 초과 kWh와 SMP 기준 비용 차이. 각 행에 "증설 N대·상한 배율·이용률 배율" 가정과 상한 배율 범위를 병기. PNG는 소표본 법정동 기여분 제외 |
-| 8-E 결합점수 | `priority_score.py` | `s8e_priority`(순위 대상만) · `s8e_not_ranked`(부하 미평가 — 접근성 부족만 확인) · `s8e_priority_summary`(풀 크기·안전/경제성 축 상관) | 격리·8-B/8-C 없으면 생략. 세 축이 모두 있는 동네만 순위·`robust_top`·킬 15번 분모에 든다(`params.priority.min_axes`, 기본 3). 결측 사유는 `not_assessed_low_concentration`(8-B 대상 아님)과 `data_missing`. 안전·경제성 상관 ≥ `params.priority.redundant_corr`(기본 0.9)이면 실행 요약에 "사실상 두 축" 경고 |
+| 8-E 결합점수 | `priorityscore.py` | `s8e_priority`(순위 대상만) · `s8e_not_ranked`(부하 미평가 — 접근성 부족만 확인) · `s8e_priority_summary`(풀 크기·안전/경제성 축 상관) | 격리·8-B/8-C 없으면 생략. 세 축이 모두 있는 동네만 순위·`robust_top`·킬 15번 분모에 든다(`params.priority.min_axes`, 기본 3). 결측 사유는 `not_assessed_low_concentration`(8-B 대상 아님)과 `data_missing`. 안전·경제성 상관 ≥ `params.priority.redundant_corr`(기본 0.9)이면 실행 요약에 "사실상 두 축" 경고 |
 | 9 반출 | `outputs.py` · `pipeline.py` | `s0_run_summary` · `s9_manifest` | — |
-| 킬 크라이테리아 | `kill_criteria.py` | `kill_criteria/png/k_kill_criteria` | 항목별 `오류`. 16번 = 원천 수록 기간(활성화 창 끝과 비교) |
+| 킬 크라이테리아 | `killcriteria.py` | `kill_criteria/png/k_kill_criteria` | 항목별 `오류`. 16번 = 원천 수록 기간(활성화 창 끝과 비교) |
 
 ## 폴백 경로 (현장에 없을 수 있는 패키지)
 
@@ -110,9 +110,9 @@ py -3 -m venv .venv
 | CAN 피처 시점 | `can_feature_before`(2025-03) 이전 세션만 | 스펙은 "2022.11~ 오염 없음"이지만 데이터가 2025 이후까지 이어지면 bad control |
 | CATE 단위결과 | Δ = 사후 3개월 평균 − 사전 평균, 대조군은 코호트 시점 분포 가중 | 대조군에도 셀 CATE 를 배정해 미활성 지역 처방에 쓴다 |
 | CATE 검증 | 같은 층화 K-fold 에서 상수 ATE / 2×2 / CF 의 변환결과 MSE · GATES 비교 | CF 는 교차검증 손실이 2×2 보다 크면 채택하지 않음 |
-| 4사분면 문턱 | CATE·집중도 모두 중앙값 | `load_axis.cate_cut`/`conc_cut` (`"zero"` 또는 숫자 가능) |
+| 4사분면 문턱 | CATE·집중도 모두 중앙값 | `loadaxis.cate_cut`/`conc_cut` (`"zero"` 또는 숫자 가능) |
 | 분석 지역 단위 | `params.analysis_level`: `"emd"`(법정동, 기본) · `"sigungu"`(시군구 폴백) | 한전 읍면동이 행정동이어서 법정동과 못 맞출 때(킬 5번 실패) `"sigungu"`로 다시 실행한다. 지역키는 시군구5자리+`00000`의 10자리 `bjd_code`이고, 한전은 시도+시군구로만 매칭하며 신한카드·EV는 코드를 시군구로 접는다. 읍면동 시간별 값은 시군구로 합산하고 소표본 억제용 고객호수도 합(공개 값을 만든 인원)으로 잡는다. **300/500/800m 2SFCA와 중심점 근사는 시군구 규모에서 의미가 없어 8-C·8-E는 생략**되고 8-B(안전·경제성)와 9-H 숫자 2·3은 나온다. 지역이 적으면(수십 곳 미만) MDE(4.5)·처치/대조 표본 부족으로 상권 단계가 생략될 수 있다. 해상도가 낮아진 결과이므로 "시군구 단위 잠정 검토"로만 보고한다. 행정동→법정동 배분표 방식(②)은 미구현 |
-| 001/002 | 합산하지 않음. 활성화 시점은 `kepco.source`(제공 설정 002), 전력축은 001. **주의: `config.py` 기본값은 `kepco.source="001"`이고 `field_template.json`·`mock.json`은 `"002"`다(통일 여부는 팀 확인 필요).** 산출물 제목은 `activation.source_label`(기본: 002 "공용(사업자 채널) 충전 활성화", 001 "충전 활성화(전체)"). KEPCO_002는 가공일자(20250825)가 제공기간 끝(20251231)보다 이르므로 킬 크라이테리아 16번이 원천별 마지막 수록 달을 창 끝과 비교해 사후 `ratio_months`를 못 채우는 달 수를 적고, `activation.clip_to_data=true`면 창 끝을 마지막 수록 달로 줄인다 | 실제 포괄 범위·사업자 채널 대응은 현장 명세 확인 |
+| 001/002 | 합산하지 않음. 활성화 시점은 `kepco.source`(제공 설정 002), 전력축은 001. **주의: `config.py` 기본값은 `kepco.source="001"`이고 `fieldtemplate.json`·`mock.json`은 `"002"`다(통일 여부는 팀 확인 필요).** 산출물 제목은 `activation.source_label`(기본: 002 "공용(사업자 채널) 충전 활성화", 001 "충전 활성화(전체)"). KEPCO_002는 가공일자(20250825)가 제공기간 끝(20251231)보다 이르므로 킬 크라이테리아 16번이 원천별 마지막 수록 달을 창 끝과 비교해 사후 `ratio_months`를 못 채우는 달 수를 적고, `activation.clip_to_data=true`면 창 끝을 마지막 수록 달로 줄인다 | 실제 포괄 범위·사업자 채널 대응은 현장 명세 확인 |
 
 ## 공학 산출물 해석
 

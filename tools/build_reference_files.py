@@ -44,7 +44,7 @@ from pyproj import Transformer
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from bjd_mapping import load_bjd_master, load_crosswalk, load_emd_centroids  # noqa: E402
+from bjdmapping import load_bjd_master, load_crosswalk, load_emd_centroids  # noqa: E402
 from config import DEFAULT_COLUMNS  # noqa: E402
 
 # 경계 파일의 옛 시도코드 → 현행. 앞자리만 바뀌고 나머지 자리가 같은 경우(마스터에 그 코드가 있을 때만 적용)
@@ -304,7 +304,7 @@ def main():
         읍면동수=("구코드", "size"), 구=("구_시군구명", "first"), 신=("신_시군구명", lambda s: "·".join(sorted(set(s))))
     ).reset_index().rename(columns={"구코드": "구시군구코드"})
     how = cent["산출방식"].value_counts().to_dict()
-    guide = f"""충전 리플맵 4.2 — 현장 참고자료 (config/field_template.json 이 이 파일 이름을 가리킨다)
+    guide = f"""충전 리플맵 4.2 — 현장 참고자료 (config/fieldtemplate.json 이 이 파일 이름을 가리킨다)
 
 1) bjdmaster.csv   → paths.bjd_master  (기준일 {args.master_date})
    출처: 국토교통부_전국 법정동 (공공데이터포털 https://www.data.go.kr/data/15063424/fileData.do), 기준 {args.master_date}

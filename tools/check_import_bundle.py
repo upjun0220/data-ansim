@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import re
 import sys
+import zipfile
 from pathlib import Path
 
 MAX_FILES, MAX_BYTES = 10, 50 * 1024 * 1024
 FONT_EXT = {".ttf", ".otf", ".ttc"}
 # 반입 포털 규칙: 파일명에는 영문 대·소문자와 숫자만(공백·한글·특수문자 불가). 확장자 앞의 점 하나만 허용한다.
 SAFE_NAME = re.compile(r"^[A-Za-z0-9]+\.[A-Za-z0-9]+$")
+SAFE_PART = re.compile(r"^[A-Za-z0-9]+(\.[A-Za-z0-9]+)?$")  # zip 안의 폴더·파일 이름 조각
 
 
 def collect(paths):
@@ -40,6 +42,15 @@ def check(files):
         problems.append(f"코드 zip {kinds.count('code')}개(정확히 1개여야 함)")
     problems += [f"허용되지 않는 형식: {n}" for n, k, _ in rows if k == "other"]
     problems += [f"파일명 규칙 위반(영문·숫자만): {n}" for n, _, _ in rows if not SAFE_NAME.match(n)]
+    for f in files:  # zip 안의 이름도 같은 규칙으로 본다(포털이 안쪽 이름까지 검사하는지 확인되지 않아 보수적으로)
+        if f.suffix.lower() == ".zip":
+            try:
+                with zipfile.ZipFile(f) as z:
+                    bad = [n for n in z.namelist() if not all(SAFE_PART.match(part) for part in n.rstrip("/").split("/"))]
+            except zipfile.BadZipFile:
+                problems.append(f"{f.name} 은(는) 올바른 zip 이 아님")
+                continue
+            problems += [f"{f.name} 안의 파일명 규칙 위반: {n}" for n in bad[:5]]
     return rows, problems
 
 

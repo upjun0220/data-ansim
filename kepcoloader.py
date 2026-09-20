@@ -21,8 +21,8 @@ import re
 import numpy as np
 import pandas as pd
 
-import bjd_mapping
-from bjd_mapping import canonicalize, match_regions, sido_short
+import bjdmapping
+from bjdmapping import canonicalize, match_regions, sido_short
 from common import log, mi_to_ym, norm_text, optional_import, read_columns, read_header, to_num, ym_to_mi
 
 KEYS = ["sido", "sigungu", "emd"]
@@ -164,7 +164,7 @@ def attach_bjd(agg, master, fail_warn_rate, crosswalk=None):
         out["cust_min"] = out["cust_sum"]
     # 서로 다른 텍스트가 같은 법정동으로 모인 경우('가람제1동'·'가람1동', 개편 전/후 명칭) 합친다
     # 시군구 모드: 서로 다른 읍면동이 한 셀로 모이므로 그 셀의 고객호수는 읍면동 고객호수의 합이다(공개 값을 만든 인원).
-    cust_min_how = "sum" if bjd_mapping.ANALYSIS_LEVEL == "sigungu" else "min"
+    cust_min_how = "sum" if bjdmapping.ANALYSIS_LEVEL == "sigungu" else "min"
     out = out.groupby(["bjd_code", "mi", "hour"], sort=True).agg(
         kwh=("kwh", "sum"), n_days=("n_days", "max"), cust_sum=("cust_sum", "sum"),
         cust_min=("cust_min", cust_min_how), region_name=("region_name", "first")
@@ -260,7 +260,7 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     matched["bjd_code"] = canonicalize(matched["bjd_code"], crosswalk)
     out = raw.merge(matched[KEYS + ["bjd_code"]], on=KEYS, how="left", validate="many_to_one")
     out = out.dropna(subset=["bjd_code"])[["bjd_code", "date", "hour", "kwh", "cust"]]
-    if bjd_mapping.ANALYSIS_LEVEL == "sigungu":  # 읍면동 시간별 값을 시군구로 합산(부하 kW 는 더해진다)
+    if bjdmapping.ANALYSIS_LEVEL == "sigungu":  # 읍면동 시간별 값을 시군구로 합산(부하 kW 는 더해진다)
         out = out.groupby(["bjd_code", "date", "hour"], as_index=False)[["kwh", "cust"]].sum()
     if out.duplicated(["bjd_code", "date", "hour"]).any():
         raise ValueError("기준코드 보정 후 시간별 셀 중복 — 합산 전 원천 범위 확인 필요")

@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from bjd_mapping import canonicalize, shc_bjd_code
+from bjdmapping import canonicalize, shc_bjd_code
 from common import clean_label, filter_sido_code, log, mi_to_ym, parse_mi, read_columns, to_num
 
 

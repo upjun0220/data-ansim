@@ -1,6 +1,6 @@
 """파이프라인 설정 — 데이터 경로 · 컬럼명 · 파라미터 · 업종코드 매핑을 코드에서 분리한다.
 
-현장(안심구역)에서는 config/field_template.json 과 config/industry_codes_template.json 을 복사해
+현장(안심구역)에서는 config/fieldtemplate.json 과 config/industrycodestemplate.json 을 복사해
 경로와 코드값만 채워 쓴다.
 - JSON 안의 상대경로는 JSON 파일 위치 기준으로 해석한다.
 - "_" 로 시작하는 키는 설명용이라 무시한다.

@@ -1,5 +1,5 @@
 {
-  "_설명": "현장용 템플릿 — 복사해서 industry_codes.json 으로 저장하고 실제 코드값으로 채운다. 비어 있으면 pipeline 이 멈춘다(kill_criteria 는 돈다).",
+  "_설명": "현장용 템플릿 — 복사해서 industry_codes.json 으로 저장하고 실제 코드값으로 채운다. 비어 있으면 pipeline 이 멈춘다(killcriteria 는 돈다).",
   "_형식": "\"A\" = TOBU_BIDVS_CD 일치, \"A:01\" = 대분류 A + 중분류 01 일치",
   "wait": [],
   "_wait": "대기소비 가능 업종: 카페 · 편의점 · 음식점 · 소매 (TB_SHC_TOBU_CODE.csv 에서 확인)",

@@ -1,8 +1,8 @@
 """킬 크라이테리아 자동 체크 — 첫 방문 반나절(목표 30분) 안에 8개 항목을 한 번에 판정.
 
 실행:
-    .venv\\Scripts\\python.exe kill_criteria.py --config config/mock.json
-    (JupyterLab) from kill_criteria import run_checks; run_checks("config/field.json")
+    .venv\\Scripts\\python.exe killcriteria.py --config config/mock.json
+    (JupyterLab) from killcriteria import run_checks; run_checks("config/field.json")
 
 업종 코드 매핑(industry_codes)이 아직 비어 있어도 돈다 — 첫 방문에 코드값을 확인하는 것도 이 스크립트의 목적이다.
 대용량 원천은 표본만 읽는다(params.kill.sample_rows · compare_rows · kepco_max_chunks).
@@ -17,12 +17,12 @@ from pathlib import Path
 
 import pandas as pd
 
-import bjd_mapping
-import can_loader
-import equity_access
+import bjdmapping
+import canloader
+import equityaccess
 import identification
-import kepco_loader
-import priority_score
+import kepcoloader
+import priorityscore
 from common import log, mi_to_ym, setup_logging, ym_to_mi
 from config import deep_merge, load_config
 from outputs import OutputWriter, setup_korean_font
@@ -41,7 +41,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     cfg = load_config(config_path, require_industry=False)
     if params_override:
         cfg["params"] = deep_merge(cfg["params"], params_override)
-    bjd_mapping.set_analysis_level(cfg["params"]["analysis_level"])
+    bjdmapping.set_analysis_level(cfg["params"]["analysis_level"])
     if paths_override:
         cfg["paths"].update({k: (str(Path(v).resolve()) if v else None) for k, v in paths_override.items()})
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
@@ -82,18 +82,18 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     kepco_state = {}
 
     def load_kepco():
-        master = bjd_mapping.load_bjd_master(paths["bjd_master"], C["bjd"])
-        raw = kepco_loader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"], "KEPCO_001",
+        master = bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"])
+        raw = kepcoloader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"], "KEPCO_001",
                                                    max_chunks=K["kepco_max_chunks"])
-        mh, rate, unmatched, fail = kepco_loader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
+        mh, rate, unmatched, fail = kepcoloader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
         kepco_state.update(master=master, mh=mh, fail=fail, n_regions=len(raw[["sido", "sigungu", "emd"]].drop_duplicates()),
                            unmatched=unmatched)
 
     def check2():
         load_kepco()
         a = P["activation"]
-        daily = kepco_loader.daily_series(kepco_state["mh"])
-        cands = kepco_loader.simple_candidates(daily, a["window"], a["min_ratio"], a["ratio_months"])
+        daily = kepcoloader.daily_series(kepco_state["mh"])
+        cands = kepcoloader.simple_candidates(daily, a["window"], a["min_ratio"], a["ratio_months"])
         n = len(cands)
         ev = f"{'~'.join(a['window'])} 전후 {a['ratio_months']}개월 평균비 >= {a['min_ratio']} 고유 법정동 {n}곳 (set 집계)"
         if n < K["es_min_regions"]:
@@ -168,8 +168,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     def check7():
         kp = dict(P["kepco"], chunksize=K["compare_rows"])
         keys = ["sido", "sigungu", "emd", "mi", "hour"]
-        a = kepco_loader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], kp, "KEPCO_001", max_chunks=1)
-        b = kepco_loader.load_kepco_monthly_hour(paths["kepco_002"], C["kepco_cpo"], kp, "KEPCO_002", max_chunks=1)
+        a = kepcoloader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], kp, "KEPCO_001", max_chunks=1)
+        b = kepcoloader.load_kepco_monthly_hour(paths["kepco_002"], C["kepco_cpo"], kp, "KEPCO_002", max_chunks=1)
         m = b.merge(a, on=keys, how="left", suffixes=("_002", "_001"), indicator=True)
         matched = m["_merge"] == "both"
         share = matched.mean() if len(m) else float("nan")
@@ -185,8 +185,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
 
     # 8. CAN 식별번호
     def check8():
-        can = can_loader.load_can_m(paths["can_m"], C, P["can"], nrows=K["sample_rows"])
-        verdict, evidence = can_loader.verify_join_key(can, P["can"])
+        can = canloader.load_can_m(paths["can_m"], C, P["can"], nrows=K["sample_rows"])
+        verdict, evidence = canloader.verify_join_key(can, P["can"])
         ev = " · ".join(f"{r['항목']}={r['값']}" for _, r in evidence.iterrows() if r["항목"] != "판정")
         if verdict == "individual":
             add(8, "CAN verify_join_key", "통과", f"individual | {ev}", "경로 A(개별 차량 클러스터링)")
@@ -202,11 +202,11 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         # KEPCO_001을 하드코딩해 원천이 다르면(현장 002) 처치 수가 실제와 어긋났다.
         src = str(P["kepco"]["source"])
         cols = C["kepco"] if src == "001" else C["kepco_cpo"]
-        master = kepco_state["master"] if "master" in kepco_state else bjd_mapping.load_bjd_master(paths["bjd_master"], C["bjd"])
-        raw = kepco_loader.load_kepco_monthly_hour(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}",
+        master = kepco_state["master"] if "master" in kepco_state else bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"])
+        raw = kepcoloader.load_kepco_monthly_hour(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}",
                                                    max_chunks=K["kepco_max_chunks"])
-        mh, *_ = kepco_loader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
-        activation = kepco_loader.detect_activation(kepco_loader.daily_series(mh), P["activation"])
+        mh, *_ = kepcoloader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
+        activation = kepcoloader.detect_activation(kepcoloader.daily_series(mh), P["activation"])
         panel, _ = identification.build_ydd(shc_state["scan"]["cells"], ind, P["identification"]["use_log1p"])
         mp = P["mde"]
         note = "표본 기반 참고값 — 본 판정은 pipeline 4.5"
@@ -261,7 +261,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     def check16():
         src = str(P["kepco"]["source"])
         cols = C["kepco"] if src == "001" else C["kepco_cpo"]
-        dates = kepco_loader.scan_observed_dates(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}")
+        dates = kepcoloader.scan_observed_dates(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}")
         if dates.empty:
             add(16, "원천 수록 기간", "경고", f"KEPCO_{src} 관측 일자를 못 읽음", "period 열·컬럼 설정 확인")
             return
@@ -270,7 +270,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         end = ym_to_mi(a["window"][1])
         label = f"KEPCO_{src} 마지막 수록 {mi_to_ym(last)} · 활성화 창 끝 {a['window'][1]}"
         if last < end:
-            short = kepco_loader.window_shortfall(last, a["window"], a["ratio_months"])
+            short = kepcoloader.window_shortfall(last, a["window"], a["ratio_months"])
             add(16, "원천 수록 기간", "경고", f"{label} · 사후 {a['ratio_months']}개월을 못 채우는 후보 달 {short}개",
                 "activation.window 끝을 줄이거나 activation.clip_to_data=true")
         else:
@@ -280,15 +280,15 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     if P["priority"]["enabled"]:
         # 12. 외부 접근성 자료의 법정동 매칭
         def check12():
-            if bjd_mapping.ANALYSIS_LEVEL == "sigungu":
+            if bjdmapping.ANALYSIS_LEVEL == "sigungu":
                 add(12, "접근성 지역키 매칭", "경고", "analysis_level=sigungu — 2SFCA(8-C)는 시군구 규모에서 의미가 없어 생략",
                     "형평성 축은 읍면동(법정동) 모드에서만 계산")
                 return
             if not paths["access_stations"] or not paths["ev_registration"] or not paths["emd_centroids"]:
                 add(12, "접근성 지역키 매칭", "경고", "접근성 입력 경로 미설정", "공개자료 반입 후 다시 실행")
                 return
-            cent = bjd_mapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
-            _stations, points = equity_access.load_access_inputs(
+            cent = bjdmapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
+            _stations, points = equityaccess.load_access_inputs(
                 paths["access_stations"], paths["ev_registration"], C, cent)
             rate = float(points["ev_count"].notna().mean())
             verdict = "통과" if rate >= K["access_match_min"] else "실패"
@@ -303,9 +303,9 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 return
             if "master" not in kepco_state:
                 load_kepco()
-            hourly = kepco_loader.load_kepco_hourly(paths["kepco_hourly"], C["kepco"], P["kepco"],
+            hourly = kepcoloader.load_kepco_hourly(paths["kepco_hourly"], C["kepco"], P["kepco"],
                                                     kepco_state["master"])
-            coverage = priority_score.seasonal_coverage(hourly)
+            coverage = priorityscore.seasonal_coverage(hourly)
             verdict = "통과" if coverage["season_status"] == "검증 가능" else "경고"
             add(13, "계절 커버리지", verdict,
                 f"{coverage['season_count']}/4계절 · 누락 {coverage['missing_seasons'] or '없음'}",
@@ -314,12 +314,12 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
 
         # 14. 설정 가중치와 선택 AHP 행렬
         def check14():
-            w = priority_score.validate_weights(P["priority"]["weights"])
+            w = priorityscore.validate_weights(P["priority"]["weights"])
             matrix = P["priority"].get("ahp_matrix")
             if matrix is None:
                 add(14, "가중치/AHP 일관성", "통과", f"설정 가중치 {w.round(4).tolist()} · AHP 입력 없음")
                 return
-            cr = priority_score.ahp_consistency_ratio(matrix)
+            cr = priorityscore.ahp_consistency_ratio(matrix)
             add(14, "가중치/AHP 일관성", "통과" if cr < 0.1 else "실패", f"CR={cr:.4f}",
                 "CR<0.1이 되도록 쌍대비교 재검토" if cr >= 0.1 else "")
         guarded(14, "가중치/AHP 일관성", check14)

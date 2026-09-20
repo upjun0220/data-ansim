@@ -25,19 +25,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import bjd_mapping
-import can_loader
+import bjdmapping
+import canloader
 import diagnostics
-import equity_access
+import equityaccess
 import headline
 import heterogeneity
 import identification
-import kep007_loader
-import kepco_loader
-import load_axis
-import load_forecast
-import ess_optimizer
-import priority_score
+import kep007loader
+import kepcoloader
+import loadaxis
+import loadforecast
+import essoptimizer
+import priorityscore
 from common import log, mi_to_ym, setup_logging, ym_to_mi
 from config import deep_merge, load_config
 from outputs import (OutputWriter, plot_activation_examples, plot_bar, plot_event_study, plot_histogram,
@@ -159,7 +159,7 @@ def run(config_path, params_override=None, paths_override=None):
     cfg = load_config(config_path)
     if params_override:
         cfg["params"] = deep_merge(cfg["params"], params_override)
-    bjd_mapping.set_analysis_level(cfg["params"]["analysis_level"])
+    bjdmapping.set_analysis_level(cfg["params"]["analysis_level"])
     if paths_override:
         cfg["paths"].update({k: (str(Path(v).resolve()) if v else None) for k, v in paths_override.items()})
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
@@ -173,27 +173,27 @@ def run(config_path, params_override=None, paths_override=None):
     try:
         # ------------------------------------------------ 0·1단계
         def stage01():
-            master = bjd_mapping.load_bjd_master(paths["bjd_master"], C["bjd"])
-            S["crosswalk"] = bjd_mapping.load_crosswalk(paths["bjd_crosswalk"], C["crosswalk"]) \
+            master = bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"])
+            S["crosswalk"] = bjdmapping.load_crosswalk(paths["bjd_crosswalk"], C["crosswalk"]) \
                 if paths["bjd_crosswalk"] else None
             src = str(P["kepco"]["source"])
             if src not in ("001", "002"):
                 raise ValueError("params.kepco.source 는 '001' 또는 '002' — 둘을 합산하지 않는다")
-            raw = kepco_loader.load_kepco_monthly_hour(paths[f"kepco_{src}"], C["kepco" if src == "001" else "kepco_cpo"],
+            raw = kepcoloader.load_kepco_monthly_hour(paths[f"kepco_{src}"], C["kepco" if src == "001" else "kepco_cpo"],
                                                        P["kepco"], f"KEPCO_{src}")
-            last = kepco_loader.last_month(raw)
+            last = kepcoloader.last_month(raw)
             act_p = P["activation"]
-            short = kepco_loader.window_shortfall(last, act_p["window"], act_p["ratio_months"])
+            short = kepcoloader.window_shortfall(last, act_p["window"], act_p["ratio_months"])
             log.info("KEPCO_%s 마지막 수록 달 %s · 활성화 창 %s · 사후 %d개월을 못 채우는 후보 달 %d개",
                      src, mi_to_ym(last), "~".join(act_p["window"]), act_p["ratio_months"], short)
             if act_p.get("clip_to_data") and last < ym_to_mi(act_p["window"][1]):
-                act_p["window"] = kepco_loader.clip_window(act_p["window"], last)
+                act_p["window"] = kepcoloader.clip_window(act_p["window"], last)
                 log.warning("activation.clip_to_data: 창 끝을 수록 마지막 달로 줄임 → %s", "~".join(act_p["window"]))
-            mh, rate, unmatched, fail = kepco_loader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"], S["crosswalk"])
+            mh, rate, unmatched, fail = kepcoloader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"], S["crosswalk"])
             writer.table(rate, "s0_bjd_match_rate", "0단계 법정동 매칭률 (시도+시군구+읍면동 3단 매칭)",
                          note=f"실패율 {fail:.1%} — {P['bjd']['fail_warn_rate']:.0%} 이상이면 행정동 기준 의심")
             writer.table(unmatched, "s0_bjd_unmatched", "0단계 미매칭 목록 (사람 검토 필요)")
-            daily = kepco_loader.daily_series(mh)
+            daily = kepcoloader.daily_series(mh)
             monthly = daily.groupby("mi").agg(법정동수=("bjd_code", "nunique"),
                                               일평균충전량_합_kWh=("kwh_per_day", "sum")).reset_index()
             # R2: 전국 합계표는 bjd_code 열이 없어 _kepco_export 행 마스킹이 못 걸린다.
@@ -209,7 +209,7 @@ def run(config_path, params_override=None, paths_override=None):
                          png_df=_ym_col(monthly_png),
                          note=f"PNG는 그 달 대표 고객호수(시간별 {basis}) < {min_count}인 법정동의 기여분 제외")
             if ind.get("tizo_bands"):
-                band = kepco_loader.band_series(mh, ind["tizo_bands"])
+                band = kepcoloader.band_series(mh, ind["tizo_bands"])
                 wide = band.groupby(["mi", "band"])["kwh_per_day"].sum().unstack(fill_value=0)
                 share = wide.div(wide.sum(axis=1), axis=0).add_prefix("구간비_").reset_index()
                 band_visible = _exclude_small_cells(band, cell_rep, min_count, "s1_kepco_band_share")
@@ -224,10 +224,10 @@ def run(config_path, params_override=None, paths_override=None):
 
         # ------------------------------------------------ 2단계
         def stage2():
-            act = kepco_loader.detect_activation(S["daily"], P["activation"])
+            act = kepcoloader.detect_activation(S["daily"], P["activation"])
             cols = ["bjd_code", "status", "T_r", "ratio", "T_simple", "agree_simple", "n_changepoints", "n_months"]
             writer.table(act[[c for c in cols if c in act]], "s2_activation",
-                         f"2단계 {kepco_loader.activation_label(P['kepco']['source'], P['activation'].get('source_label'))} 시점 T_r "
+                         f"2단계 {kepcoloader.activation_label(P['kepco']['source'], P['activation'].get('source_label'))} 시점 T_r "
                          f"({act.attrs.get('method')}, 창 {'~'.join(P['activation']['window'])})")
             counts = act["status"].value_counts().rename_axis("상태").reset_index(name="법정동수")
             writer.table(counts, "s2_status_counts", "2단계 처치 상태별 법정동 수")
@@ -249,18 +249,18 @@ def run(config_path, params_override=None, paths_override=None):
         def stage3_centroids():
             if not paths["emd_centroids"]:
                 raise FileNotFoundError("paths.emd_centroids 없음 — CAN·KEP_007 좌표를 법정동으로 보낼 수 없음")
-            cent = bjd_mapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
-            cent["bjd_code"] = bjd_mapping.canonicalize(cent["bjd_code"], S.get("crosswalk"))
+            cent = bjdmapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
+            cent["bjd_code"] = bjdmapping.canonicalize(cent["bjd_code"], S.get("crosswalk"))
             # 시군구 모드는 읍면동 중심점을 다 남긴다: 좌표→가장 가까운 읍면동→그 시군구 코드로 보내려는 것이다.
-            S["centroids"] = cent if bjd_mapping.ANALYSIS_LEVEL == "sigungu" else cent.drop_duplicates("bjd_code")
+            S["centroids"] = cent if bjdmapping.ANALYSIS_LEVEL == "sigungu" else cent.drop_duplicates("bjd_code")
         runner.run("3", "법정동 중심점", stage3_centroids, ISOLATED)
 
         def stage3_kep007():
             if not paths["kep007"]:
                 raise FileNotFoundError("paths.kep007 없음")
-            st = kep007_loader.load_kep007(paths["kep007"], C, P["kep007"], S.get("centroids"),
+            st = kep007loader.load_kep007(paths["kep007"], C, P["kep007"], S.get("centroids"),
                                            P["can"]["centroid_max_km"], P["can"]["lat_range"], P["can"]["lon_range"])
-            stock = kep007_loader.region_stock(st)
+            stock = kep007loader.region_stock(st)
             writer.table(stock, "s3_kep007_stock", "3단계 KEP_007 법정동별 인프라 스톡 (2019 기준 정적 스냅샷)", digits=0)
             S.update(stations=st, infra_stock=stock)
         runner.run("3", "KEP_007 설치현황", stage3_kep007, ISOLATED)
@@ -268,7 +268,7 @@ def run(config_path, params_override=None, paths_override=None):
         def stage3_can():
             if not P["can"]["enabled"] or not paths["can_m"]:
                 raise RuntimeError("CAN 비활성 또는 paths.can_m 없음")
-            res = can_loader.run_can_stage(paths["can_m"], C, P["can"], S.get("centroids"), S.get("stations"),
+            res = canloader.run_can_stage(paths["can_m"], C, P["can"], S.get("centroids"), S.get("stations"),
                                            S["activation"], P["heterogeneity"]["can_feature_before"])
             writer.table(res["evidence"], "s3_can_join_key", f"3단계 CAN 식별번호 검증 → {res['verdict']} · 경로 {res['path']}")
             writer.table(res["duration_summary"], "s3_can_session_summary", "3단계 충전 세션 길이 요약 (20~40분 체류 전제 검증)")
@@ -418,9 +418,9 @@ def run(config_path, params_override=None, paths_override=None):
                 raise RuntimeError("7단계 CATE 결과가 없어 처방을 만들 수 없음")
             load_mh = S["mh"]
             if str(P["kepco"]["source"]) != "001":
-                raw = kepco_loader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"])
-                load_mh, _, _, _ = kepco_loader.attach_bjd(raw, S["master"], P["bjd"]["fail_warn_rate"], S.get("crosswalk"))
-            conc = load_axis.compute_concentration(load_mh, P["load_axis"]["period"])
+                raw = kepcoloader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"])
+                load_mh, _, _, _ = kepcoloader.attach_bjd(raw, S["master"], P["bjd"]["fail_warn_rate"], S.get("crosswalk"))
+            conc = loadaxis.compute_concentration(load_mh, P["load_axis"]["period"])
             p0, p1 = (ym_to_mi(v) for v in P["load_axis"]["period"])
             # R1: 최솟값 대신 기간 내 시간별 고객호수의 최댓값을 기본으로 쓴다(suppress_basis).
             customer_min = _period_customer_count(
@@ -430,7 +430,7 @@ def run(config_path, params_override=None, paths_override=None):
             writer.table(conc_csv, "s8_load_concentration", "8단계 부하 집중도",
                          png_df=conc_png,
                          note="avg_kw = 1시간 kWh ÷ 1h 의 일평균 = 구간 평균 kW (순간 최대전력 아님)")
-            quad, cc, kc = load_axis.classify_quadrants(S["het"]["cate"], conc, P["load_axis"], reserved)
+            quad, cc, kc = loadaxis.classify_quadrants(S["het"]["cate"], conc, P["load_axis"], reserved)
             export = quad.drop(columns=["reserved"])
             export_csv, export_png = _kepco_export(
                 export, customer_min, P["can"]["min_cell_count"],
@@ -448,17 +448,17 @@ def run(config_path, params_override=None, paths_override=None):
         # ------------------------------------------------ 8-C단계 (격리)
         if P["priority"]["enabled"]:
             def stage8c():
-                if bjd_mapping.ANALYSIS_LEVEL == "sigungu":
+                if bjdmapping.ANALYSIS_LEVEL == "sigungu":
                     raise RuntimeError("analysis_level=sigungu: 300/500/800m 2SFCA와 중심점 근사는 시군구 규모에서 의미가 없어 생략(8-E도 생략)")
                 if not paths["access_stations"] or not paths["ev_registration"]:
                     raise FileNotFoundError("paths.access_stations 또는 paths.ev_registration 없음")
                 if "centroids" not in S:
                     raise RuntimeError("법정동 중심점 없음 — 2SFCA 계산 불가")
-                stations, points = equity_access.load_access_inputs(
+                stations, points = equityaccess.load_access_inputs(
                     paths["access_stations"], paths["ev_registration"], C, S["centroids"], S.get("crosswalk"))
-                access = equity_access.compute_2sfca(
+                access = equityaccess.compute_2sfca(
                     stations, points, P["priority"]["radii_m"], P["priority"]["default_radius_m"])
-                access = equity_access.add_access_indicators(access, stations, points)
+                access = equityaccess.add_access_indicators(access, stations, points)
                 writer.table(access, "s8c_accessibility", "8-C 법정동별 2SFCA 접근성과 형평성 부족도",
                              note="2SFCA가 낮을수록 equity_need_norm은 높음. 지표 1·2는 법정동 중심점 근사(격자점·폴리곤 아님). 실제 취약계층 규모가 아님")
                 S.update(access=access, access_match_rate=float(points["ev_count"].notna().mean()))
@@ -471,7 +471,7 @@ def run(config_path, params_override=None, paths_override=None):
                 _warn_energy_calendar(ep)
                 date_start, date_end = _energy_load_window(ep)
                 hourly_params = dict(P["kepco"], date_start=str(date_start.date()), date_end=str(date_end.date()))
-                hourly = kepco_loader.load_kepco_hourly(paths["kepco_hourly"] or paths["kepco_001"],
+                hourly = kepcoloader.load_kepco_hourly(paths["kepco_hourly"] or paths["kepco_001"],
                                                        C["kepco"], hourly_params, S["master"], S.get("crosswalk"))
                 # 공학 평가 대상도 평가 시작 전 교정자료로 고정한다(CATE 크기로 제외하지 않음).
                 start = pd.Timestamp(ep["evaluation_start"])
@@ -479,7 +479,7 @@ def run(config_path, params_override=None, paths_override=None):
                                                     start - pd.Timedelta(days=1))]
                 complete = []
                 for code in prior["bjd_code"].unique():
-                    matrix = load_forecast.daily_matrix(prior, code)
+                    matrix = loadforecast.daily_matrix(prior, code)
                     if len(matrix) == ep["calibration_days"] and not matrix.isna().any().any():
                         profile = matrix.mean(axis=0)
                         complete.append({"bjd_code": code, "concentration": profile.max() / profile.sum()
@@ -487,14 +487,14 @@ def run(config_path, params_override=None, paths_override=None):
                     else:
                         log.warning("8-A %s: 교정기간 결측 — 대상선정 보류", code)
                 conc = pd.DataFrame(complete, columns=["bjd_code", "concentration"])
-                cutoff = load_axis._cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
+                cutoff = loadaxis._cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
                 regions = conc.loc[conc["concentration"] > cutoff, "bjd_code"].tolist()
                 if not regions:
                     raise ValueError("고집중도 지역 없음 — 대상 기준 확인 필요")
                 rows = []
                 for code in regions:
                     try:
-                        rows.append(load_forecast.backtest_forecast(
+                        rows.append(loadforecast.backtest_forecast(
                             hourly, code, ep["holdout_weeks"], ep["weeks"], ep["holidays"],
                             end_date=pd.Timestamp(ep["evaluation_start"]) - pd.Timedelta(days=1)))
                     except ValueError as exc:
@@ -517,17 +517,17 @@ def run(config_path, params_override=None, paths_override=None):
                 if "energy_input" not in S:
                     raise RuntimeError("8-A 입력 없음 — oracle로 예측 성과를 대체하지 않음")
                 try:
-                    smp = ess_optimizer.load_smp(paths["smp"])
+                    smp = essoptimizer.load_smp(paths["smp"])
                 except (OSError, ValueError, KeyError) as exc:
                     log.warning("SMP 로드 실패 — 피크 목적함수: %s", exc)
                     smp = None
                 hourly, regions, validation = S["energy_input"]
                 shape = S.get("can", {}).get("charging_shape")
-                results, schedules = ess_optimizer.run_scenarios(hourly, regions, P["energy"], validation, smp, shape)
+                results, schedules = essoptimizer.run_scenarios(hourly, regions, P["energy"], validation, smp, shape)
                 evidence = None
                 if paths["public_evidence"]:
                     evidence = json.loads(Path(paths["public_evidence"]).read_text(encoding="utf-8"))
-                priority = ess_optimizer.public_priority(results, evidence, P["energy"]["priority_multiplier"])
+                priority = essoptimizer.public_priority(results, evidence, P["energy"]["priority_multiplier"])
                 note = "정책 상한·후보 용량·SMP 비용 차이 시뮬레이션. 정전 예방/교체비 절감 실증 아님"
                 customer_min = S["energy_customer_min"]
                 result_values = [c for c in results if c.endswith(("_kw", "_kwh", "_won"))]
@@ -557,13 +557,13 @@ def run(config_path, params_override=None, paths_override=None):
             def stage8e():
                 if "access" not in S or "energy_results" not in S:
                     raise RuntimeError("8-C 접근성 또는 8-B ESS 결과 없음")
-                result = priority_score.build_priority(S["energy_results"], S["access"], P["priority"])
+                result = priorityscore.build_priority(S["energy_results"], S["access"], P["priority"])
                 corr = result.attrs.get("axes_correlation", {})  # merge 뒤에는 attrs가 사라지므로 먼저 꺼낸다
                 # R3: 8-A 평가창(91일) 필터가 걸린 S["energy_input"] 대신, period 열만 가볍게 스캔한
                 # 원천 전체 기간의 관측 일자로 계절 커버리지를 판정한다(시간별 원자료 전체를 다시 올리지 않음).
-                observed_dates = kepco_loader.scan_observed_dates(
+                observed_dates = kepcoloader.scan_observed_dates(
                     paths["kepco_hourly"] or paths["kepco_001"], C["kepco"], P["kepco"])
-                coverage = priority_score.seasonal_coverage(observed_dates)
+                coverage = priorityscore.seasonal_coverage(observed_dates)
                 result["season_status"] = coverage["season_status"]
                 result["missing_seasons"] = coverage["missing_seasons"]
                 if "het" in S:

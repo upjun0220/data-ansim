@@ -10,10 +10,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import DEFAULT_COLUMNS, DEFAULT_PARAMS
-from bjd_mapping import load_bjd_master
-from kepco_loader import load_kepco_hourly
-from load_forecast import daily_matrix, forecast_load, backtest_forecast
-from ess_optimizer import (solve_peak_shaving, greedy_peak_shaving, size_ess,
+from bjdmapping import load_bjd_master
+from kepcoloader import load_kepco_hourly
+from loadforecast import daily_matrix, forecast_load, backtest_forecast
+from essoptimizer import (solve_peak_shaving, greedy_peak_shaving, size_ess,
                            evaluate_realized, compute_added_load, load_smp, public_priority, run_scenarios)
 import mock_data
 

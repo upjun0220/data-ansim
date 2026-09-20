@@ -1,5 +1,5 @@
 {
-  "_설명": "mock 전용 가상 코드. 현장에서는 industry_codes_template.json 을 복사해 TB_SHC_TOBU_CODE.csv · TB_SHC_CODE.csv 의 실제 코드로 채운다.",
+  "_설명": "mock 전용 가상 코드. 현장에서는 industrycodestemplate.json 을 복사해 TB_SHC_TOBU_CODE.csv · TB_SHC_CODE.csv 의 실제 코드로 채운다.",
   "wait": ["FD", "RT"],
   "control": ["MD", "ED", "PS"],
   "placebo": ["MD"],

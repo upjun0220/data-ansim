@@ -236,7 +236,7 @@ def public_priority(results, public_evidence=None, multiplier=1.2):
 
 def run_scenarios(hourly, regions, params, validation, smp=None, utilization_shape=None):
     """평가 시작일 이전에 상한·용량을 고정하고 동일 용량으로 forecast/oracle을 비교한다."""
-    from load_forecast import daily_matrix, forecast_day
+    from loadforecast import daily_matrix, forecast_day
 
     start = pd.Timestamp(params["evaluation_start"]).normalize()
     days = pd.date_range(start, periods=int(params["evaluation_days"]), freq="D")

@@ -10,8 +10,8 @@ from matplotlib import font_manager
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import identification
-import kepco_loader
-import priority_score
+import kepcoloader
+import priorityscore
 from config import DEFAULT_PARAMS
 from outputs import setup_korean_font
 from pipeline import (_energy_load_window, _exclude_small_activation, _exclude_small_cells, _kepco_export,
@@ -128,9 +128,9 @@ def test_seasonal_coverage_scan_ignores_8a_date_window(tmp_path):
         path, index=False, encoding="utf-8")
     # 8-A 평가창처럼 12월만 보는 좁은 date_start/date_end가 섞여 있어도 무시하고 전체를 스캔해야 한다.
     narrow_8a_params = {"chunksize": 100, "date_start": "2025-12-01", "date_end": "2025-12-31"}
-    scanned = kepco_loader.scan_observed_dates(path, {"period": "조회기간"}, narrow_8a_params)
+    scanned = kepcoloader.scan_observed_dates(path, {"period": "조회기간"}, narrow_8a_params)
     assert len(scanned) == 370
-    coverage = priority_score.seasonal_coverage(scanned)
+    coverage = priorityscore.seasonal_coverage(scanned)
     assert coverage["season_status"] == "검증 가능"
     assert coverage["missing_seasons"] == ""
 
@@ -159,11 +159,11 @@ def test_output_min_cell_count_overrides_can_alias():
 def test_window_shortfall_clip_and_label():
     w = ["2025-03", "2025-09"]
     dec = 2025 * 12 + 11
-    assert kepco_loader.window_shortfall(dec, w, 3) == 0            # 12월까지 있으면 사후 3개월 충분
+    assert kepcoloader.window_shortfall(dec, w, 3) == 0            # 12월까지 있으면 사후 3개월 충분
     aug = 2025 * 12 + 7
-    assert kepco_loader.window_shortfall(aug, w, 3) == 3            # 8월까지면 7~9월 후보가 못 채움
-    assert kepco_loader.clip_window(w, aug) == ["2025-03", "2025-08"]
-    assert kepco_loader.clip_window(w, dec) == w
-    assert kepco_loader.activation_label("002") == "공용(사업자 채널) 충전 활성화"
-    assert kepco_loader.activation_label("001") == "충전 활성화(전체)"
-    assert kepco_loader.activation_label("002", "내 이름") == "내 이름"
+    assert kepcoloader.window_shortfall(aug, w, 3) == 3            # 8월까지면 7~9월 후보가 못 채움
+    assert kepcoloader.clip_window(w, aug) == ["2025-03", "2025-08"]
+    assert kepcoloader.clip_window(w, dec) == w
+    assert kepcoloader.activation_label("002") == "공용(사업자 채널) 충전 활성화"
+    assert kepcoloader.activation_label("001") == "충전 활성화(전체)"
+    assert kepcoloader.activation_label("002", "내 이름") == "내 이름"

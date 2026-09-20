@@ -23,7 +23,7 @@ import pandas as pd
 
 from common import log, mi_to_ym, norm_sf2, optional_import, ym_to_mi
 
-# 부하·집중도 계열 이름. load_axis.py 에서만 쓰는 정보다.
+# 부하·집중도 계열 이름. loadaxis.py 에서만 쓰는 정보다.
 FORBIDDEN_FEATURE = re.compile(r"(집중도|피크|부하|전력|kwh|kw$|_kw|peak|concentration|load)", re.IGNORECASE)
 
 

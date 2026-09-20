@@ -113,7 +113,7 @@
       <tr><td>v6</td><td>안전·형평성·경제성을 중심에 두고 매출 효과를 부가 편익으로 재배치. 정책적 상한·예측 편향·열화 제외 Q&amp;A 추가.</td></tr>
       <tr><td>v7</td><td>SOC·초기잔량·역송 금지·재충전 제약을 반영한 후보 용량 검증으로 수정. 평가 이전에 상한·용량·대상을 고정하고 예측 실패와 oracle을 분리. 공공 검토 규칙·공간 경계 출처·실행 범위를 구체화하고 HTML·구현 명세·Python을 동기화.</td></tr>
       <tr><td>v8</td><td>외부 공개데이터 3종(충전소 위치·설치년도, 행정동별 전기차 등록현황, 공동주택 단지정보)을 추가해 충전 접근성 관측지표 3종을 신설, 형평성 축을 "미확보"에서 측정 가능 범위로 전환. 충전소 위경도와 읍면동 경계를 결합해 LX 데이터를 지도 배경에서 접근성 계산 입력으로 승격. CAN은 M-Type 단독 사용으로 확정하고 식별자 진단을 M-Type 전용 3종으로 교체. DSZ 신청 데이터 6개는 변경 없음.</td></tr>
-      <tr><td>v9</td><td>안전·형평성·경제성 세 축을 <strong>재현 가능한 결합 점수(가중합)</strong>로 전환한다. 현재 기본 가중치는 균등이며, 선택적으로 입력한 AHP 행렬의 일관성비율을 검사한다. 상한 배율과 가중치 <strong>민감도 검증</strong>으로 강건 상위군과 경계선 지역을 구분한다. 2SFCA, 계절 커버리지 상태, 데이터 신뢰도 점수를 구현했으며 MCLP·GIS 커버리지·DEM 경사 보정은 후속 범위다. 신규 모듈은 <code>equity_access.py</code>(8-C)와 <code>priority_score.py</code>(8-E)다. DSZ 신청 데이터 6개는 변경 없음.</td></tr>
+      <tr><td>v9</td><td>안전·형평성·경제성 세 축을 <strong>재현 가능한 결합 점수(가중합)</strong>로 전환한다. 현재 기본 가중치는 균등이며, 선택적으로 입력한 AHP 행렬의 일관성비율을 검사한다. 상한 배율과 가중치 <strong>민감도 검증</strong>으로 강건 상위군과 경계선 지역을 구분한다. 2SFCA, 계절 커버리지 상태, 데이터 신뢰도 점수를 구현했으며 MCLP·GIS 커버리지·DEM 경사 보정은 후속 범위다. 신규 모듈은 <code>equityaccess.py</code>(8-C)와 <code>priorityscore.py</code>(8-E)다. DSZ 신청 데이터 6개는 변경 없음.</td></tr>
       <tr><td>v9 정정(09-19)</td><td>전화 확인 질문지·저장소 코드와 대조해 본문의 불일치를 바로잡았다. ① LH KLH_001은 신청 6개에 없으므로 지표 3·8-C의 LH 입력 서술을 후속으로 조정, ② 지표 2는 법정동 중심점 기준으로 명시하고 300/500m 커버리지 비율은 8-D 후속으로 정리, ③ 반입 개수에 코드 zip과 폰트 파일 반영, ④ CAN 신청이 불가할 때 KEP_007을 대체 고유 데이터로 추가하는 경로를 0-2절에 명시. 분석 방법은 바꾸지 않았고 문서와 구현 범위의 차이만 정리했다.</td></tr>
       <tr><td><strong>v10(현재)</strong></td><td>코드 구현 결과와 전화 확인 대비 사항을 문서에 반영했다(테스트 73개 통과, 가상 데이터로 전 단계 실행 확인). ① <strong>순위 대상(ranking pool)</strong> — 세 축이 모두 있는 동네만 순위·강건 상위군에 넣고 나머지는 “부하 미평가” 별도 목록으로 분리(3-2절), ② 안전·경제성 축의 상관을 실행마다 재서 사실상 한 축이면 경고, ③ 9-H 단계와 <code>s9_headline</code> 표로 “1지도 3숫자”를 가정과 함께 산출, ④ 접근성 지표 1·2 구현(법정동 중심점 근사), ⑤ 한글 폰트가 없으면 영문 라벨로 대체, ⑥ 소표본 억제 설정 정리(<code>output.min_cell_count</code>, <code>suppress_basis</code> 결정표), ⑦ KEPCO 원천 수록 기간 점검(킬 16번)과 창 줄이기 옵션, ⑧ 신한카드 시도별 분할·반입 묶음 점검 도구, ⑨ 한전 읍면동이 행정동일 때의 <strong>시군구 폴백</strong>(<code>analysis_level="sigungu"</code>, 8-C·8-E 생략), ⑩ 방법론 감사(리플맵4.2) 지적 반영 — 사전추세 지역 제외 옵션 삭제, CATE 보고 전 BLP 교정 검정 강제, 위약 판정을 “0과 구분되는가”로 바꾸고 할인 후 값에 부트스트랩 CI 병기, 추정량 이름을 “충전 활동 활성화 시점의 외지 대기소비 매출 변화”로 통일. 분석 방법과 세 축 정의는 바꾸지 않았다. DSZ 신청 데이터 6개는 변경 없음.</td></tr>
     </tbody>
@@ -270,12 +270,12 @@ E_ref = max_d Σ_h [L_calibration(r,d,h) + ΔL(r,h) − P_target(r)]⁺ · Δt
     <thead><tr><th>단계</th><th>파일</th><th>핵심 데이터</th><th>산출물</th><th>방법</th></tr></thead>
     <tbody>
       <tr><td>0~7</td><td colspan="4">(기존과 동일)</td></tr>
-      <tr><td>8. 전력축·처방</td><td><code>load_axis.py</code></td><td>KEPCO_001 (처치시점은 002)</td><td>4사분면 분류, 공공 검토 유형</td><td>부하 집중도 계산. 저CATE 투자 배제 문구 제거</td></tr>
-      <tr><td>8-A. day-ahead 부하예측</td><td><code>load_forecast.py</code></td><td>KEPCO_001 (신규 데이터셋 없음)</td><td>지역별 <code>L_forecast(r,t)</code>, MAE(vs persistence), 증가 지역 평균 오차·피크 시간 오차</td><td>naive seasonal(median, 4주)</td></tr>
-      <tr><td>8-B. ESS 피크쉐이빙·후보 검증</td><td><code>ess_optimizer.py</code></td><td>8-A 예측 + 평가 전 교정기간의 고집중도 지역 + KEPCO_001 과거 일별 실측 + CAN 상대 모양/가정 이용률 + SMP</td><td>0/2/3/5대 × 1.1/1.2/1.3배 × oracle/forecast 결과, 스케줄, 후보 용량, 상한 초과·종단 잔량 오차·가격 비용 차이</td><td>제한된 피크쉐이빙 LP + 후보 순회, 그리디 폴백. 단계 8 사후 지도와 대상 시점 차이 명시</td></tr>
-      <tr id="sec08-cd"><td><strong>8-C. 접근성 지표</strong></td><td><code>equity_access.py</code></td><td>외부 3종(0-5절)</td><td>읍면동별 2SFCA 접근성 점수(3-5절), 지표 1(충전기 1기당 EV 수)·지표 2(최근접 공용충전기 거리)를 <strong>구현</strong>(법정동 중심점 근사, 폴리곤 공간조인·격자점 아님), 결측 목록. 지역 간 배수는 9-H 숫자 1로 낸다. 지표 3은 후속</td><td>비율 계산 + 공간 최근접 탐색 + 2SFCA 반경 탐색</td></tr>
+      <tr><td>8. 전력축·처방</td><td><code>loadaxis.py</code></td><td>KEPCO_001 (처치시점은 002)</td><td>4사분면 분류, 공공 검토 유형</td><td>부하 집중도 계산. 저CATE 투자 배제 문구 제거</td></tr>
+      <tr><td>8-A. day-ahead 부하예측</td><td><code>loadforecast.py</code></td><td>KEPCO_001 (신규 데이터셋 없음)</td><td>지역별 <code>L_forecast(r,t)</code>, MAE(vs persistence), 증가 지역 평균 오차·피크 시간 오차</td><td>naive seasonal(median, 4주)</td></tr>
+      <tr><td>8-B. ESS 피크쉐이빙·후보 검증</td><td><code>essoptimizer.py</code></td><td>8-A 예측 + 평가 전 교정기간의 고집중도 지역 + KEPCO_001 과거 일별 실측 + CAN 상대 모양/가정 이용률 + SMP</td><td>0/2/3/5대 × 1.1/1.2/1.3배 × oracle/forecast 결과, 스케줄, 후보 용량, 상한 초과·종단 잔량 오차·가격 비용 차이</td><td>제한된 피크쉐이빙 LP + 후보 순회, 그리디 폴백. 단계 8 사후 지도와 대상 시점 차이 명시</td></tr>
+      <tr id="sec08-cd"><td><strong>8-C. 접근성 지표</strong></td><td><code>equityaccess.py</code></td><td>외부 3종(0-5절)</td><td>읍면동별 2SFCA 접근성 점수(3-5절), 지표 1(충전기 1기당 EV 수)·지표 2(최근접 공용충전기 거리)를 <strong>구현</strong>(법정동 중심점 근사, 폴리곤 공간조인·격자점 아님), 결측 목록. 지역 간 배수는 9-H 숫자 1로 낸다. 지표 3은 후속</td><td>비율 계산 + 공간 최근접 탐색 + 2SFCA 반경 탐색</td></tr>
       <tr><td><strong>8-D. 공간 커버리지(후속)</strong></td><td>미구현</td><td>읍면동 경계 + 충전소 위경도 + LX DEM5M</td><td>버퍼 커버리지·경사 보정 접근성</td><td>현재 산출물에 포함하지 않음</td></tr>
-      <tr id="sec08-e"><td><strong>8-E. 투자 우선순위 결합 점수</strong><span class="badge new">v9 신규</span></td><td><code>priority_score.py</code></td><td>8-B ESS + 8-C 2SFCA + 설정 가중치</td><td>법정동별 결합 점수, 결측 축과 결측 사유, <strong>순위 대상 여부(세 축 모두)</strong>, 민감도 순위, 신뢰도, 강건 상위군, 안전·경제성 축 상관 경고</td><td>min-max 정규화 + 결측 재정규화 + 격자 민감도</td></tr>
+      <tr id="sec08-e"><td><strong>8-E. 투자 우선순위 결합 점수</strong><span class="badge new">v9 신규</span></td><td><code>priorityscore.py</code></td><td>8-B ESS + 8-C 2SFCA + 설정 가중치</td><td>법정동별 결합 점수, 결측 축과 결측 사유, <strong>순위 대상 여부(세 축 모두)</strong>, 민감도 순위, 신뢰도, 강건 상위군, 안전·경제성 축 상관 경고</td><td>min-max 정규화 + 결측 재정규화 + 격자 민감도</td></tr>
       <tr id="sec08-h"><td><strong>9-H. 발표 숫자</strong><span class="badge new">v10 신규</span></td><td><code>headline.py</code></td><td>8-B 결과 + 8-C 지표 1</td><td><code>s9_headline</code> 표(CSV·PNG): 숫자 1·2·3, 각 행에 “증설 N대·상한 배율·이용률 배율” 가정과 상한 1.1~1.3 범위</td><td>상·하위 10% 평균 비율, 지역·일 평균. PNG는 소표본 법정동 몫 제외</td></tr>
       <tr><td>9. 반출(개정)</td><td><code>outputs.py</code></td><td>모든 단계 + 공공성 확인 항목</td><td>CSV·PNG 검토표. 경계 확보 후 <strong>2D 잠정 검토 지도</strong> 작성</td><td>Python은 표·차트 생성. 실제 지리 지도는 QGIS 경계 결합·반출 심의 후 별도 완성</td></tr>
     </tbody>
@@ -355,7 +355,7 @@ w_safety + w_equity + w_econ = 1</code></pre>
 채택된 응답들의 가중치를 기하평균으로 합쳐 최종 가중치를 정한다.</code></pre>
   <ul>
     <li>실제 AHP 응답이 없으므로 현재 결과를 AHP 도출 가중치라고 부르지 않는다. 행렬이 입력된 경우 CR ≥ 0.1이면 킬 크라이테리아에서 실패로 표시한다.</li>
-    <li>심사·현장 담당자가 다른 가중치를 요구하면(예: "이 지자체는 형평성을 더 우선한다") <code>priority_score.py</code>에 가중치를 인자로 넘겨 즉시 재계산할 수 있게 구현한다 — 고정 상수가 아니라 설정값이다.</li>
+    <li>심사·현장 담당자가 다른 가중치를 요구하면(예: "이 지자체는 형평성을 더 우선한다") <code>priorityscore.py</code>에 가중치를 인자로 넘겨 즉시 재계산할 수 있게 구현한다 — 고정 상수가 아니라 설정값이다.</li>
   </ul>
 
   <h3 id="pm-4">3-4. 임계값·가중치 민감도 검증</h3>
@@ -369,7 +369,7 @@ w_safety + w_equity + w_econ = 1</code></pre>
   <ul>
     <li>가중치 그리드는 설정 중심값에서 ±0.15 범위를 흔들고 합이 1이 되도록 재정규화한다.</li>
     <li>결과는 지도에 두 겹으로 표시한다 — <strong>1겹: 기준 가중치의 결합 점수, 2겹: 강건 상위군 여부(굵은 테두리)</strong>. 심사·현장 담당자가 "이 지역은 가중치를 어떻게 바꿔도 상위권"이라는 지역과 "특정 가중치에서만 상위권"인 지역을 한눈에 구분할 수 있다.</li>
-    <li>이 절차는 <code>priority_score.py</code>의 <code>run_sensitivity()</code> 함수로 구현하고, 조합 수·소요 시간·상위 20% 문턱을 설정 파일로 노출한다.</li>
+    <li>이 절차는 <code>priorityscore.py</code>의 <code>run_sensitivity()</code> 함수로 구현하고, 조합 수·소요 시간·상위 20% 문턱을 설정 파일로 노출한다.</li>
   </ul>
 
   <h3 id="pm-5">3-5. 형평성 지표 고도화 — 2SFCA</h3>
@@ -385,7 +385,7 @@ DEM5M 경사 보정: 유클리드 거리 대신 "경사 조정 도보시간"을 
     <li>행정경계에 갇히지 않는다 — 옆 동네 충전소도 반경 안에 있으면 공급으로 잡힌다. 07-3절 지표 2(단순 최근접거리)는 그대로 병기하되, <strong>지도의 형평성 표시값은 2SFCA 점수를 주 지표로 승격</strong>한다.</li>
     <li>반경 d0은 500m 고정이 아니라 300/500/800m 세 가지로 계산해 병기한다 — 도보 반경 가정 자체가 민감도 파라미터이기 때문이다.</li>
     <li>"충전기의 유효 대수"는 완속/급속을 합한 공개 충전기 대수를 쓰며, 회전율(대당 실제 이용 가능 세션 수)은 모집단 이용률 자료가 없어 반영하지 않는다 — 이 한계는 11절에 그대로 명시한다.</li>
-    <li>현재 구현은 8-C(<code>equity_access.py</code>)의 <code>compute_2sfca()</code>에서 법정동 중심점과 충전소 좌표의 haversine 거리를 사용한다. 실제 도로망·DEM 경사 보정은 구현하지 않았으며 후속 검증 범위다.</li>
+    <li>현재 구현은 8-C(<code>equityaccess.py</code>)의 <code>compute_2sfca()</code>에서 법정동 중심점과 충전소 좌표의 haversine 거리를 사용한다. 실제 도로망·DEM 경사 보정은 구현하지 않았으며 후속 검증 범위다.</li>
   </ul>
 
   <h3 id="pm-6">3-6. 계절 강건성 검증</h3>
@@ -443,7 +443,7 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
       <tr><td class="num-col">15</td><td>가중치·임계값 민감도 그리드에서 강건 상위군이 전체 후보지의 5% 미만인가(3-4절)</td><td>강건 상위군이 너무 적으면(=순위가 근본적으로 불안정하면) 결합 점수 단일 순위 발표를 보류하고, 축별 개별 순위표 3장(안전·형평성·경제성)을 병기해 "합의된 1등은 없다"고 정직하게 보고</td></tr>
     </tbody>
   </table>
-  <p><strong>v10 번호·판정 주의</strong>: 위 표의 번호는 설계 문서 기준이며, 코드(<code>kill_criteria.py</code>)가 실제로 내는 16개 표 번호와 다르다. 현장에서는 코드가 내는 표를 기준으로 한다. v10에서 바뀐 판정: <strong>11번(한글 폰트)</strong>은 폰트가 없어도 실패가 아니라 “영문 라벨로 진행” 경고(기본), <strong>15번</strong>은 순위 대상 안에서 계산, <strong>16번(원천 수록 기간, 신규)</strong>은 선택한 KEPCO 원천의 마지막 수록 달이 활성화 창 끝보다 이르면 경고하고 사후 비교를 못 채우는 달 수를 표시, <strong>5번(한전 매핑 실패율)</strong>은 행정동 기준이 의심되면 <code>analysis_level="sigungu"</code>로 다시 실행하도록 안내한다.</p>
+  <p><strong>v10 번호·판정 주의</strong>: 위 표의 번호는 설계 문서 기준이며, 코드(<code>killcriteria.py</code>)가 실제로 내는 16개 표 번호와 다르다. 현장에서는 코드가 내는 표를 기준으로 한다. v10에서 바뀐 판정: <strong>11번(한글 폰트)</strong>은 폰트가 없어도 실패가 아니라 “영문 라벨로 진행” 경고(기본), <strong>15번</strong>은 순위 대상 안에서 계산, <strong>16번(원천 수록 기간, 신규)</strong>은 선택한 KEPCO 원천의 마지막 수록 달이 활성화 창 끝보다 이르면 경고하고 사후 비교를 못 채우는 달 수를 표시, <strong>5번(한전 매핑 실패율)</strong>은 행정동 기준이 의심되면 <code>analysis_level="sigungu"</code>로 다시 실행하도록 안내한다.</p>
 
   <hr>
 
@@ -493,12 +493,12 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
   <h3>Q9. CAN 데이터의 차종_식별번호가 개별 차량이 아니면 분석이 무너지지 않는가?</h3>
   <p><strong>답변</strong>: “CAN은 M-Type 단독 사용이라 다른 표와 조인이 없어 '조인키' 문제 자체가 없습니다. verify_vehicle_identifier가 동시각 중복·순간이동·SOC 연속성 3개 진단으로 개별 차량 여부를 판정하고, 모델 코드나 불명 판정이면 개별 차량 클러스터링을 포기하고 법정동 단위 밀집도(경로 B, 정황상 보조 근거)로 격하합니다. 07-2의 <code>u(t)</code>는 차량 식별이 필요 없는 세션 재구성만으로 계산되므로, 어느 경로든 파이프라인은 유지됩니다.”</p>
   <h3>Q10. 결합 점수의 가중치를 왜 그렇게 정했는가? 팀이 임의로 정한 것 아닌가?</h3>
-  <p><strong>답변</strong>: “현재 기본값은 세 축 균등 가중치이며, <code>priority_score.py</code>는 설정값을 받아 즉시 재계산합니다. AHP 행렬이 입력되면 일관성비율(CR&lt;0.1)을 검사하지만, 팀 5인의 실제 응답은 아직 확보되지 않았으므로 AHP 도출값이라고 주장하지 않습니다. 가중치를 흔들어도 순위가 유지되는 강건 상위군과 경계선 지역을 함께 보고합니다.”</p>
+  <p><strong>답변</strong>: “현재 기본값은 세 축 균등 가중치이며, <code>priorityscore.py</code>는 설정값을 받아 즉시 재계산합니다. AHP 행렬이 입력되면 일관성비율(CR&lt;0.1)을 검사하지만, 팀 5인의 실제 응답은 아직 확보되지 않았으므로 AHP 도출값이라고 주장하지 않습니다. 가중치를 흔들어도 순위가 유지되는 강건 상위군과 경계선 지역을 함께 보고합니다.”</p>
 
   <footer class="doc-foot">
     <p>신청서에는 상단 선언문과 6절 공공성 서사를 사용한다. v10 수식과 범위는 함께 제공한 구현 명세 및 GitHub <a href="https://github.com/upjun0220/data-ansim">data-ansim</a>의 예측·ESS·접근성·GIS·결합점수 모듈에 반영한다. 모의실험 검증을 실제 지역의 효과로 쓰지 않는다.</p>
     <ol>
-      <li>현재 구현: <code>equity_access.py</code>(8-C)와 <code>priority_score.py</code>(8-E)를 <code>pipeline.py</code>에 선택형 격리 단계로 연결했다. 지표 1·2(충전기당 EV 대수·최근접거리, 법정동 중심점 근사)는 구현했고, 지표 3(자가충전 제약 주거 비율)·MCLP·300/500m 커버리지·실제 GIS 지도·DEM 경사 보정은 구현하지 않았다.</li>
+      <li>현재 구현: <code>equityaccess.py</code>(8-C)와 <code>priorityscore.py</code>(8-E)를 <code>pipeline.py</code>에 선택형 격리 단계로 연결했다. 지표 1·2(충전기당 EV 대수·최근접거리, 법정동 중심점 근사)는 구현했고, 지표 3(자가충전 제약 주거 비율)·MCLP·300/500m 커버리지·실제 GIS 지도·DEM 경사 보정은 구현하지 않았다.</li>
       <li>원자료 확보 후 확인: KEPCO 일자·시각·단위·포괄 범위, CAN 식별자와 세션 신뢰도(관측 종료 시점 포함), 공휴일·SMP 정보시점, 경계 기준일과 결합키, 공동주택 주차대수 컬럼 존재 여부, 경계 도형(SHP/GeoPackage)의 안심구역 반입 가능 여부, 표준데이터 "이용자 제한 여부" 필드의 실제 값 분포, 공공성 증빙, <strong>AHP 팀원 응답 원자료, 2SFCA 반경(300/500/800m) 중 현장 채택값, KEPCO_001의 계절 커버리지 실제 기간</strong>. 실제 신청 제출과 안심구역 반출 심의는 이 문서 수정과 별개다.</li>
     </ol>
   </footer>

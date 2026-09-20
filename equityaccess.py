@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from bjd_mapping import canonicalize
+from bjdmapping import canonicalize
 from common import clean_code, read_columns, to_num
 
 
