@@ -122,20 +122,36 @@ def test_filter_sido_code_keeps_only_listed_prefixes():
     assert filter_sido_code(chunk, "sido_cd", ["11", "41"])["v"].tolist() == [1, 2, 3]
     assert len(filter_sido_code(chunk, "sido_cd", None)) == 4   # 설정 없으면 전체
 
-def test_import_bundle_check_rules(tmp_path):
+
+def test_import_bundle_accepts_py_csv_txt_font_but_not_zip_json_md(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import check, collect
-    import zipfile
-    zipfile.ZipFile(tmp_path / "code.zip", "w").close()
-    for name in ("a.csv", "b.csv", "font.ttf"):
-        (tmp_path / name).write_bytes(b"x")
-    rows, problems = check(collect([tmp_path]))
-    assert len(rows) == 4 and problems == []                 # 코드 1 + 데이터 2 + 폰트 1
-    (tmp_path / "c.xlsx").write_bytes(b"x")
-    assert any("허용되지 않는 형식" in p for p in check(collect([tmp_path]))[1])
-    for i in range(6):
-        (tmp_path / f"d{i}.csv").write_bytes(b"x")
-    assert any("최대 10개" in p for p in check(collect([tmp_path]))[1])
+    (tmp_path / "dataansimbundle.py").write_text("x = 1\n", encoding="utf-8")
+    for name in ("bjdmaster.csv", "smp.txt"):
+        (tmp_path / name).write_text("a,b\n1,2\n", encoding="utf-8")
+    (tmp_path / "koreanfont.ttf").write_bytes(b"x")
+    assert check(collect([tmp_path]))[1] == []                      # 코드 1 + 데이터 2 + 폰트 1
+    for bad in ("b.zip", "c.json", "d.md"):
+        (tmp_path / bad).write_bytes(b"x")
+    assert sum("허용되지 않는 형식" in p for p in check(collect([tmp_path]))[1]) == 3
+
+
+def test_import_bundle_rejects_unsafe_names_count_and_broken_python(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from check_import_bundle import check, collect
+    (tmp_path / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    for bad in ("bjd_master.txt", "data-ansim.txt", "법정동.txt", "my file.txt"):
+        (tmp_path / bad).write_text("a\n", encoding="utf-8")
+    assert sum("파일명 규칙 위반" in p for p in check(collect([tmp_path]))[1]) == 4
+    broken = tmp_path / "broken.py"
+    broken.write_text("def (:\n", encoding="utf-8")
+    assert any("올바른 파이썬 파일이 아님" in p for p in check(collect([broken]))[1])
+    many = tmp_path / "many"
+    many.mkdir()
+    for i in range(11):
+        (many / f"f{i}.txt").write_text("x", encoding="utf-8")
+    assert any("최대 10개" in p for p in check(collect([many]))[1])
+
 
 def test_blp_calibration_separates_real_from_noise_heterogeneity():
     from heterogeneity import _blp_calibration
@@ -172,29 +188,3 @@ def test_placebo_verdict_uses_zero_test_and_reports_ci():
     _, s_ok = discount_by_placebo(main, ok)
     assert s_bad.attrs["placebo_fails"] and "해석 유보" in s_bad.set_index("구분").at["위약(대조 업종)", "판정"]
     assert not s_ok.attrs["placebo_fails"] and {"CI_하한", "CI_상한"} <= set(s_ok.columns)
-
-def test_import_bundle_rejects_unsafe_file_names(tmp_path):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-    from check_import_bundle import check, collect
-    import zipfile
-    zipfile.ZipFile(tmp_path / "dataansimcodev10.zip", "w").close()
-    (tmp_path / "bjdmaster.csv").write_bytes(b"x")
-    assert check(collect([tmp_path]))[1] == []
-    for bad in ("data-ansim.csv", "bjd_master.csv", "법정동마스터.csv", "my file.csv"):
-        (tmp_path / bad).write_bytes(b"x")
-    problems = check(collect([tmp_path]))[1]
-    assert sum("파일명 규칙 위반" in x for x in problems) == 4
-
-
-def test_import_bundle_checks_names_inside_zip(tmp_path):
-    import zipfile
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-    from check_import_bundle import check, collect
-    good = tmp_path / "goodcode.zip"
-    with zipfile.ZipFile(good, "w") as z:
-        z.writestr("dataansim/kepcoloader.py", "x")
-    assert check(collect([good]))[1] == []
-    bad = tmp_path / "badcode.zip"
-    with zipfile.ZipFile(bad, "w") as z:
-        z.writestr("dataansim/kepco_loader.py", "x")
-    assert any("안의 파일명 규칙 위반" in p for p in check(collect([bad]))[1])
