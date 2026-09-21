@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>충전 부하 로드맵북 v11</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#F3F6F5; --sheet:#FFFFFF; --ink:#16232A; --ink-2:#44555D; --ink-3:#6E7F86;
+  --line:#D3DEDB; --line-2:#E4ECEA;
+  --volt:#0D6B70; --volt-soft:#DCEEEE; --amber:#B8700F; --amber-soft:#FBEFD9;
+  --red:#B0362C; --red-soft:#F8E1DE; --good:#2D7A4C; --good-soft:#DDF0E3;
+  --code-bg:#EAF0EE;
+  --serif:"Gowun Batang","Noto Serif KR","Nanum Myeongjo",serif;
+  --sans:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",Consolas,"D2Coding",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F171B; --sheet:#152127; --ink:#E5EEEC; --ink-2:#B3C2C1; --ink-3:#83959A;
+    --line:#2A3A40; --line-2:#1E2C32;
+    --volt:#5EC3C4; --volt-soft:#163539; --amber:#E7A94A; --amber-soft:#35291A;
+    --red:#EE8A7F; --red-soft:#3A2020; --good:#74C795; --good-soft:#18322A; --code-bg:#1B2A30;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F171B; --sheet:#152127; --ink:#E5EEEC; --ink-2:#B3C2C1; --ink-3:#83959A;
+  --line:#2A3A40; --line-2:#1E2C32;
+  --volt:#5EC3C4; --volt-soft:#163539; --amber:#E7A94A; --amber-soft:#35291A;
+  --red:#EE8A7F; --red-soft:#3A2020; --good:#74C795; --good-soft:#18322A; --code-bg:#1B2A30;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0;word-break:keep-all;overflow-wrap:break-word}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 80px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);gap:0}}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);align-self:start;font-size:14px;max-height:calc(100vh - 40px);overflow:auto}
+@media (max-width:900px){nav.toc{position:static;max-height:none;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:24px}}
+@media (max-width:900px){nav.toc ol{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+nav.toc p{font-size:12px;letter-spacing:.08em;color:var(--ink-3);margin:0 0 8px}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+nav.toc a{display:grid;grid-template-columns:2.2em 1fr;color:var(--ink-2);text-decoration:none;padding:4px 6px;border-radius:6px}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--volt-soft);color:var(--ink);outline:none}
+nav.toc a span{font-family:var(--mono);color:var(--volt);font-size:12px;padding-top:2px}
+main{min-width:0}
+header.cover{padding-block:8px 36px;border-bottom:2px solid var(--ink);margin-bottom:12px}
+.eyebrow{font-size:13px;letter-spacing:.1em;color:var(--volt);font-weight:600;margin:0 0 10px}
+h1{font-family:var(--serif);font-size:clamp(34px,5vw,50px);line-height:1.2;margin:0 0 14px;text-wrap:balance;font-weight:700}
+.lede{font-size:18px;color:var(--ink-2);max-width:40em;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:20px;font-size:13px;color:var(--ink-3)}
+section.ch{padding-block:44px 8px;border-bottom:1px solid var(--line)}
+section.ch:last-of-type{border-bottom:0}
+.chno{font-family:var(--mono);font-size:13px;color:var(--volt);letter-spacing:.06em;margin:0 0 6px}
+h2{font-family:var(--serif);font-size:clamp(26px,3.4vw,32px);line-height:1.3;margin:0 0 18px;text-wrap:balance}
+h3{font-size:18px;margin:32px 0 10px;line-height:1.4}
+p{margin:0 0 14px;max-width:42em}
+ul,ol{margin:0 0 14px;padding-left:1.3em;max-width:42em}
+li{margin:4px 0}
+strong{font-weight:600}
+code,kbd{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 6px;border-radius:4px}
+pre{font-family:var(--mono);font-size:13.5px;line-height:1.6;background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:auto;margin:0 0 16px;max-width:100%}
+pre code{background:none;padding:0}
+.env{display:inline-block;font-size:12px;font-weight:600;color:var(--volt);border:1px solid var(--volt);border-radius:999px;padding:0 10px;margin-bottom:6px}
+.easy{background:var(--volt-soft);border-radius:10px;padding:16px 18px;margin:0 0 18px;max-width:46em}
+.easy b.tag{display:block;font-size:12px;letter-spacing:.08em;color:var(--volt);margin-bottom:4px}
+.easy p:last-child,.easy ul:last-child{margin-bottom:0}
+.warn{background:var(--amber-soft);border-left:4px solid var(--amber);padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 18px;max-width:46em}
+.warn b.tag{display:block;font-size:12px;letter-spacing:.08em;color:var(--amber);margin-bottom:4px}
+.warn p:last-child,.warn ul:last-child{margin-bottom:0}
+.stop{background:var(--red-soft);border-left:4px solid var(--red);padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 18px;max-width:46em}
+.stop b.tag{display:block;font-size:12px;letter-spacing:.08em;color:var(--red);margin-bottom:4px}
+.stop p:last-child,.stop ul:last-child{margin-bottom:0}
+.tbl{overflow-x:auto;margin:0 0 20px;border:1px solid var(--line);border-radius:8px;background:var(--sheet)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.6}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line-2)}
+th{font-size:12.5px;letter-spacing:.04em;color:var(--ink-3);font-weight:600;background:var(--paper);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);color:var(--volt);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;white-space:nowrap}
+.p-must{background:var(--red-soft);color:var(--red)}
+.p-iso{background:var(--good-soft);color:var(--good)}
+.p-opt{background:var(--amber-soft);color:var(--amber)}
+.p-info{background:var(--volt-soft);color:var(--volt)}
+.p-off{background:var(--line-2);color:var(--ink-3)}
+.tree{font-family:var(--mono);font-size:13.5px;line-height:1.75;background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:14px 18px;overflow-x:auto;white-space:pre;margin:0 0 18px}
+.tree .c{color:var(--ink-3)}
+.tree .h{color:var(--volt);font-weight:500}
+.rail{list-style:none;padding:0;margin:0 0 20px;max-width:none;display:grid;gap:0}
+.rail li{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;margin:0;position:relative;padding-bottom:14px}
+.rail li::before{content:"";position:absolute;left:31px;top:30px;bottom:0;width:2px;background:var(--line)}
+.rail li:last-child::before{display:none}
+.rail .st{font-family:var(--mono);font-size:13px;font-weight:500;width:64px;height:30px;border-radius:6px;display:grid;place-items:center;background:var(--sheet);border:1.5px solid var(--ink-3);color:var(--ink);position:relative;z-index:1}
+.rail .st.must{border-color:var(--red);color:var(--red)}
+.rail .st.iso{border-color:var(--good);color:var(--good)}
+.rail .st.off{border-style:dashed;color:var(--ink-3)}
+.rail .bd{padding-top:2px}
+.rail .bd b{font-size:15.5px}
+.rail .bd p{margin:2px 0 0;font-size:14.5px;color:var(--ink-2)}
+.rail .group{font-size:12px;letter-spacing:.08em;color:var(--ink-3);margin:6px 0 10px 78px}
+.files{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin:0 0 20px}
+.file{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.file h4{margin:0;font-family:var(--mono);font-size:14.5px;font-weight:500;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}
+.file h4 small{font-family:var(--sans);font-size:12px;color:var(--ink-3);font-weight:400}
+.file .one{font-weight:600;margin:0;font-size:15px}
+.file .like{margin:0;font-size:14px;color:var(--ink-2)}
+.file dl{margin:4px 0 0;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13.5px}
+.file dt{color:var(--ink-3)}
+.file dd{margin:0;min-width:0}
+.file dd code{word-break:break-all}
+.file.new{border-color:var(--volt)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13.5px;color:var(--ink-2);margin:0 0 16px}
+.checklist{list-style:none;padding:0}
+.checklist li{padding-left:28px;position:relative}
+.checklist li::before{content:"";position:absolute;left:2px;top:.45em;width:14px;height:14px;border:1.5px solid var(--volt);border-radius:3px}
+.steps{counter-reset:s;list-style:none;padding:0;max-width:46em}
+.steps>li{counter-increment:s;padding-left:40px;position:relative;margin:0 0 16px}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:13px;display:grid;place-items:center}
+.day{font-family:var(--serif);font-size:20px;margin:28px 0 12px}
+dl.gloss{display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:0;margin:0 0 20px;border-top:1px solid var(--line)}
+dl.gloss dt,dl.gloss dd{padding:10px 0;border-bottom:1px solid var(--line-2);margin:0}
+dl.gloss dt{font-weight:600;padding-right:14px}
+@media (max-width:560px){dl.gloss{grid-template-columns:1fr}dl.gloss dt{border-bottom:0;padding-bottom:0}}
+a{color:var(--volt)}
+a:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
+footer{margin-top:40px;font-size:13px;color:var(--ink-3)}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth}
+section[id]{scroll-margin-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="차례">
+  <p>차례</p>
+  <ol>
+    <li><a href="#s00"><span>00</span>5분 요약</a></li>
+    <li><a href="#s01"><span>01</span>우리가 하려는 것</a></li>
+    <li><a href="#s02"><span>02</span>폴더 지도</a></li>
+    <li><a href="#s03"><span>03</span>데이터·반입</a></li>
+    <li><a href="#s04"><span>04</span>분석 순서 한눈에</a></li>
+    <li><a href="#s05"><span>05</span>코드 파일 사전</a></li>
+    <li><a href="#s06"><span>06</span>로컬에서 먼저 돌려 보기</a></li>
+    <li><a href="#s07"><span>07</span>첫날 점검 21항목</a></li>
+    <li><a href="#s08"><span>08</span>센터에서 할 일</a></li>
+    <li><a href="#s09"><span>09</span>설정값 바꾸는 법</a></li>
+    <li><a href="#s10"><span>10</span>결과물 읽는 법</a></li>
+    <li><a href="#s11"><span>11</span>아직 안 풀린 문제</a></li>
+    <li><a href="#s12"><span>12</span>심사 질문 대비</a></li>
+    <li><a href="#s13"><span>13</span>용어 사전</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="cover">
+  <p class="eyebrow">2026 데이터안심구역 경진대회 · 팀 공부용 · 센터 가기 전 필독</p>
+  <h1>충전 부하, 하루 먼저 본다<br>로드맵북 v11</h1>
+  <p class="lede">센터에 가기 전에 이것 하나만 읽으면 된다. 무엇을 하려는지, 어떤 데이터를 들고 가는지, 코드 파일 하나하나가 무슨 일을 하고 어떻게 돌리는지, 센터에서 첫날 무엇을 누르고 무엇을 확인하는지를 순서대로 적었다.</p>
+  <div class="meta"><span>v11 · 기준일 2026-09-21</span><span>기준 문서: 전체설계 V11.4(<code>docs/1_팀공유_전체설계_V11.4_20260921.html</code>)</span><span>코드: GitHub <code>upjun0220/data-ansim</code> · 테스트 113개 통과·3개 생략</span></div>
+</header>
+
+<!-- 00 -->
+<section class="ch" id="s00">
+  <p class="chno">00</p>
+  <h2>5분 요약</h2>
+  <div class="easy"><b class="tag">한 줄로</b>
+    <p>서울 법정동마다 <strong>내일 저녁 충전 부하를 AI로 확률 예측</strong>해 “평소 최대를 크게 넘어 급증할 동네”를 전날 찾고, 그중 <strong>공용 충전기가 부족한 동네</strong>부터 공공 충전 투자와 ESS(대형 배터리) 운전을 검토하게 하는 순위 지도를 만든다.</p></div>
+  <ul>
+    <li><strong>두 가지 점수</strong>: 급증 위험(안전, AI 예측) + 충전 접근성 부족(형평성). 각 1/2씩 더한다. v10의 경제성 점수는 안전과 같은 계산에서 나와 참고 표시로만 남겼다.</li>
+    <li><strong>지역</strong>: 서울 법정동만(법정동코드 앞 2자리 11). 형평성의 분모인 동 단위 전기차 등록이 서울 자료뿐이라서다.</li>
+    <li><strong>상권(카드 매출) 분석은 뺐다.</strong> 코드는 지우지 않고 꺼 두었다(<code>stages.commerce=false</code>). 그래서 신한카드 파일도 필요 없다.</li>
+    <li><strong>AI</strong>: 그래디언트 부스팅 분위수 회귀(P50·P90). 딥러닝이 아니다. lightgbm이 없으면 scikit-learn으로, 그것도 없으면 “4주 중앙값” 기준 모델로 자동 전환한다.</li>
+    <li><strong>코드는 다 짜 두었다.</strong> 가상 데이터로 전 과정이 돌고 테스트 113개가 통과한다. 센터에서는 경로와 날짜만 채워서 돌린다.</li>
+    <li><strong>반입은 10개</strong>: 코드 번들 <code>1.py</code> + 데이터 <code>2.csv</code>~<code>9.csv</code> + 폰트 <code>10.ttf</code>. 이름은 이전 반입과 겹치지 않게 숫자로 붙였다.</li>
+    <li><strong>첫날 가장 중요한 일</strong>: 킬 크라이테리아(첫날 점검)로 “이 데이터로 계획대로 갈 수 있는지”를 판정받는 것. 분석은 그다음이다.</li>
+  </ul>
+  <div class="warn"><b class="tag">솔직하게 알고 가야 할 것</b>
+    <ul>
+      <li>급증 위험은 <strong>변압기 과부하가 아니다</strong>. “그 동네가 최근 겪어 본 최대 부하 × 1.1~1.3배를 넘는 날”이다. 상한은 우리가 정한 정책 가정이다.</li>
+      <li>가상 데이터에서 AI가 기준 모델보다 나은 건 <strong>성능 근거가 아니다</strong>. 기온·요일·휴일 반응을 가상 데이터에 우리가 직접 심었기 때문이다. 오히려 가상 데이터에서 P90 적중률이 0.77로 기준(0.8)에 못 미쳐 “AI 개선 없음”이 떴고, 그대로 보고한다.</li>
+      <li>2030 지도는 <strong>예측이 아니라 시나리오</strong>다(충전기 추가 설치 없음 가정).</li>
+    </ul></div>
+  <h3>v10 → v11 바뀐 것</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>항목</th><th>v10</th><th>v11</th></tr></thead>
+    <tbody>
+      <tr><td>지역</td><td>수도권</td><td>서울 법정동</td></tr>
+      <tr><td>상권 분석</td><td>필수 단계</td><td>꺼 둠(코드 보존, <code>stages.commerce=false</code>)</td></tr>
+      <tr><td>다음날 예측</td><td>4주 중앙값</td><td>AI 분위수 예측(P50·P90), 4주 중앙값은 비교용</td></tr>
+      <tr><td>안전 점수</td><td>ESS 시뮬레이션 상한 초과 kWh(고집중 동네만)</td><td>증설 0대 급증위험(모든 동네) + 경보 정밀도·재현율</td></tr>
+      <tr><td>결합 점수</td><td>세 축(안전·형평성·경제성) 1/3씩</td><td>두 축(급증위험·형평성) 1/2씩</td></tr>
+      <tr><td>순위 대상</td><td>절반이 “부하 미평가”</td><td>가상 데이터에서 30/30곳</td></tr>
+      <tr><td>새 입력</td><td>—</td><td>기온(실측·예보), 공휴일 달력, 전기차 등록 월별 이력, 행정동→법정동 대응표</td></tr>
+      <tr><td>확장안</td><td>없음</td><td>2028·2030 충전 부하 시나리오(8-F)</td></tr>
+      <tr><td>첫날 점검</td><td>16항목</td><td>21항목(17~21 신규, “해당 없음” 판정 추가)</td></tr>
+      <tr><td>반입</td><td><code>dataansimbundle.py</code> 외 영문 이름 8개</td><td><code>1.py</code>~<code>10.ttf</code> 숫자 이름 10개</td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- 01 -->
+<section class="ch" id="s01">
+  <p class="chno">01</p>
+  <h2>우리가 하려는 것</h2>
+  <div class="easy"><b class="tag">비유로 먼저</b>
+    <p>일기예보가 “내일 비 올 확률 90%”라고 하듯, 우리는 동네마다 “내일 저녁 충전 부하가 평소 최대를 넘을 확률”을 전날 낸다. 넘칠 것 같은 날에는 낮에 채워 둔 대형 배터리(ESS)가 저녁에 대신 전기를 내준다. 그리고 애초에 충전기가 부족한 동네가 어디인지 재서, 두 가지를 합친 “어디부터 살펴볼지” 순위를 만든다.</p></div>
+  <h3>두 가지 점수</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>축</th><th>쉽게 말하면</th><th>실제로 계산하는 것</th><th>단계</th></tr></thead>
+    <tbody>
+      <tr><td><strong>급증 위험</strong>(안전)</td><td>내일 충전이 평소 최대를 크게 넘을 것 같은 날이 잦은 동네</td><td>평가일 중 “AI P90 예측의 하루 최대 &gt; 교정기간 최대 × 1.2”인 날의 비율(증설 0대). 대부분 동네가 0이면 “P90 피크 ÷ 평소 최대”(피크비율)로 대체</td><td>8-A</td></tr>
+      <tr><td><strong>형평성</strong></td><td>근처 공용 충전기가 부족한 동네</td><td>2SFCA 접근성 점수(반경 500m 안 충전기를 나눠 쓰는 전기차 수). 낮을수록 점수가 높다</td><td>8-C</td></tr>
+      <tr><td>경제성(참고)</td><td>배터리를 두면 전기 도매가 기준으로 얼마나 아끼나</td><td>SMP 기준 비용 차이. 점수에는 넣지 않고 표시만</td><td>8-B</td></tr>
+    </tbody></table></div>
+  <h3>AI가 쓸모 있는지 두 가지로 확인한다</h3>
+  <ol>
+    <li><strong>경보가 맞았나</strong>: 전날 AI 경보가 실제 급증을 얼마나 맞혔는지(정밀도·재현율)를 기준 모델 경보와 나란히 낸다. 가정이 들어가지 않은 실측 검증이라 발표에서 먼저 쓴다.</li>
+    <li><strong>배터리 운전이 나아졌나(AI 효과)</strong>: 같은 크기의 배터리를 기준 모델 예측으로 한 번, AI P90 예측으로 한 번 운전해서 실제 상한 초과 kWh가 얼마나 줄었는지 본다. <code>AI 효과 = 1 − 초과(P90) ÷ 초과(기준 모델)</code>. 음수여도 그대로 낸다.</li>
+  </ol>
+  <h3>우리가 주장하지 않는 것</h3>
+  <p>심사 때 가장 많이 찔리는 부분이라 외워 두자.</p>
+  <ul>
+    <li>“정전을 막았다”, “변압기 교체비를 아꼈다” — 아니다. 한전 변압기 자료가 없어 상한은 정책 가정이다.</li>
+    <li>“ESS 최적 용량을 구했다” — 아니다. 후보 7개 중 조건을 만족하는 가장 작은 것을 고른다.</li>
+    <li>“충전 취약계층 몇 명” — 아니다. 소득 자료가 없어 사람 수는 못 센다. 물리적 거리·대수만 잰다.</li>
+    <li>“2030년에 N곳이 넘친다” — 예측이 아니다. 보급 증가율 가정(저·중·고)에 따른 시나리오다.</li>
+    <li>“딥러닝 AI” — 아니다. 그래디언트 부스팅 분위수 회귀다.</li>
+  </ul>
+</section>
+
+<!-- 02 -->
+<section class="ch" id="s02">
+  <p class="chno">02</p>
+  <h2>폴더 지도</h2>
+  <p>코드 파일은 서로를 불러 쓰기 때문에 폴더 맨 위에 그대로 둬야 한다. 파일명에 밑줄이 없는 것은 반입 포털이 영문·숫자 이름만 받기 때문이다.</p>
+<div class="tree">data-ansim/                        <span class="c">← GitHub upjun0220/data-ansim (main·v11.3 브랜치)</span>
+├── <span class="h">0_로드맵북_센터가기전_필독_v11.html</span>   <span class="c">← 지금 이 책</span>
+├── docs/
+│   ├── <span class="h">1_팀공유_전체설계_V11.4_20260921.html</span>  <span class="c">← 설계 원본(수식·근거·Q&amp;A)</span>
+│   └── claude-code-프롬프트-V11.3-구현-20260921.md  <span class="c">← 이번 구현 작업 명세</span>
+├── 연구계획서_충전리플맵_20260921.docx / .pdf     <span class="c">← 센터 이용신청 참고자료(분석 지역 수정 필요)</span>
+├── 현장준비_효과크기_문의문안_20260919.md       <span class="c">← 사무국 문의 질문</span>
+├── pipeline.py 외 분석 모듈 20개                <span class="c">← 05장</span>
+├── config/
+│   ├── fieldtemplate.json      <span class="c">← 센터용 설정 원본(복사해서 field.json으로)</span>
+│   ├── mock.json               <span class="c">← 가상 데이터 연습용</span>
+│   ├── holidays.yaml           <span class="c">← 공휴일 달력(지금은 빈 자리표시자)</span>
+│   └── industrycodestemplate.json · industry_codes_mock.json  <span class="c">← 상권 단계 전용(v11에서 안 씀)</span>
+├── tests/                      <span class="c">← 자동 검사 113개</span>
+├── tools/
+│   ├── fetch_holidays.py       <span class="c">← 공휴일 달력 받기(인터넷 되는 곳)</span>
+│   ├── make_import_bundle.py   <span class="c">← 반입 번들 1.py 만들기</span>
+│   ├── check_import_bundle.py  <span class="c">← 반입 형식·개수·이름 중복 점검</span>
+│   └── build_reference_files.py <span class="c">← 법정동 참고자료 3종 만들기</span>
+├── dist/import/1.py            <span class="c">← 만들어진 반입 번들(저장소에는 안 올라감)</span>
+├── dist/READMEimportlist.md    <span class="c">← 반입 요청 목록·해시</span>
+├── data/mock/  out/            <span class="c">← 가상 데이터 / 실행 결과(자동 생성, 저장소에 안 올라감)</span>
+├── README.md                   <span class="c">← 개발자용 설명서(설정 키 전체 표)</span>
+└── requirements.txt</div>
+  <div class="easy"><b class="tag">어떤 문서를 누구에게</b>
+    <p>팀원 공부용 → 이 로드맵북 · 설계를 깊게 볼 때 → 전체설계 V11.4 · 센터에 낼 때 → 연구계획서 · 문의 담당 → 문의문안 · 코드 고칠 때 → README</p></div>
+</section>
+
+<!-- 03 -->
+<section class="ch" id="s03">
+  <p class="chno">03</p>
+  <h2>데이터·반입</h2>
+  <div class="easy"><b class="tag">핵심 규칙</b>
+    <p>센터 데이터는 센터 안에서만 본다. 밖에서 가져가는 것(반입)은 신청한 파일만, 결과를 가져오는 것(반출)은 동네 단위 이상으로 묶은 표·그림만 심사를 받고 나온다.</p></div>
+  <h3>센터에서 받는 데이터 (신청 4개)</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>이름</th><th>내용</th><th>쓰는 곳</th></tr></thead>
+    <tbody>
+      <tr><td><strong>KEPCO_001</strong><br>한전 전기차 충전량</td><td>동네별·날짜별·시간별 충전 전력량, 고객호수</td><td>AI 예측 학습·검증(8-A), 부하 집중도(8), ESS(8-B), 시나리오 대표 곡선(8-F)</td></tr>
+      <tr><td><strong>KEPCO_002</strong><br>충전사업자용</td><td>001과 같은 형식, 사업자 채널</td><td>001과의 비율 비교(1-C). 절대 001과 더하지 않는다. 역할이 약하면 신청에서 빼는 것도 검토</td></tr>
+      <tr><td><strong>티벨 CAN</strong>(M-Type)</td><td>차량 위치·배터리 잔량 기록</td><td>충전이 하루 중 언제 몰리는지 모양 u(t)(3). 없으면 설정값 모양을 쓴다</td></tr>
+      <tr><td><strong>LX DEM5M</strong></td><td>표고</td><td>지도 배경·경사 보정(후속, 지금 코드는 안 씀)</td></tr>
+    </tbody></table></div>
+  <p>신한카드 SHC001·SHC002는 v10.1부터 신청 목록에서 뺐다.</p>
+  <h3>우리가 들고 가는 것 (반입 10개)</h3>
+  <p>반입 포털은 <strong>.py·.csv·.txt·폰트만</strong> 받고(zip·json·md 불가) 파일명은 영문·숫자만 된다. 최대 10개·총 50MB. 이름은 이전 반입(<code>dataansimbundle.py</code>·<code>bjdmaster.csv</code> 등)과 겹치지 않게 숫자로 붙였다.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>파일</th><th>내용</th><th>형식(열)</th><th>없으면</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1.py</td><td>코드 번들(모듈 20개·설정 템플릿·공휴일 달력·README)</td><td><code>%run 1.py</code>로 풀기</td><td>아무것도 못 함</td></tr>
+      <tr><td class="num">2.csv</td><td>법정동코드 마스터</td><td>법정동코드·법정동명·폐지여부</td><td>0단계 중단</td></tr>
+      <tr><td class="num">3.csv</td><td>법정동 코드대응(개편 전후 코드 → 기준코드)</td><td>코드·기준코드</td><td>개편 동네가 둘로 쪼개짐</td></tr>
+      <tr><td class="num">4.csv</td><td>법정동 중심점</td><td>법정동코드·위도·경도</td><td>CAN·8-C 생략</td></tr>
+      <tr><td class="num">5.csv</td><td>SMP(전력 도매가격)</td><td><code>timestamp,smp</code>(KST, 원/kWh)</td><td>비용 차이 결측, 피크 최소화로 계산</td></tr>
+      <tr><td class="num">6.csv</td><td>공용 충전소 위치</td><td>위도·경도·충전기수</td><td>8-C·8-E 생략</td></tr>
+      <tr><td class="num">7.csv</td><td>행정동별 연료별 자동차 등록 월별 이력(OA-21236, 서울)</td><td>기준년월·행정동코드·연료·대수</td><td>8-F 생략, 8-C 분모 없음</td></tr>
+      <tr><td class="num">8.csv</td><td>행정동→법정동 대응표</td><td>행정동코드·법정동코드·가중치</td><td>8-F·8-C 생략</td></tr>
+      <tr><td class="num">9.csv</td><td>기온 실측·과거 예보(서울)</td><td><code>timestamp,station_or_grid,temp_obs_c,temp_fcst_c,fcst_issued_at</code></td><td>기온 없는 모델로 진행</td></tr>
+      <tr><td class="num">10.ttf</td><td>한글 폰트(서버에 없을 때만)</td><td>—</td><td>영문 라벨로 그림 생성</td></tr>
+    </tbody></table></div>
+  <div class="warn"><b class="tag">아직 준비 안 된 것</b>
+    <ul>
+      <li><strong>9.csv 과거 기온 예보</strong>: 기상자료개방포털 동네예보 과거자료. 발표 시각(<code>fcst_issued_at</code>)을 꼭 같이 저장해야 한다. 코드가 전날 18시 이전 발표분만 쓰기 때문이다.</li>
+      <li><strong>8.csv 대응표</strong>: 가중치는 “그 행정동 전기차 중 이 법정동 몫”. 모르면 가중치 열을 비워 두면 같은 몫으로 나누고 경고한다.</li>
+      <li><strong>공휴일 달력</strong>: <code>tools/fetch_holidays.py</code>로 받은 뒤 번들을 다시 만들어야 1.py에 들어간다(08장).</li>
+    </ul></div>
+  <p>8-C의 법정동별 전기차 대수는 7.csv·8.csv의 기준월(2026-06) 값으로 계산하므로 v10의 <code>evregistration.csv</code>는 따로 가져가지 않는다. 경계 도형이나 공동주택 자료를 더 가져가려면 10개 한도 때문에 무엇을 뺄지 정해야 한다.</p>
+</section>
+
+<!-- 04 -->
+<section class="ch" id="s04">
+  <p class="chno">04</p>
+  <h2>분석 순서 한눈에</h2>
+  <p><code>pipeline.py</code>를 한 번 실행하면 아래 단계가 위에서부터 차례로 돈다.</p>
+  <div class="legend"><span><span class="pill p-must">필수</span> 실패하면 전체가 멈춤</span><span><span class="pill p-iso">격리</span> 실패해도 건너뛰고 계속</span><span><span class="pill p-off">꺼짐</span> v11 기본 비활성</span></div>
+  <ol class="rail">
+    <li><span class="st must">0·1</span><div class="bd"><b>동네 이름 맞추기 + 충전량 집계</b><p>한전은 “서울 종로구 ○○동” 같은 글자다. 법정동 10자리 코드로 맞추고 동네×월×시간으로 묶는다. 서울(코드 11)만 남긴다.</p></div></li>
+    <li><span class="st iso">1-C</span><div class="bd"><b>KEPCO_002 채널 비교</b><p>002÷001 비율이 시간대별로 어떻게 분포하는지. 더하지 않는다. 002가 없으면 건너뛴다.</p></div></li>
+    <li><span class="st iso">3</span><div class="bd"><b>CAN 충전 모양</b><p>차량 기록으로 충전 세션을 만들고 하루 중 언제 몰리는지 모양(u(t))과 반복 충전 위치 비율을 낸다.</p></div></li>
+    <li><span class="st off">2·4~7</span><div class="bd"><b>상권 단계(꺼 둠)</b><p>충전 활성화 시점·카드 매출 전후 비교·위약·CATE. 실행 요약에 “상권 단계 비활성(v11)” 한 줄만 남는다.</p></div></li>
+    <li><span class="st iso">8</span><div class="bd"><b>부하 집중도</b><p>하루 중 가장 붐비는 한 시간이 전체의 몇 %인지 재서 고·저 집중으로 나눈다. 고집중 동네가 ESS 시뮬레이션 대상이다.</p></div></li>
+    <li><span class="st iso">8-C</span><div class="bd"><b>충전기 접근성(형평성)</b><p>2SFCA 점수, 충전기 1기당 전기차 수(지표 1), 가장 가까운 충전기 거리(지표 2). 동네 중심점 근사.</p></div></li>
+    <li><span class="st iso">0-E</span><div class="bd"><b>외부 입력 점검</b><p>공휴일 달력을 읽어 휴일유형을 붙이고, 기온 파일에서 마감(전날 18시) 전에 발표된 예보만 남긴다.</p></div></li>
+    <li><span class="st iso">8-A</span><div class="bd"><b>다음날 부하 예측 + 급증 위험</b><p>기준 모델(4주 중앙값)을 검증하고, AI가 서울 모든 동네를 한 모델로 학습해 P50·P90을 낸다. 평가 28일 동안 급증 경보·정밀도·재현율을 계산한다.</p></div></li>
+    <li><span class="st iso">8-B</span><div class="bd"><b>배터리(ESS) 시뮬레이션 + AI 효과</b><p>고집중 동네에 증설 0/2/3/5대 × 상한 1.1/1.2/1.3배로 하루씩 배터리를 운전한다. 증설 3대에서는 같은 배터리를 기준 모델·P50·P90·완전정보로 네 번 돌려 AI 효과를 잰다.</p></div></li>
+    <li><span class="st iso">8-E</span><div class="bd"><b>결합 점수(최종 순위)</b><p>급증위험·형평성을 1/2씩 더하고, 가중치를 0.35~0.65로 흔들어도 상위 20%에 남는 “강건 상위군”을 표시한다.</p></div></li>
+    <li><span class="st iso">8-F</span><div class="bd"><b>2028·2030 시나리오</b><p>전기차 등록 추세로 미래 대수를 만들고 탄력성 β로 부하를 늘려, 지금 상한을 넘는 동네 수를 센다. 충전기 추가 설치 없음 가정.</p></div></li>
+    <li><span class="st iso">9-H</span><div class="bd"><b>발표 숫자 표</b><p>숫자 1·2·3을 가정(증설 대수·상한 배율·이용률·기온 모드·사용 모델)과 함께 한 표로.</p></div></li>
+    <li><span class="st iso">9</span><div class="bd"><b>반출용 표·그림</b><p>모든 표를 CSV(센터 안 작업용)와 PNG(반출용)로 저장하고 실행 요약·파일 목록을 남긴다. 실패해도 반드시 남긴다.</p></div></li>
+  </ol>
+  <div class="easy"><b class="tag">실패하면 어떻게 되나</b>
+    <p>0·1단계만 필수다. 나머지는 실패해도 이유를 실행 요약 “비고”에 남기고 다음으로 간다. 예: AI 라이브러리가 없으면 8-A는 기준 모델로, scipy가 없으면 ESS는 그리디로, SMP가 없으면 비용 차이는 빈칸으로. 8-C가 실패하면 8-A는 동네 특성 없이 학습한다.</p></div>
+</section>
+
+<!-- 05 -->
+<section class="ch" id="s05">
+  <p class="chno">05</p>
+  <h2>코드 파일 사전</h2>
+  <p>파일마다 “한 줄 역할 · 비유 · 넣는 것 · 나오는 것 · 주요 함수”. 직접 실행하는 파일은 <code>pipeline.py</code>·<code>killcriteria.py</code>·<code>mock_data.py</code>와 <code>tools/</code> 스크립트뿐이고 나머지는 부품이다. <span class="pill p-info">v11 신규</span> 표시는 이번에 새로 만든 파일이다.</p>
+
+  <h3>직접 실행하는 파일</h3>
+  <div class="files">
+    <div class="file"><h4>pipeline.py <small>951줄 · 총감독</small></h4>
+      <p class="one">0~9단계를 순서대로 부르고, 단계마다 실패를 격리하고, 실행 요약을 남긴다.</p>
+      <p class="like">비유: 요리 레시피 순서표. 한 재료가 없으면 그 요리만 빼고 나머지는 계속 만든다.</p>
+      <dl><dt>실행</dt><dd><code>python pipeline.py --config config/field.json</code> 또는 <code>from pipeline import run; run("config/field.json")</code></dd>
+      <dt>넣는 것</dt><dd><code>config/field.json</code></dd>
+      <dt>나오는 것</dt><dd><code>out/…/csv</code>, <code>out/…/png</code>, <code>pipeline.log</code>, <code>s0_run_summary</code></dd>
+      <dt>v11</dt><dd>상권 단계 끄기, 서울 필터, 1-C·0-E·8-F 연결, AI 단계를 별도 격리</dd></dl></div>
+    <div class="file"><h4>killcriteria.py <small>532줄 · 첫날 점검</small></h4>
+      <p class="one">데이터가 계획대로 쓸 수 있는 상태인지 21개 항목을 판정한다(07장).</p>
+      <p class="like">비유: 수술 전 건강검진. 여기서 걸리면 계획을 줄인다.</p>
+      <dl><dt>실행</dt><dd><code>python killcriteria.py --config config/field.json</code> 또는 <code>from killcriteria import run_checks</code></dd>
+      <dt>넣는 것</dt><dd>설정 파일(원자료는 일부만 읽음)</dd>
+      <dt>나오는 것</dt><dd><code>out/…/kill_criteria/k_kill_criteria</code> 표(통과·경고·실패·오류·해당 없음)</dd></dl></div>
+    <div class="file"><h4>mock_data.py <small>403줄 · 연습용</small></h4>
+      <p class="one">진짜와 같은 모양의 가짜 데이터를 만든다.</p>
+      <p class="like">비유: 모의고사 문제지. 정답을 미리 심어 두고 코드가 맞히는지 본다. 결론에는 절대 쓰지 않는다.</p>
+      <dl><dt>실행</dt><dd><code>python mock_data.py --out data/mock --energy</code> (상권 회귀는 <code>--with-shc</code>)</dd>
+      <dt>나오는 것</dt><dd>서울 3개 자치구 30개 법정동의 KEPCO·CAN·충전소·기온·공휴일·전기차 이력·대응표</dd></dl></div>
+  </div>
+
+  <h3>재료 읽기·정리</h3>
+  <div class="files">
+    <div class="file"><h4>config.py <small>296줄 · 설정 창고</small></h4>
+      <p class="one">경로·열 이름·숫자 기준의 기본값. JSON에 적은 값이 이걸 덮어쓴다.</p>
+      <p class="like">비유: 게임 옵션 메뉴.</p>
+      <dl><dt>주요</dt><dd><code>DEFAULT_PARAMS</code>, <code>load_config()</code>, <code>resolve_region()</code>(region이 kepco.sido보다 우선)</dd></dl></div>
+    <div class="file"><h4>common.py <small>339줄 · 공구함</small></h4>
+      <p class="one">CSV 읽기(인코딩·구분자 자동), 코드 정리, 거리 계산, 서울 필터(<code>keep_region</code>), p값.</p>
+      <p class="like">비유: 모든 파일이 빌려 쓰는 드라이버·망치.</p></div>
+    <div class="file"><h4>bjdmapping.py <small>273줄 · 0단계</small></h4>
+      <p class="one">한전 동네 이름 ↔ 법정동 10자리 코드 맞추기. 개편 전후 코드를 기준코드 하나로 묶는다.</p>
+      <p class="like">비유: 주소와 우편번호를 짝짓는 우체국 직원. “가람제1동”처럼 표기가 달라도 다듬어서 맞춘다.</p>
+      <dl><dt>나오는 것</dt><dd><code>s0_bjd_match_rate</code>, <code>s0_bjd_unmatched</code></dd></dl></div>
+    <div class="file"><h4>kepcoloader.py <small>441줄 · 1단계</small></h4>
+      <p class="one">한전 충전 파일을 청크로 읽어 동네×월×시간으로 묶는다. 8-A용 날짜 보존 시간별 자료도 여기서 읽는다.</p>
+      <p class="like">비유: 동네별 충전 가계부 정리.</p>
+      <dl><dt>나오는 것</dt><dd><code>s1_kepco_monthly</code>, 시간별 부하(8-A 입력)</dd></dl></div>
+    <div class="file new"><h4>weatherloader.py <small>154줄 · 0-E</small> <span class="pill p-info">v11 신규</span></h4>
+      <p class="one">기온 CSV를 읽어 예보는 전날 18시 이전 발표분 중 최신만 남기고, 공휴일 달력을 읽어 휴일유형을 붙인다.</p>
+      <p class="like">비유: 어제 저녁 뉴스의 일기예보만 볼 수 있는 규칙. 오늘 아침 예보를 보면 반칙이다.</p>
+      <dl><dt>주요</dt><dd><code>forecast_temps()</code>, <code>assert_forecast_before_cutoff()</code>, <code>load_holidays()</code>, <code>classify_holidays()</code></dd>
+      <dt>원칙</dt><dd>휴일을 규칙으로 만들지 않는다. 날짜는 파일에서만 온다</dd></dl></div>
+    <div class="file"><h4>canloader.py <small>283줄 · 3단계</small></h4>
+      <p class="one">CAN 기록으로 충전 세션을 만들고 하루 중 충전 모양 u(t)와 반복 충전 위치 비율을 낸다.</p>
+      <p class="like">비유: 블랙박스로 “이 차는 매일 저녁 7시에 충전하네”를 알아내는 것.</p>
+      <dl><dt>v11</dt><dd>상권 단계를 끄면 처치 정제(거점성 판별)는 하지 않는다</dd></dl></div>
+  </div>
+
+  <h3>주 분석 — 예측·배터리·형평성·순위</h3>
+  <div class="files">
+    <div class="file"><h4>loadaxis.py <small>115줄 · 8단계</small></h4>
+      <p class="one">부하 집중도(가장 붐비는 한 시간의 비중) 계산과 고·저 구분.</p>
+      <p class="like">비유: 급식실이 12시 10분에만 미어터지는지, 하루 종일 고른지.</p>
+      <dl><dt>나오는 것</dt><dd><code>s8_load_concentration</code>, <code>s8_load_type</code>(4사분면은 상권 단계에서만)</dd></dl></div>
+    <div class="file"><h4>loadforecast.py <small>414줄 · 8-A</small> <span class="pill p-info">v11 확장</span></h4>
+      <p class="one">기준 모델(4주 중앙값)과 AI 분위수 예측, 검증 지표, 급증 위험을 계산한다.</p>
+      <p class="like">비유: “이 동네는 내일 저녁 90% 확률로 이 정도 안쪽”이라고 말하는 일기예보관. 틀린 날도 성적표에 그대로 적는다.</p>
+      <dl><dt>주요</dt><dd><code>forecast_baseline()</code>, <code>build_features()</code>, <code>assert_no_leakage()</code>, <code>select_model()</code>, <code>run_ai_forecast()</code>, <code>surge_risk()</code>, <code>ai_improvement()</code></dd>
+      <dt>나오는 것</dt><dd><code>s8a_validation</code>, <code>s8a_forecast_metrics</code>, <code>s8a_risk</code>, <code>s8a_risk_summary</code></dd></dl></div>
+    <div class="file"><h4>essoptimizer.py <small>419줄 · 8-B</small> <span class="pill p-info">v11 확장</span></h4>
+      <p class="one">배터리를 언제 채우고 언제 내보낼지 하루 단위로 계산(선형계획, 없으면 그리디). 같은 배터리를 예측 입력만 바꿔 돌려 AI 효과를 잰다.</p>
+      <p class="like">비유: 물탱크. 새벽에 채워 두고 저녁에 보탠다. 예보가 좋으면 적게 채우고도 넘치지 않는다.</p>
+      <dl><dt>주요</dt><dd><code>run_scenarios()</code>, <code>ai_effect()</code>, <code>policy_target()</code>·<code>utilization_profile()</code>(8-A·8-F와 공용)</dd>
+      <dt>나오는 것</dt><dd><code>s8b_scenarios</code>, <code>s8b_ai_effect</code>, <code>s8b_ai_effect_summary</code>, <code>s9_public_review</code></dd></dl></div>
+    <div class="file"><h4>equityaccess.py <small>106줄 · 8-C</small></h4>
+      <p class="one">2SFCA 접근성 점수와 지표 1·2(충전기당 전기차·최근접 거리).</p>
+      <p class="like">비유: 반경 500m 안 충전기 한 대를 몇 대의 전기차가 나눠 쓰는지. 옆 동네 충전기도 가까우면 센다.</p>
+      <dl><dt>나오는 것</dt><dd><code>s8c_accessibility</code></dd></dl></div>
+    <div class="file"><h4>priorityscore.py <small>314줄 · 8-E</small> <span class="pill p-info">v11 확장</span></h4>
+      <p class="one">급증위험·형평성을 0~1로 맞춰 1/2씩 더하고, 가중치를 흔들어 순위가 버티는지 본다.</p>
+      <p class="like">비유: 두 과목 점수로 석차를 내되, 과목 비중을 바꿔도 상위권인 학생을 따로 표시.</p>
+      <dl><dt>주요</dt><dd><code>build_priority_v11()</code>, <code>choose_risk_metric()</code>(피크비율 자동 대체), <code>run_sensitivity_v11()</code></dd>
+      <dt>나오는 것</dt><dd><code>s8e_priority</code>, <code>s8e_not_ranked</code>, <code>s8e_rank_risk</code>, <code>s8e_rank_equity</code>, <code>s8e_priority_summary</code></dd></dl></div>
+    <div class="file new"><h4>loadscenario.py <small>249줄 · 8-F</small> <span class="pill p-info">v11 신규</span></h4>
+      <p class="one">전기차 등록 추세로 2028·2030 대수를 만들고 부하를 키워 지금 상한을 넘는 동네를 센다.</p>
+      <p class="like">비유: “아무 투자도 안 하면 몇 년 뒤 어디가 먼저 넘치나”를 그려 보는 모의 지도.</p>
+      <dl><dt>주요</dt><dd><code>load_ev_history()</code>, <code>map_to_bjd()</code>, <code>solve_k_goal()</code>, <code>estimate_beta()</code>, <code>run_scenarios_8f()</code></dd>
+      <dt>나오는 것</dt><dd><code>s8f_scenario</code>, <code>s8f_scenario_region</code>, <code>s8f_beta</code>, 그림 <code>s8f_scenario_2030_mid</code></dd></dl></div>
+    <div class="file"><h4>headline.py <small>139줄 · 9-H</small></h4>
+      <p class="one">발표 숫자 3개를 가정과 함께 한 표로.</p>
+      <p class="like">비유: 발표 맨 앞장 요약 카드. 숫자 옆에 조건을 꼭 적는다.</p>
+      <dl><dt>나오는 것</dt><dd><code>s9_headline</code></dd></dl></div>
+    <div class="file"><h4>outputs.py <small>279줄 · 9단계 · 반출 문지기</small></h4>
+      <p class="one">표를 CSV와 PNG로 저장. 좌표 열이 있으면 저장 거부, 작은 칸은 PNG에서 가림, 한글 폰트가 없으면 영문 라벨.</p>
+      <p class="like">비유: 공항 보안검색대.</p></div>
+  </div>
+
+  <h3>꺼 둔 상권 단계 (지우지 않고 보존)</h3>
+  <div class="files">
+    <div class="file"><h4>identification.py <small>640줄 · 4~6단계</small></h4><p class="one">카드 매출 축약·전후 비교·위약·MDE.</p><p class="like"><code>stages.commerce=true</code>일 때만 돈다.</p></div>
+    <div class="file"><h4>diagnostics.py <small>108줄 · 6.5단계</small></h4><p class="one">가게가 한꺼번에 생긴 동네를 “유보” 표시.</p></div>
+    <div class="file"><h4>heterogeneity.py <small>326줄 · 7단계</small></h4><p class="one">CATE(동네 특성별 효과). EconML 없으면 2×2 표.</p></div>
+    <div class="file"><h4>kep007loader.py <small>49줄</small></h4><p class="one">한전 충전소 설치현황(KEP_007). 신청에서 뺀 데이터라 현장 설정은 <code>null</code>.</p></div>
+  </div>
+
+  <h3>tools/ 와 tests/</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>파일</th><th>하는 일</th><th>실행</th></tr></thead>
+    <tbody>
+      <tr><td><code>tools/fetch_holidays.py</code> <span class="pill p-info">신규</span></td><td>특일 정보 API로 공휴일을 받아 유형까지 붙여 <code>config/holidays.yaml</code>에 저장. 서비스키는 환경변수로만</td><td><code>python tools/fetch_holidays.py 2024 2025</code></td></tr>
+      <tr><td><code>tools/make_import_bundle.py</code></td><td>코드 전체를 <code>dist/import/1.py</code> 한 파일로 담고, 새 폴더에 풀어 20개 모듈 import까지 확인</td><td><code>python tools/make_import_bundle.py</code></td></tr>
+      <tr><td><code>tools/check_import_bundle.py</code></td><td>반입 형식·개수(10)·용량(50MB)·파일명(영문·숫자)·이전 반입 이름 중복 점검</td><td><code>python tools/check_import_bundle.py dist/import</code></td></tr>
+      <tr><td><code>tools/build_reference_files.py</code></td><td>공개 법정동 원본으로 참고자료 3종 생성(반입 때 2·3·4.csv로 이름 변경)</td><td>README 참고</td></tr>
+      <tr><td><code>tests/</code></td><td>자동 검사 113개(선택 패키지 없는 3개 생략). 정보 누설·분위수 교차·폴백 순서·위험 축이 증설 가정에 안 흔들리는지 등</td><td><code>python -m pytest -q tests</code></td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- 06 -->
+<section class="ch" id="s06">
+  <p class="chno">06</p>
+  <h2>로컬에서 먼저 돌려 보기</h2>
+  <p>센터에 가기 전에 자기 PC에서 한 번 끝까지 돌려 보면 결과물이 어떻게 생겼는지 미리 안다. 가상 데이터라 숫자는 의미가 없다.</p>
+  <ol class="steps">
+    <li><strong>코드 받기</strong><span class="env">PowerShell</span>
+<pre><code>git clone https://github.com/upjun0220/data-ansim
+cd data-ansim</code></pre></li>
+    <li><strong>패키지 설치</strong> — 필수는 pandas·numpy·scikit-learn·matplotlib. lightgbm은 선택.
+<pre><code>py -3 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt</code></pre></li>
+    <li><strong>가상 데이터 만들기</strong> — <code>--energy</code>를 꼭 붙인다(시간별 부하·기온·공휴일·전기차 이력).
+<pre><code>.venv\Scripts\python.exe mock_data.py --out data/mock --energy</code></pre></li>
+    <li><strong>첫날 점검 연습</strong>
+<pre><code>.venv\Scripts\python.exe killcriteria.py --config config/mock.json</code></pre></li>
+    <li><strong>본 분석</strong> — 2분 안팎. 끝나면 “상태: 완료”가 나온다.
+<pre><code>.venv\Scripts\python.exe pipeline.py --config config/mock.json</code></pre></li>
+    <li><strong>점검 다시</strong> — 18번(AI 성능)·21번(급증위험 0 비율)은 분석 결과를 읽으므로 분석 뒤에 다시 돌려야 판정이 나온다.</li>
+    <li><strong>결과 보기</strong> — <code>out/mock/csv/s0_run_summary.csv</code>부터(10장).</li>
+    <li><strong>코드를 고쳤다면 검사</strong>
+<pre><code>.venv\Scripts\python.exe -m pytest -q tests</code></pre></li>
+  </ol>
+  <div class="warn"><b class="tag">윈도우 경로 길이</b><p>저장소가 아주 긴 폴더 경로 안에 있으면 이름이 긴 결과 파일 저장이 실패할 수 있다(260자 제한). <code>C:\dev\data-ansim</code>처럼 짧은 경로에서 돌린다.</p></div>
+</section>
+
+<!-- 07 -->
+<section class="ch" id="s07">
+  <p class="chno">07</p>
+  <h2>첫날 점검 21항목</h2>
+  <p>킬 크라이테리아가 한 번에 판정한다. 번호는 코드가 실제로 내는 번호다(설계 문서 번호와 대응은 설계 V11.4 4절). 판정은 <span class="pill p-iso">통과</span> <span class="pill p-opt">경고</span> <span class="pill p-must">실패</span> <span class="pill p-info">오류</span>(파일·열 문제) <span class="pill p-off">해당 없음</span>.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>무엇을 보나</th><th>기준</th><th>걸리면</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>필요한 파이썬 패키지</td><td>pandas·numpy·scikit-learn·matplotlib 필수</td><td>선택 패키지는 없어도 대체 경로로 진행</td></tr>
+      <tr><td class="num">2</td><td>충전 활성화 후보 지역 수(T_r)</td><td>—</td><td>상권 단계를 꺼 두면 <strong>해당 없음</strong></td></tr>
+      <tr><td class="num">3·4·6</td><td>카드 시간대·거주 거리·마스킹</td><td>—</td><td>상권 단계를 꺼 두면 <strong>해당 없음</strong>(SHC 미사용)</td></tr>
+      <tr><td class="num">5</td><td>한전 동네 이름 매칭 실패율</td><td>10% 이하 통과 · 30% 이상 실패</td><td>행정동 기준이면 <code>analysis_level="sigungu"</code>로 다시(서울 25개 자치구 단위)</td></tr>
+      <tr><td class="num">7</td><td>KEPCO_002가 001에 포함되나</td><td>정황 판정</td><td>둘을 절대 더하지 않는다</td></tr>
+      <tr><td class="num">8</td><td>CAN 식별번호가 개별 차량인가</td><td>순간이동·배터리 급변 비율</td><td>차종 코드면 동네 밀집도로 격하</td></tr>
+      <tr><td class="num">9</td><td>배터리 계산(선형계획) 환경</td><td>scipy 있음</td><td>없으면 그리디(최적해 아님)</td></tr>
+      <tr><td class="num">10</td><td>잡을 수 있는 최소 효과(MDE)</td><td>—</td><td>상권 단계를 꺼 두면 <strong>해당 없음</strong></td></tr>
+      <tr><td class="num">11</td><td>한글 폰트</td><td>있음</td><td>없으면 영문 라벨로 진행(경고). 한글 그림이 필요하면 <code>10.ttf</code></td></tr>
+      <tr><td class="num">12</td><td>전기차 등록자료 동네 매칭률</td><td>70% 이상</td><td>대응표 보완</td></tr>
+      <tr><td class="num">13</td><td>시간별 충전 기록이 사계절을 덮나</td><td>계절마다 28일 이상</td><td>“계절 미검증” 표시</td></tr>
+      <tr><td class="num">14</td><td>가중치가 유효한가</td><td>두 축 합 1·음수 없음</td><td>설정 수정</td></tr>
+      <tr><td class="num">15</td><td>가중치를 흔들어도 상위권인 동네 비율</td><td>5% 이상</td><td>한 줄 순위 발표 보류, 축별 순위표 2장(<code>s8e_rank_risk</code>·<code>s8e_rank_equity</code>) 병기</td></tr>
+      <tr><td class="num">16</td><td>002를 001과 대조할 수 있는 기간</td><td>두 원천의 날짜가 겹침</td><td>겹치지 않으면 002 유지 여부 팀 결정</td></tr>
+      <tr><td class="num">17</td><td>AI 예측 라이브러리</td><td>lightgbm 또는 scikit-learn(분위수 지원)</td><td>둘 다 없으면 “AI 예측 미실행”, 숫자 2 미실행</td></tr>
+      <tr><td class="num">18</td><td>AI 성능(분석 후 판정)</td><td>AI P50 MAE ≤ 기준 모델 MAE, P90 적중률 ≥ 80%</td><td><strong>실패</strong>: “AI 개선 없음”을 발표 숫자에 표시하고 그대로 보고</td></tr>
+      <tr><td class="num">19</td><td>기온 예보 확보·발표 시각</td><td>마감 전 발표분이 있음</td><td>예보 없음 = 경고(기온 없는 모델). 마감 뒤 발표가 대부분이면 실패</td></tr>
+      <tr><td class="num">20</td><td>시나리오: 매핑률·β·k_goal</td><td>매핑 실패 10% 이하</td><td>10% 초과 경고, 30% 초과 실패. β 불안정이면 β=1로 표시</td></tr>
+      <tr><td class="num">21</td><td>급증위험이 0인 동네 비율(분석 후 판정)</td><td>50% 미만</td><td>경고: 위험 축을 피크비율로 대체했음을 발표에 적는다</td></tr>
+    </tbody></table></div>
+  <p>9·17·18·19번은 에너지 분석을 켰을 때, 12~15·21번은 우선순위 분석을 켰을 때, 20번은 전기차 이력 경로가 있을 때 나온다. 가상 데이터에서는 18번 실패, 21번 경고가 정상이다(성능 근거 아님).</p>
+</section>
+
+<!-- 08 -->
+<section class="ch" id="s08">
+  <p class="chno">08</p>
+  <h2>센터에서 할 일</h2>
+  <h3>가기 전 체크리스트</h3>
+  <ul class="checklist">
+    <li>센터·사무국 답변 받기 — 메모리, 한글 폰트, 소수 셀 기준, 한전 읍면동이 법정동인지, 고객호수 정의, KEPCO_002 실제 기간, lightgbm·scikit-learn 설치 여부</li>
+    <li>연구계획서·DSZ 신청서의 분석 지역을 “수도권” → “서울”로, 반입 목록을 1~10번으로 맞추기</li>
+    <li>공휴일 달력 받기: <code>$env:DATAGOKR_SERVICE_KEY="…"</code> 후 <code>python tools/fetch_holidays.py 2024 2025</code>, 대체·임시공휴일·선거일이 빠졌는지 확인</li>
+    <li>반입 번들 다시 만들기: <code>python tools/make_import_bundle.py</code> → <code>dist/import/1.py</code>, 해시를 <code>dist/READMEimportlist.md</code>에 갱신</li>
+    <li>데이터 2~9.csv 준비(특히 9.csv 과거 기온 예보, 8.csv 대응표), 서울로 걸러 용량 줄이기</li>
+    <li><code>python tools/check_import_bundle.py &lt;반입 폴더&gt;</code>로 개수·용량·형식·이름 중복 점검</li>
+    <li>로컬에서 <code>pytest</code> 통과, 06장 연습 한 번</li>
+    <li>이 책 04·07·10장 읽고 오기</li>
+  </ul>
+
+  <p class="day">첫날 — 분석이 아니라 “판정”</p>
+  <ol class="steps">
+    <li><strong>번들 풀기.</strong> 반입 폴더에서
+      <span class="env">센터 JupyterLab</span>
+<pre><code>%run 1.py
+%cd dataansim11</code></pre>
+      <code>dataansim11/</code>에 모듈 20개·설정·README가 풀리고 SHA-256으로 검증한다. 예전 V10이 풀린 <code>dataansim/</code>과 섞이지 않는다.</li>
+    <li><strong>데이터 놓기.</strong> <code>dataansim11/data/field/</code>를 만들고 <code>2.csv</code>~<code>9.csv</code>를 넣는다. 센터가 주는 KEPCO·CAN 파일 경로도 확인한다.</li>
+    <li><strong>설정 파일 복사.</strong> <code>config/fieldtemplate.json</code> → <code>config/field.json</code>. 업종 코드 파일은 v11에서 필요 없다.</li>
+    <li><strong>경로 채우기.</strong> <code>field.json</code>의 <code>paths</code>에서 <code>kepco_001</code>·<code>kepco_002</code>·<code>kepco_hourly</code>·<code>can_m</code>을 센터 실제 경로로 바꾼다(2~9.csv는 이미 적혀 있다). 열 이름이 다르면 <code>columns</code>에 그 항목만 적는다.</li>
+    <li><strong>평가 시작일 정하기.</strong> <code>params.energy.evaluation_start</code>가 비어 있으면 8-A가 멈춘다. 이 날짜부터 28일을 평가하고, 그 앞 약 9개월(학습 182일 + 검증 8주 + 4주)의 시간별 기록이 있어야 AI가 제대로 학습한다. 연말(12/24~1/1)·설 연휴에 걸치면 경고가 뜬다.</li>
+    <li><strong>첫날 점검 실행.</strong>
+      <span class="env">센터 JupyterLab</span>
+<pre><code>from killcriteria import run_checks
+run_checks("config/field.json")</code></pre>
+      결과는 <code>out/field/kill_criteria/</code>에 저장된다.</li>
+    <li><strong>판정으로 계획 조정.</strong> 07장 표의 “걸리면” 칸대로. 특히 5번(행정동 의심), 17번(AI 라이브러리), 19번(기온 예보). 판정 표는 반출 신청용으로 남긴다.</li>
+  </ol>
+
+  <p class="day">둘째 날 이후 — 본 분석</p>
+  <span class="env">센터 JupyterLab</span>
+<pre><code>from pipeline import run
+summary = run("config/field.json")
+summary["stages"]</code></pre>
+  <ul>
+    <li><code>out/field/csv/s0_run_summary.csv</code>에서 단계별 완료·생략·실패와 비고(사용 모델·기온 모드·AI 판정)를 먼저 본다.</li>
+    <li>분석 뒤 <code>run_checks</code>를 한 번 더 돌려 18·21번 판정을 받는다.</li>
+    <li>반출 신청은 <code>out/field/png/</code>의 그림과 <code>s9_manifest</code>(파일 목록)로 한다.</li>
+    <li>지도가 필요하면 센터 안 태블로에서 CSV(<code>bjd_code</code> 키)를 경계와 결합한다. 반출 그림에도 소표본 억제·좌표 비반출 규칙을 똑같이 적용한다.</li>
+    <li>메모리가 부족하면 <code>params.kepco.chunksize</code>를 줄인다(시도 필터는 이미 서울로 걸려 있다).</li>
+  </ul>
+  <div class="easy"><b class="tag">방문 일수</b><p>기술평가에서 방문 1일 2점, 3일 6점, 5일 이상 10점. 최소 3일은 잡는다.</p></div>
+</section>
+
+<!-- 09 -->
+<section class="ch" id="s09">
+  <p class="chno">09</p>
+  <h2>설정값 바꾸는 법</h2>
+  <p>모든 설정은 <code>config/field.json</code> 한 파일에서 바꾼다. 코드는 건드리지 않는다. JSON에 적지 않은 값은 <code>config.py</code>의 기본값을 쓴다. 경로는 <code>field.json</code>이 있는 <code>config/</code> 폴더 기준 상대경로다. 전체 목록은 README “새 설정 키” 표.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>이럴 때</th><th>바꿀 곳</th><th>값</th></tr></thead>
+    <tbody>
+      <tr><td>평가 날짜</td><td><code>params.energy.evaluation_start</code></td><td><code>"2025-12-04"</code> 같은 날짜(필수). 기간은 <code>evaluation_days</code>(기본 28)</td></tr>
+      <tr><td>AI 모델을 고정하고 싶으면</td><td><code>params.forecast.model</code></td><td><code>"auto"</code>(기본) · <code>"lightgbm"</code> · <code>"sklearn"</code> · <code>"baseline"</code></td></tr>
+      <tr><td>AI 학습기간</td><td><code>params.forecast.train_days</code></td><td>182(기본). 이력이 짧으면 있는 만큼 쓴다(학습일 14일 미만이면 AI 단계 생략)</td></tr>
+      <tr><td>예보가 없거나 실측 참고를 보고 싶으면</td><td><code>params.weather.mode</code></td><td><code>"forecast"</code>(기본) · <code>"none"</code> · <code>"observed"</code>(참고용, 발표 숫자 금지)</td></tr>
+      <tr><td>예보 마감 시각</td><td><code>params.weather.fcst_cutoff</code></td><td><code>"18:00"</code>(전날)</td></tr>
+      <tr><td>가중치를 바꾸라고 하면</td><td><code>params.priority.weights</code></td><td><code>{"risk": 0.4, "equity": 0.6}</code> 식. 합 1(킬 14)</td></tr>
+      <tr><td>위험 축 지표 고정</td><td><code>params.priority.risk_metric</code></td><td><code>"auto"</code>(기본) · <code>"surge_risk"</code> · <code>"peak_ratio"</code></td></tr>
+      <tr><td>숫자 3(a) 기준</td><td><code>params.headline.risk_threshold</code></td><td>0.1(10일에 하루 이상 경보). 팀 확정 대상</td></tr>
+      <tr><td>배터리 운전 입력</td><td><code>params.ess.forecast_input</code></td><td><code>"p90"</code>(기본) · <code>"p50"</code> · <code>"baseline"</code></td></tr>
+      <tr><td>센터 소수 셀 기준이 5명이면</td><td><code>params.output.min_cell_count</code></td><td>5(기본 3)</td></tr>
+      <tr><td>“집계에 들어간 칸이 하나라도 기준 미만이면 안 된다”면</td><td><code>params.kepco.suppress_basis</code></td><td><code>"min"</code>(기본 <code>"max"</code>)</td></tr>
+      <tr><td>한전 읍면동이 행정동이면</td><td><code>params.analysis_level</code></td><td><code>"sigungu"</code>(서울 25개 자치구, 8-C·8-E 생략)</td></tr>
+      <tr><td>시나리오 기준월을 2026-08로 옮기면</td><td><code>params.scenario.base_month</code> · <code>national_base</code> · <code>seoul_base</code></td><td>세 값과 전기차 기준월을 함께 바꾼다</td></tr>
+      <tr><td>상권 단계를 다시 켜려면(비교용)</td><td><code>params.stages.commerce</code></td><td><code>true</code> + SHC 경로·업종코드 필요</td></tr>
+      <tr><td>폰트를 반입했으면</td><td><code>paths.font</code></td><td><code>"../data/field/10.ttf"</code></td></tr>
+    </tbody></table></div>
+  <span class="env">config/field.json 일부 — 예시</span>
+<pre><code>"paths":  { ..., "font": "../data/field/10.ttf" },
+"params": {
+  "energy":   { "enabled": true, "evaluation_start": "2025-12-04", "evaluation_days": 28 },
+  "priority": { "enabled": true, "weights": {"risk": 0.5, "equity": 0.5} },
+  "output":   { "min_cell_count": 5 }
+}</code></pre>
+</section>
+
+<!-- 10 -->
+<section class="ch" id="s10">
+  <p class="chno">10</p>
+  <h2>결과물 읽는 법</h2>
+  <h3>먼저 볼 것</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>파일</th><th>보는 법</th></tr></thead>
+    <tbody>
+      <tr><td><code>s0_run_summary</code></td><td>단계별 완료·생략·실패·비활성. 8-A(AI) 비고에 사용 모델·기온 모드·AI 개선 여부. <code>분석지역</code>·<code>지역단위수</code> 열</td></tr>
+      <tr><td><code>s0_external_inputs</code></td><td>공휴일 수·유형, 기온 지점·기간, 마감 이전 예보 시각 수, 실제로 쓴 기온 모드</td></tr>
+      <tr><td><code>s8a_forecast_metrics</code></td><td>bjd_code가 빈 줄 = 전체. MAE(persistence·기준·AI), P90 적중률, <code>ai_beats_baseline</code>(못 이긴 동네도 그대로)</td></tr>
+      <tr><td><code>s8a_risk</code> · <code>s8a_risk_summary</code></td><td>동네·상한 배율별 급증위험·피크비율·경보 정밀도·재현율. <code>n_excluded_days</code> = 기준 모델이 실패해 비교에서 뺀 날</td></tr>
+      <tr><td><code>s8b_ai_effect_summary</code></td><td>AI 효과 평균·범위·대상 수, 과잉 방전 kWh(P90 대 기준 모델)</td></tr>
+      <tr><td><code>s8e_priority</code></td><td>최종 순위(두 점수가 다 있는 동네). <code>robust_top</code>=가중치를 바꿔도 상위권, <code>confidence</code>=자료 충실도(점수는 깎지 않음), <code>risk_metric</code>=쓴 위험 지표</td></tr>
+      <tr><td><code>s8e_not_ranked</code></td><td>순위 밖 목록. 0점이 아니라 “축이 비어 있음”. <code>missing_reason</code>으로 이유 구분</td></tr>
+      <tr><td><code>s8f_scenario</code> · <code>s8f_beta</code></td><td>연도·시나리오·상한별 초과 동네 수, β와 신뢰구간, k_goal, 매핑 실패율</td></tr>
+      <tr><td><code>s9_headline</code></td><td>발표 숫자와 가정. “값”은 AI, “비교”는 기준 모델(숫자 2) 또는 고 시나리오(숫자 3b)</td></tr>
+    </tbody></table></div>
+  <h3>발표 전면 — 지도 1장, 숫자 3개</h3>
+  <ul>
+    <li><strong>지도</strong>: 결합 점수(색) + ESS 용량 후보(버블) + 신뢰도(투명도). 본선에서는 2030 중 시나리오 지도를 마지막 장으로.</li>
+    <li><strong>숫자 1</strong>: 충전기 1기당 전기차 수, 상위 10% 동네 ÷ 하위 10% 동네.</li>
+    <li><strong>숫자 2</strong>: 증설 0대 급증 경보의 정밀도·재현율(AI 대 기준 모델) → AI 효과(ESS 초과 kWh 감소율).</li>
+    <li><strong>숫자 3</strong>: 현재 급증 위험 동네 수 → 2030 중 시나리오에서 지금 상한을 넘는 동네 수(괄호에 고 시나리오). 둘 다 충전기 추가 없음 기준.</li>
+  </ul>
+  <div class="warn"><b class="tag">숫자를 말할 때 꼭 같이 말할 것</b><p>상한 배율(1.2배), 증설 대수(숫자 2의 AI 효과는 3대), 기온 모드, 사용 모델. 숫자 2가 “AI 개선 없음”이면 그대로 말한다 — 예측이 결정을 바꾸지 못했다는 것도 결과다.</p></div>
+  <h3>반출 그림에서 가려지는 칸</h3>
+  <p>고객이 3명 미만인 동네 수치는 PNG에서 “—”로 가려진다(CSV에는 원값 + <code>소표본억제</code> 열). 동네 열이 없는 합계·요약표(채널 비교·경보 요약·AI 효과 요약·시나리오 요약·발표 숫자)는 가린 동네 몫을 빼고 다시 계산한 값이 PNG에 실린다. 위도·경도 열이 든 표는 아예 저장되지 않는다.</p>
+</section>
+
+<!-- 11 -->
+<section class="ch" id="s11">
+  <p class="chno">11</p>
+  <h2>아직 안 풀린 문제</h2>
+  <p>숨기지 않고 적는다. 위에 있을수록 급하다.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>문제</th><th>영향</th><th>해결</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>과거 기온 예보(9.csv)·행정동→법정동 대응표(8.csv) 미확보</td><td>예보 없으면 기온 없는 모델, 대응표 없으면 8-C·8-F 불가</td><td><span class="pill p-must">준비 필요</span></td></tr>
+      <tr><td class="num">2</td><td>공휴일 달력이 빈 자리표시자</td><td>공휴일 미보정으로 돌아감</td><td><span class="pill p-must">준비 필요</span> fetch_holidays 후 번들 재생성</td></tr>
+      <tr><td class="num">3</td><td>연구계획서·DSZ 신청서의 분석 지역·반입 목록이 v11과 다름</td><td>심사 때 앞뒤가 안 맞아 보임</td><td><span class="pill p-opt">서류 수정</span></td></tr>
+      <tr><td class="num">4</td><td>반입 10개 한도에 딱 맞음</td><td>경계 도형·공동주택 자료를 넣을 자리가 없음</td><td><span class="pill p-opt">결정 필요</span> 무엇을 뺄지</td></tr>
+      <tr><td class="num">5</td><td>안심구역에 lightgbm·scikit-learn이 있는지 미확인</td><td>둘 다 없으면 AI 미실행</td><td><span class="pill p-info">문의 중</span></td></tr>
+      <tr><td class="num">6</td><td>한전 읍면동이 법정동인지 행정동인지 미확인</td><td>행정동이면 자치구 단위로만 분석, 8-C·8-E 생략</td><td><span class="pill p-info">문의 중</span></td></tr>
+      <tr><td class="num">7</td><td>고객호수 정의·센터 소수 셀 기준 미확인</td><td>반출 그림이 얼마나 가려질지 모름</td><td><span class="pill p-info">문의 중</span></td></tr>
+      <tr><td class="num">8</td><td>KEPCO_002 유지 여부</td><td>역할이 약하면 신청 데이터 3개</td><td><span class="pill p-opt">결정 필요</span> 1-C 결과로</td></tr>
+      <tr><td class="num">9</td><td>숫자 3 헤드라인 문구, <code>risk_threshold</code> 0.1</td><td>발표 문장</td><td><span class="pill p-opt">결정 필요</span></td></tr>
+      <tr><td class="num">10</td><td>전국·서울 전기차 기준값을 통계누리 원자료와 대조하지 않음</td><td>고 시나리오 배율(전국 값만 계산에 씀)</td><td><span class="pill p-opt">확인 필요</span></td></tr>
+      <tr><td class="num">11</td><td>가상 데이터 결과 ≠ 실제</td><td>모든 수치는 동작 확인용</td><td>현장 실측</td></tr>
+      <tr><td class="num">12</td><td>지표 3·300/500m 커버리지·MCLP·DEM 경사 보정·실제 GIS 지도 미구현</td><td>설계의 후속 범위</td><td>지도는 태블로 경로 검토</td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- 12 -->
+<section class="ch" id="s12">
+  <p class="chno">12</p>
+  <h2>심사 질문 대비</h2>
+  <p>설계 V11.4 7절 Q&amp;A 중 가장 자주 나올 것만 짧게. 원문은 설계 문서.</p>
+  <h3>“1.1~1.3배는 어디서 나온 숫자인가?”</h3>
+  <p>변압기 용량 자료가 없어서 정한 정책 가정이다. 그 동네가 최근 겪은 최대 부하에 10~30%를 더한 값이고, 세 값으로 바꿔 가며 결과가 어떻게 달라지는지 비교한다.</p>
+  <h3>“스스로 정한 상한을 넘는 게 위험인가? 순환 논리 아닌가?”</h3>
+  <p>그래서 “변압기 과부하”가 아니라 “평소 최대 대비 급증 위험”이라고 부른다. 점수에는 증설 가정이 없는 관측 기반 값만 쓰고, 전날 경보가 실제 급증을 얼마나 맞혔는지 정밀도·재현율로 검증했다.</p>
+  <h3>“이걸 AI라고 부를 수 있나? 평균보다 나은가?”</h3>
+  <p>그래디언트 부스팅 분위수 회귀이고 딥러닝이라고 하지 않는다. 같은 검증기간에 4주 중앙값·전날 값과 오차를 비교하고, 같은 배터리를 AI 예측으로 운전했을 때 초과가 얼마나 줄었는지 낸다. 못 이긴 동네도 숨기지 않는다. 입력에는 전날 발표된 기온 예보만 쓴다.</p>
+  <h3>“2030 지도는 예측인가?”</h3>
+  <p>시나리오다. 트리 모델은 학습 범위 밖에서 평평해져 외삽에 맞지 않아, 현재 부하 모양에 동네 간 탄력성 β를 곱했다. 고 시나리오는 정부 2030년 420만 대 목표가 달성될 때의 상한이다.</p>
+  <h3>“왜 서울만인가?”</h3>
+  <p>동 단위 전기차 등록 공개자료가 서울뿐이라 경기·인천은 형평성 축을 만들 수 없다. 모듈은 지역에 묶여 있지 않아 자료가 생기면 그대로 적용한다.</p>
+  <h3>“정전을 막았다고 증명했나?”</h3>
+  <p>아니다. 피크를 얼마나 낮출 수 있는지 평가하는 단계다. 초과량·저감량·용량 후보·비용 차이로만 말한다.</p>
+</section>
+
+<!-- 13 -->
+<section class="ch" id="s13">
+  <p class="chno">13</p>
+  <h2>용어 사전</h2>
+  <dl class="gloss">
+    <dt>데이터안심구역</dt><dd>민감한 원자료를 밖으로 안 내보내고 센터 안 보안 PC에서만 분석하게 하는 곳.</dd>
+    <dt>반입 / 반출</dt><dd>반입 = 우리 파일을 센터로 들여감. 반출 = 결과를 심사받고 밖으로 가져옴.</dd>
+    <dt>법정동 / 행정동</dt><dd>법정동은 주소에 쓰는 법적 동네, 행정동은 주민센터 기준 구역. 전기차 등록은 행정동이라 대응표로 법정동에 나눈다.</dd>
+    <dt>분위수 예측(P50·P90)</dt><dd>P50 = 절반은 이보다 낮게 나오는 값(가운데). P90 = 10일 중 하루 정도만 이보다 높게 나오는 값. 보수적 운전과 경보의 기준.</dd>
+    <dt>적중률</dt><dd>실측이 P90 이하였던 시간 비율. 90% 근처가 맞고, 80% 미만이면 P90이 너무 낮게 잡힌 것(보수성 부족).</dd>
+    <dt>pinball loss</dt><dd>분위수 예측의 오차 점수. 낮을수록 좋다.</dd>
+    <dt>기준 모델</dt><dd>“지난 4주 같은 요일·같은 시간의 가운데 값”. AI와 비교하는 잣대.</dd>
+    <dt>persistence</dt><dd>“어제 값 그대로”라는 가장 단순한 예측. 이것도 못 이기면 모델이 의미 없다.</dd>
+    <dt>정보 누설</dt><dd>예측 시점에 알 수 없던 값(내일 실측 기온 등)이 입력에 섞이는 것. 성능이 부풀려진다.</dd>
+    <dt>급증 위험 / 피크비율</dt><dd>급증 위험 = 평가일 중 P90 예측 피크가 “평소 최대 × 배율”을 넘는 날의 비율. 피크비율 = P90 예측 피크 ÷ 평소 최대(연속값, 급증위험이 대부분 0일 때 대신 씀).</dd>
+    <dt>정밀도 / 재현율</dt><dd>정밀도 = 울린 경보 중 실제로 급증한 날의 비율. 재현율 = 실제 급증일 중 전날 경보가 울린 비율. 둘을 같이 봐야 경보 남발과 구분된다.</dd>
+    <dt>AI 효과</dt><dd>같은 배터리를 AI P90으로 운전했을 때 기준 모델 대비 상한 초과 kWh가 줄어든 비율.</dd>
+    <dt>과잉 방전</dt><dd>실측 기준으로는 필요 없었던 방전량. P90이 “무조건 크게 잡아서 줄였다”는 반론에 답하려고 같이 낸다.</dd>
+    <dt>oracle</dt><dd>내일을 완벽히 안다고 가정한 비교 기준. 현실 성과가 아니다.</dd>
+    <dt>kWh / kW</dt><dd>kWh는 쓴 전기의 양(물 몇 리터), kW는 그 순간의 세기(수도꼭지를 얼마나 틀었나).</dd>
+    <dt>ESS · 피크쉐이빙</dt><dd>ESS는 대형 배터리. 피크쉐이빙은 가장 붐비는 시간의 봉우리를 깎아 내리는 것.</dd>
+    <dt>SMP</dt><dd>전력 도매시장 가격(원/kWh). 시간마다 다르다.</dd>
+    <dt>2SFCA</dt><dd>충전소마다 “반경 안에서 나눠 쓰는 전기차 수”를 구한 뒤, 동네마다 반경 안 충전소 값을 더해 접근성을 잰다. 옆 동네 충전소도 센다.</dd>
+    <dt>강건 상위군</dt><dd>가중치·상한을 바꿔도 90% 이상 경우에서 상위 20% 안에 드는 동네. 순위 대상 안에서만 센다.</dd>
+    <dt>순위 대상</dt><dd>급증위험·형평성 두 점수가 모두 있어 순위를 매길 수 있는 동네.</dd>
+    <dt>탄력성 β</dt><dd>전기차가 1% 늘 때 충전 부하가 몇 % 느는지. 동네끼리 비교해 추정하고, 불안정하면 1로 둔다.</dd>
+    <dt>k_goal</dt><dd>고 시나리오에서 서울 합계 증가 배율이 “정부 목표 420만 대 ÷ 현재 전국 대수(약 3.8배)”와 같아지게 맞춘 증가율 배수.</dd>
+    <dt>소표본 억제</dt><dd>1~2명만 있는 칸은 그 사람이 드러날 수 있어서 반출 그림에서 가리는 것.</dd>
+    <dt>킬 크라이테리아</dt><dd>첫날 “계획대로 가도 되나”를 판정하는 점검 목록. 걸리면 계획을 줄인다.</dd>
+  </dl>
+</section>
+
+<footer>v11 · 작성 2026-09-21 · 근거: 코드(GitHub upjun0220/data-ansim, pytest 113 통과·3 생략), 전체설계 V11.4, 구현 명세(docs/claude-code-프롬프트-V11.3-구현-20260921.md). “가상 데이터 기준” 수치는 동작 확인용이며 실제 결과가 아니다.</footer>
+</main>
+</div>
+</body>
+</html>
