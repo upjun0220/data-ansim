@@ -1,19 +1,20 @@
-"""반입 묶음 점검 — 반입 가능한 것은 .py(코드)·.csv/.txt(데이터)·.ttf 등 폰트뿐이다(zip·json·md 불가, 최대 10개·총 50MB·파일명 영문·숫자만).
+"""반입 묶음 점검 — 반입 가능한 것은 .py(코드)·.csv/.txt(데이터·설정)·.ttf 등 폰트뿐이다(zip·json·md 불가, 총 50MB, 파일명 영문·숫자만).
+파일 개수 제한은 두지 않는다(센터 규정 확인 결과 "최대 10개"는 아님). 폴더에 checksums.txt 가 있으면 해시도 대조한다.
 
 사용: python tools/check_import_bundle.py <폴더 또는 파일> [...]   (위반이 있으면 종료코드 1)
 
-v11 기준 예: 반입 번들 1.py 1(공휴일 달력 config/holidays.yaml 포함 — 따로 세지 않음) + 데이터 CSV 8(2.csv~9.csv)
-= 9개, 폰트(10.ttf) 허용 시 10개(한도). 이름은 tools/make_import_bundle.py 의 IMPORT_NAMES, 이전 반입 이름과 겹치면 위반.
-신한카드(SHC) 파일은 더 이상 기대하지 않는다. 공동주택(선택)을 넣으면 한도를 넘으므로 지표 3 구현 때 다시 센다.
+v11 구성: 코드 모듈 20개(.py) + fieldtemplate.txt·holidays.txt·requirements.txt·README.txt·checksums.txt
++ 데이터 2.csv~9.csv + (선택) 10.ttf. 데이터 이름은 tools/make_import_bundle.py 의 IMPORT_NAMES, 이전 반입 이름과 겹치면 위반.
 """
 from __future__ import annotations
 
 import ast
+import hashlib
 import re
 import sys
 from pathlib import Path
 
-MAX_FILES, MAX_BYTES = 10, 50 * 1024 * 1024
+MAX_BYTES = 50 * 1024 * 1024
 FONT_EXT = {".ttf", ".otf", ".ttc"}
 # 반입 포털 규칙: 파일명에는 영문 대·소문자와 숫자만(공백·한글·_·- 불가). 확장자 앞의 점 하나만 허용한다.
 SAFE_NAME = re.compile(r"^[A-Za-z0-9]+\.[A-Za-z0-9]+$")
@@ -42,8 +43,6 @@ def check(files):
     total = sum(r[2] for r in rows)
     kinds = [r[1] for r in rows]
     problems = []
-    if len(rows) > MAX_FILES:
-        problems.append(f"파일 {len(rows)}개 > 최대 {MAX_FILES}개")
     if total > MAX_BYTES:
         problems.append(f"총 {total / 1024 ** 2:.1f}MB > 최대 {MAX_BYTES // 1024 ** 2}MB")
     if "code" not in kinds:
@@ -57,6 +56,14 @@ def check(files):
                 ast.parse(f.read_text(encoding="utf-8"))
             except (SyntaxError, UnicodeDecodeError) as exc:
                 problems.append(f"{f.name} 은(는) 올바른 파이썬 파일이 아님: {type(exc).__name__}")
+    for sums in (f for f in files if f.name == "checksums.txt"):
+        for line in sums.read_text(encoding="utf-8").splitlines():
+            digest, name = line.split(maxsplit=1)
+            target = sums.parent / name
+            if not target.exists():
+                problems.append(f"checksums.txt 에 있는데 없음: {name}")
+            elif hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+                problems.append(f"해시 불일치(옛 버전·전송 오류 의심): {name}")
     return rows, problems
 
 

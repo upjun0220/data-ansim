@@ -126,7 +126,7 @@ def test_filter_sido_code_keeps_only_listed_prefixes():
 def test_import_bundle_accepts_py_csv_txt_font_but_not_zip_json_md(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import check, collect
-    (tmp_path / "1.py").write_text("x = 1\n", encoding="utf-8")               # v11: 이전 반입과 겹치지 않는 숫자 이름
+    (tmp_path / "pipeline.py").write_text("x = 1\n", encoding="utf-8")        # v11: 모듈은 원래 이름, 데이터는 숫자
     for name in ("2.csv", "5.txt"):
         (tmp_path / name).write_text("a,b\n1,2\n", encoding="utf-8")
     (tmp_path / "10.ttf").write_bytes(b"x")
@@ -140,7 +140,7 @@ def test_import_bundle_rejects_previous_import_names(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import PREVIOUS_NAMES, SAFE_NAME, check, collect
     from make_import_bundle import IMPORT_NAMES
-    (tmp_path / "1.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "pipeline.py").write_text("x = 1\n", encoding="utf-8")
     for old in ("dataansimbundle.py", "bjdmaster.csv", "koreanfont.ttf"):
         (tmp_path / old).write_bytes(b"x = 1\n")
     assert sum("이전 반입 파일명과 중복" in p for p in check(collect([tmp_path]))[1]) == 3
@@ -159,9 +159,10 @@ def test_import_bundle_rejects_unsafe_names_count_and_broken_python(tmp_path):
     assert any("올바른 파이썬 파일이 아님" in p for p in check(collect([broken]))[1])
     many = tmp_path / "many"
     many.mkdir()
-    for i in range(11):
+    (many / "a.py").write_text("x = 1\n", encoding="utf-8")
+    for i in range(30):
         (many / f"f{i}.txt").write_text("x", encoding="utf-8")
-    assert any("최대 10개" in p for p in check(collect([many]))[1])
+    assert check(collect([many]))[1] == []                      # 개수 제한 없음(모듈을 따로 반입)
 
 
 def test_blp_calibration_separates_real_from_noise_heterogeneity():
@@ -199,3 +200,14 @@ def test_placebo_verdict_uses_zero_test_and_reports_ci():
     _, s_ok = discount_by_placebo(main, ok)
     assert s_bad.attrs["placebo_fails"] and "해석 유보" in s_bad.set_index("구분").at["위약(대조 업종)", "판정"]
     assert not s_ok.attrs["placebo_fails"] and {"CI_하한", "CI_상한"} <= set(s_ok.columns)
+
+
+def test_import_folder_has_separate_modules_and_checksums(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from check_import_bundle import check, collect
+    from make_import_bundle import MODULES, build, verify_checksums
+    folder, names = build(tmp_path / "imp")
+    assert {f"{m}.py" for m in MODULES} <= set(names) and "fieldtemplate.txt" in names and "holidays.txt" in names
+    assert verify_checksums(folder) == [] and check(collect([folder]))[1] == []
+    (folder / "pipeline.py").write_text("x = 2\n", encoding="utf-8")     # 한 파일만 바뀌면 잡는다
+    assert any("해시 불일치" in p for p in check(collect([folder]))[1])

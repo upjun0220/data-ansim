@@ -127,8 +127,8 @@
       <tr><td>ESS 운전 입력</td><td>4주 중앙값 예측</td><td>AI P90 예측(기본), P50·기준 모델과 비교. <strong>AI 효과 검증</strong>(같은 용량의 초과 kWh 감소율) 신설</td><td>AI가 결정을 바꾸는지 숫자로 검증</td></tr>
       <tr><td>결합 점수(8-E)</td><td>세 축(안전·형평성·경제성), 균등 1/3, 선택 AHP</td><td><strong>두 축(초과위험·형평성)</strong>, 균등 1/2. 경제성(SMP 비용 차이)은 참고 표시. AHP 삭제, 가중치 민감도로 대체</td><td>안전·경제성이 같은 ESS 시뮬레이션에서 나와 사실상 한 축</td></tr>
       <tr><td>순위 대상</td><td>세 축이 모두 있는 동네(다수가 “부하 미평가”로 분리)</td><td>두 축이 모두 있는 동네(초과위험이 모든 동네에 계산되어 대부분 포함)</td><td>정보가 적은 동네가 1등이 되는 문제 완화</td></tr>
-      <tr><td>외부 공개데이터</td><td>SMP + 접근성 입력 3종(충전소 위치·설치년도, 표준데이터, 행정동별 전기차 등록)</td><td>+ <strong>기온(실측·과거 예보, CSV 1개)</strong> + <strong>공휴일 달력</strong>(특일 정보 API, 코드 번들 <code>1.py</code> 안 설정). 전기차 등록은 2015~2026 월별 전체 이력 + <strong>행정동→법정동 대응표</strong>(v11.4)</td><td>AI 입력(기온·휴일유형)과 확장안 입력. 대응표는 등록 이력을 법정동에 배분하는 데 필요</td></tr>
-      <tr><td>반입 파일 수</td><td>7개(데이터 6 + 코드 zip), 폰트 허용 시 8개</td><td><strong>9개(코드 번들 <code>1.py</code> + 데이터 <code>2.csv</code>~<code>9.csv</code>), 폰트(<code>10.ttf</code>) 허용 시 10개 — 한도에 딱 맞음</strong>. 파일명은 이전 반입과 겹치지 않게 숫자</td><td>기온·전기차 등록 이력·대응표 추가. 등록 단면(evregistration)은 이력에서 계산해 반입하지 않음. 반입 포털은 zip 불가라 코드는 .py 번들 1개</td></tr>
+      <tr><td>외부 공개데이터</td><td>SMP + 접근성 입력 3종(충전소 위치·설치년도, 표준데이터, 행정동별 전기차 등록)</td><td>+ <strong>기온(실측·과거 예보, CSV 1개)</strong> + <strong>공휴일 달력</strong>(특일 정보 API, 코드와 함께 반입하는 <code>holidays.txt</code>). 전기차 등록은 2015~2026 월별 전체 이력 + <strong>행정동→법정동 대응표</strong>(v11.4)</td><td>AI 입력(기온·휴일유형)과 확장안 입력. 대응표는 등록 이력을 법정동에 배분하는 데 필요</td></tr>
+      <tr><td>반입 파일 수</td><td>7개(데이터 6 + 코드 zip), 폰트 허용 시 8개</td><td><strong>코드 모듈 20개를 파일마다 따로 + 설정·달력·README·해시 목록 .txt + 데이터 <code>2.csv</code>~<code>9.csv</code>·폰트 <code>10.ttf</code></strong>(개수 제한 없음, 총 50MB). 데이터 이름은 이전 반입과 겹치지 않게 숫자</td><td>기온·전기차 등록 이력·대응표 추가. 등록 단면(evregistration)은 이력에서 계산해 반입하지 않음. 반입 포털은 zip·json 불가라 코드는 .py 파일별, 설정은 .txt</td></tr>
       <tr><td>확장안</td><td>없음</td><td><strong>2028·2030 충전 부하 시나리오 지도(8-F)</strong>. 저=추세 둔화, 중=추세 연장, 고=정부 2030년 420만 대 목표 경로. 탄력성 β 스케일링</td><td>본선 발표의 마지막 장, “지금 투자하지 않으면”의 기준선</td></tr>
       <tr><td>1지도 3숫자</td><td>숫자 1 충전기당 전기차 배수 / 숫자 2 ESS 미적용 초과 kWh / 숫자 3 ESS 적용 후 잔여 초과·SMP 비용 차이</td><td>숫자 1 동일 / 숫자 2 <strong>AI 효과</strong>(초과 kWh 감소율, 경보 정밀도·재현율) / 숫자 3 현재 급증 위험 동네 수(증설 0대) → 2030 중 시나리오(괄호에 고 시나리오), 둘 다 충전기 추가 없음 기준</td><td>가정 의존 숫자 대신 AI 성과와 위험 규모를 전면에</td></tr>
       <tr><td>킬 크라이테리아</td><td>13~15번 추가, 코드 기준 16항목</td><td>11번(T_r 분포) 해당 없음, 14번 AHP 검사 제외, 15번 순위표 3장 → 2장, <strong>17~21번 신규</strong>(ML 라이브러리, AI 성능 미달, 기온 예보, 시나리오 매핑·β·k_goal, 급증위험 0 비율). 코드 기준 21항목, 판정에 “해당 없음” 추가</td><td>새 모듈의 실패 경로 명시</td></tr>
@@ -158,7 +158,7 @@
       <tr><td>v11.1</td><td>외부 입력의 출처를 확정했다. ① <strong>과거 기온 예보</strong>(기상자료개방포털 동네예보)를 실측 기온과 한 CSV로 합쳐 반입하고, 예보가 확보되면 발표 숫자를 예보 기온 모델 기준으로 낸다(0-6절, 킬 19번), ② <strong>공휴일 달력</strong>을 한국천문연구원 특일 정보 API로 만들어 코드 zip 안 설정 파일로 넣는다(반입 파일 수 변동 없음), ③ 확장안의 저·중·고 배율(k=0.5/1.0/1.5)을 <strong>저=추세 둔화, 중=추세 연장, 고=정부 2030 누적 420만대 목표 달성 경로</strong>로 바꿨다(07-4절). 경기·인천 전기차 등록 자료는 추가하지 않으며 확장안은 서울 한정을 유지한다.</td></tr>
       <tr><td>v11.2</td><td><strong>분석 지역을 수도권에서 서울로 한정</strong>했다. 형평성 축(지표 1·2SFCA)의 분모인 행정동별 전기차 등록현황(OA-21236)이 서울 자료라, 경기·인천 동네는 결합 점수 순위에 들어갈 수 없었기 때문이다. ① 제목의 “수도권”을 “서울”로 바꿨다, ② KEPCO_001·002는 전국 자료 중 서울 법정동(법정동코드 앞 2자리 11)만 쓴다, ③ AI 모델의 학습·검증·평가를 모두 서울 법정동으로 한다, ④ 기온(실측·예보)·DEM·반입 필터를 서울 범위로 맞췄다, ⑤ 시군구 폴백은 서울 25개 자치구 단위가 된다, ⑥ 한계와 Q13(“왜 서울만인가”)을 추가했다. 분석 방법은 바꾸지 않았다. DSZ 신청서의 분석 지역 기재도 맞춰야 한다.</td></tr>
       <tr><td>v11.3</td><td><strong>안전 축을 “평소 최대 대비 급증 위험”으로 재정의</strong>했다. 목표 상한이 그 동네의 교정기간 관측 최대 × 배율이라, v11의 초과위험은 대부분 “증설 3대” 가정이 만든 값이어서 순환 논리로 공격받을 수 있었다. ① 결합 점수의 위험 축을 <strong>증설 0대(관측 기반)</strong>로 계산해 가정이 들어가지 않게 했다, ② 증설 0대 경보는 실측과 대조할 수 있으므로 <strong>경보 정밀도·재현율</strong>을 AI의 핵심 근거로 삼았다, ③ 증설 시나리오의 급증 위험은 “증설 계획 검토용” 참고 레이어로 분리했다, ④ 급증 경보가 대부분의 동네에서 0이면 연속 지표(평소 최대 대비 P90 피크 비율)로 대체한다(킬 21번), ⑤ 숫자 3(a)를 증설 0대 기준으로 바꿔 2030 시나리오와 같은 “충전기 추가 없음” 기준이 되게 했다, ⑥ Q14(순환 논리 반론) 추가. 문서의 “초과위험”은 v11.3부터 이 급증 위험을 뜻한다.</td></tr>
-      <tr><td><strong>v11.4(현재)</strong></td><td><strong>v11.3 설계를 코드로 구현하고, 구현하면서 확정한 사항을 문서에 반영</strong>했다(8절). ① 평가기간을 7일에서 <strong>28일</strong>로 늘렸다 — 7일이면 급증위험이 1/7 단위로만 나오고 <code>risk_threshold</code> 0.1이 사실상 “7일 중 1회”가 되기 때문이다, ② AI의 동네 특성 “교정기간 평균 부하”는 교정기간이 검증기간과 겹쳐 정보 누설이 되므로 <strong>학습기간 평균 부하</strong>로 바꿨다, ③ 기준 모델이 휴일 표본 부족으로 실패한 날은 AI 대 기준 모델 비교에서 빼고(<strong>공통일 비교</strong>) 제외 일수를 표시한다, ④ 전기차 등록 이력을 법정동에 배분하는 <strong>행정동→법정동 대응표(가중치)</strong>를 반입하고, 8-C의 등록 단면도 이 이력에서 계산해 반입 파일을 하나 줄였다, ⑤ 반입 포털이 zip을 받지 않아 코드는 .py 번들 1개로 반입하며, <strong>파일명은 이전 반입과 겹치지 않게 숫자(<code>1.py</code>~<code>10.ttf</code>)</strong>로 매겼다, ⑥ 공휴일 달력은 안심구역에 PyYAML이 없을 수 있어 JSON 문법(=유효한 YAML)으로 저장한다, ⑦ 3-2절의 “결합 기본 시나리오 증설 3대” 서술을 v11.3 정의(증설 0대)에 맞게 고쳤다, ⑧ 킬 21번과 판정 “해당 없음”을 코드에 넣고 설계↔코드 번호 대응표를 달았다(4절). 분석 방법은 바꾸지 않았다.</td></tr>
+      <tr><td><strong>v11.4(현재)</strong></td><td><strong>v11.3 설계를 코드로 구현하고, 구현하면서 확정한 사항을 문서에 반영</strong>했다(8절). ① 평가기간을 7일에서 <strong>28일</strong>로 늘렸다 — 7일이면 급증위험이 1/7 단위로만 나오고 <code>risk_threshold</code> 0.1이 사실상 “7일 중 1회”가 되기 때문이다, ② AI의 동네 특성 “교정기간 평균 부하”는 교정기간이 검증기간과 겹쳐 정보 누설이 되므로 <strong>학습기간 평균 부하</strong>로 바꿨다, ③ 기준 모델이 휴일 표본 부족으로 실패한 날은 AI 대 기준 모델 비교에서 빼고(<strong>공통일 비교</strong>) 제외 일수를 표시한다, ④ 전기차 등록 이력을 법정동에 배분하는 <strong>행정동→법정동 대응표(가중치)</strong>를 반입하고, 8-C의 등록 단면도 이 이력에서 계산해 반입 파일을 하나 줄였다, ⑤ 반입 포털이 zip·json·md를 받지 않아 코드는 <strong>모듈 파일별로</strong>, 설정 원본·공휴일 달력·README는 내용 그대로 <code>.txt</code>로 반입하고 <code>checksums.txt</code>로 버전을 확인하며, <strong>데이터 파일명은 이전 반입과 겹치지 않게 숫자(<code>2.csv</code>~<code>10.ttf</code>)</strong>로 매겼다, ⑥ 공휴일 달력은 안심구역에 PyYAML이 없을 수 있어 JSON 문법(=유효한 YAML)으로 저장한다, ⑦ 3-2절의 “결합 기본 시나리오 증설 3대” 서술을 v11.3 정의(증설 0대)에 맞게 고쳤다, ⑧ 킬 21번과 판정 “해당 없음”을 코드에 넣고 설계↔코드 번호 대응표를 달았다(4절). 분석 방법은 바꾸지 않았다.</td></tr>
     </tbody>
   </table>
   <p><strong>v10.1부터 06절 CATE(상권 파급효과)와 4사분면 분류는 쓰지 않는다.</strong> 공공 투자 검토 순서는 주민 보호·충전 접근성·부하 완화 가능성만으로 판단한다. v11부터 부하 판단의 중심은 AI 예측이다.</p>
@@ -209,7 +209,7 @@
   <p>이 절에도 0-4절 SMP와 같은 톤의 유보를 남긴다.</p>
   <ul>
     <li>공개데이터라도 <strong>안심구역 반입 절차·형식은 별도 확인</strong>이 필요하다. 특히 경계 도형(SHP/GeoPackage)이 "데이터는 CSV만" 규정과 충돌할 수 있어 사전 문의 대상이다.</li>
-    <li><strong>반입(v11.4 확정)</strong>: 반입 포털은 <strong>.py·.csv·.txt·폰트만</strong> 받고(zip·json·md 불가) 파일명은 영문·숫자만 쓸 수 있으며 한도는 <strong>최대 10개·총 50MB</strong>다. 코드는 번들 <code>1.py</code> 1개에 원문 그대로 담고(공휴일 달력 <code>config/holidays.yaml</code> 포함), 데이터는 <code>2.csv</code> 법정동코드 마스터 · <code>3.csv</code> 코드대응 · <code>4.csv</code> 법정동 중심점 · <code>5.csv</code> SMP · <code>6.csv</code> 충전소 위치 · <code>7.csv</code> 행정동별 전기차 등록 월별 이력 · <code>8.csv</code> 행정동→법정동 대응표 · <code>9.csv</code> 기온(실측·과거 예보)으로 <strong>9개</strong>, 한글 폰트 <code>10.ttf</code>를 넣으면 <strong>10개로 한도에 딱 맞다</strong>. 파일명은 이전 반입(<code>dataansimbundle.py</code>·<code>bjdmaster.csv</code> 등)과 겹치지 않게 숫자로 매겼고, 점검 도구가 중복을 위반으로 잡는다. 8-C의 법정동별 등록 단면은 <code>7.csv</code>·<code>8.csv</code>의 기준월 값으로 계산해 따로 반입하지 않는다. 경계 도형·공동주택(선택)을 추가하려면 무엇을 뺄지 정해야 한다. 서울로 필터링해 용량을 줄인다(v11.2).</li>
+    <li><strong>반입(v11.4 확정)</strong>: 반입 포털은 <strong>.py·.csv·.txt·폰트만</strong> 받고(zip·json·md 불가) 파일명은 영문·숫자만 쓸 수 있으며 총 50MB 이내다(파일 개수 제한은 없음 — 이전 문서의 “최대 10개”는 규정이 아니었음). 코드는 모듈 20개를 파일마다 따로(원래 이름), 설정 원본·공휴일 달력·README는 내용 그대로 <code>.txt</code>로 담고 <code>checksums.txt</code>로 해시를 대조한다. 데이터는 <code>2.csv</code> 법정동코드 마스터 · <code>3.csv</code> 코드대응 · <code>4.csv</code> 법정동 중심점 · <code>5.csv</code> SMP · <code>6.csv</code> 충전소 위치 · <code>7.csv</code> 행정동별 전기차 등록 월별 이력 · <code>8.csv</code> 행정동→법정동 대응표 · <code>9.csv</code> 기온(실측·과거 예보)으로 <strong>9개</strong>, 한글 폰트는 <code>10.ttf</code>(파일 개수 제한은 없음, 총 50MB). 파일명은 이전 반입(<code>dataansimbundle.py</code>·<code>bjdmaster.csv</code> 등)과 겹치지 않게 숫자로 매겼고, 점검 도구가 중복을 위반으로 잡는다. 8-C의 법정동별 등록 단면은 <code>7.csv</code>·<code>8.csv</code>의 기준월 값으로 계산해 따로 반입하지 않는다. 경계 도형·공동주택(선택)은 추가 반입 여부를 정한다. 서울로 필터링해 용량을 줄인다(v11.2).</li>
     <li>등록현황은 <strong>행정동</strong>, 분석 기준키는 <strong>법정동</strong>이므로 <strong>행정동→법정동 대응표(가중치 = 그 행정동 전기차 중 법정동 몫, v11.4)</strong>로 배분하고, 매핑 실패율(기준월 전기차 중 대응표에 없는 행정동 몫)을 보고한다(킬 12·20번). 가중치가 없으면 같은 몫으로 나누고 경고한다.</li>
     <li>설치년도 파일(2023.10 기준)과 표준데이터(현재)를 대조해 "2023년까지 설치분 / 이후 신규분"을 구분하는 것을 <strong>시도</strong>하되, 두 데이터의 식별자 체계가 달라 매칭에 실패할 수 있음을 명시하고 실패 시 정적 스냅샷으로만 쓴다.</li>
   </ul>
@@ -227,7 +227,7 @@
   <ul>
     <li>대체공휴일·임시공휴일·선거일이 실제로 들어 있는지 조회 결과로 확인하고, 빠진 날은 관보·정부 발표로 보완한 뒤 출처를 기록한다. 국내 휴일을 규칙으로 임의 생성하지 않는다는 기존 원칙은 유지한다.</li>
     <li>휴일유형은 “공휴일(단일)”, “연휴(설·추석 등 3일 이상)”, “연휴 전날·다음날”로 나눈다. 연휴 전후에는 충전 부하가 평소와 다르게 몰릴 수 있기 때문이다. 유형 구분 기준은 설정으로 둔다.</li>
-    <li>결과는 행 수십 개라 <strong>코드 번들 <code>1.py</code> 안 설정 파일</strong>(<code>config/holidays.yaml</code>)로 반입한다. 반입 파일 수는 늘지 않는다. 안심구역에 PyYAML이 없을 수 있어 <strong>JSON 문법(=유효한 YAML)</strong>으로 저장하고 표준 <code>json</code>으로 읽는다. <code>tools/fetch_holidays.py</code>가 인터넷이 되는 곳에서 API 결과를 받아 유형(<code>holiday</code>·<code>long_holiday</code>·<code>pre_post_holiday</code>)까지 붙여 저장한다(v11.4).</li>
+    <li>결과는 행 수십 개라 <strong><code>holidays.txt</code></strong>(내용은 JSON, 저장소의 <code>config/holidays.yaml</code>과 같음)로 코드와 함께 반입한다. 2024~2025 공휴일 38일이 들어 있다. 안심구역에 PyYAML이 없을 수 있어 <strong>JSON 문법(=유효한 YAML)</strong>으로 저장하고 표준 <code>json</code>으로 읽는다. <code>tools/fetch_holidays.py</code>가 인터넷이 되는 곳에서 API 결과를 받아 유형(<code>holiday</code>·<code>long_holiday</code>·<code>pre_post_holiday</code>)까지 붙여 저장한다(v11.4).</li>
   </ul>
 
   <hr>
@@ -686,14 +686,14 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
       <tr><td><code>loadscenario.py</code>(신규)</td><td>등록 이력 읽기·행정동→법정동 배분·증가율·k_goal 이분법·β 추정·스케일링·판정</td></tr>
       <tr><td><code>headline.py</code></td><td>v11.3 발표 숫자(<code>headline_table_v11</code>)</td></tr>
       <tr><td><code>pipeline.py</code>·<code>killcriteria.py</code>·<code>config.py</code></td><td>단계 연결(상권 비활성·서울 필터·1-C·0-E·8-F), 킬 17~21·해당 없음, 새 설정 키</td></tr>
-      <tr><td><code>tools/fetch_holidays.py</code>(신규)·<code>make_import_bundle.py</code>·<code>check_import_bundle.py</code></td><td>공휴일 달력 받기, 번들 <code>1.py</code> 만들기, 반입 형식·이전 이름 중복 점검</td></tr>
+      <tr><td><code>tools/fetch_holidays.py</code>(신규)·<code>make_import_bundle.py</code>·<code>check_import_bundle.py</code>·<code>fetch_public_inputs.py</code></td><td>공휴일 달력 받기, 반입 폴더(코드 파일별 + .txt 설정 + 해시 목록) 만들기, 반입 형식·이전 이름 중복·해시 점검, SMP·기온(5·9.csv) 받기</td></tr>
     </tbody>
   </table>
   <h3>반입 파일</h3>
   <table>
     <thead><tr><th>이름</th><th>내용</th></tr></thead>
     <tbody>
-      <tr><td><code>1.py</code></td><td>코드 번들(모듈 20개·설정 템플릿·공휴일 달력·README). <code>%run 1.py</code> → <code>dataansim11/</code>에 풀림(이전 V10의 <code>dataansim/</code>과 분리)</td></tr>
+      <tr><td>모듈 20개 <code>*.py</code> · <code>fieldtemplate.txt</code> · <code>holidays.txt</code> · <code>requirements.txt</code> · <code>README.txt</code> · <code>checksums.txt</code></td><td>코드는 파일마다 따로(원래 이름). 센터에서 한 폴더에 모아 <code>field.txt</code>로 실행</td></tr>
       <tr><td><code>2.csv</code> · <code>3.csv</code> · <code>4.csv</code></td><td>법정동코드 마스터 · 코드대응 · 법정동 중심점</td></tr>
       <tr><td><code>5.csv</code> · <code>6.csv</code></td><td>SMP · 공용 충전소 위치</td></tr>
       <tr><td><code>7.csv</code> · <code>8.csv</code></td><td>행정동별 전기차 등록 월별 이력(OA-21236) · 행정동→법정동 대응표(가중치)</td></tr>
@@ -719,7 +719,7 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
     <li>숫자 3 헤드라인 문구와 <code>headline.risk_threshold</code>(0.1).</li>
     <li>KEPCO_002 유지 여부 — <code>s1_channel_share</code>와 킬 7·16번으로 판단(mock은 002 ⊆ 001).</li>
     <li><code>scenario.national_base</code>·<code>seoul_base</code>를 통계누리 원자료로 대조하고, 기준월을 2026-08로 옮길지(옮기면 세 값과 EV_now 월을 함께 바꾼다).</li>
-    <li>반입 한도: 폰트까지 10개로 딱 맞다. 경계 도형·공동주택 자료를 넣으려면 무엇을 뺄지.</li>
+    <li>반입 자료 범위: 경계 도형·공동주택 자료를 추가로 가져갈지(개수 제한 없음, 총 50MB).</li>
     <li>반입 전 준비: 공휴일 달력(<code>tools/fetch_holidays.py</code> 실행 후 번들 재생성), 과거 기온 예보, 행정동→법정동 대응표.</li>
     <li>실제 GIS 지도: 안심구역 안의 태블로로 CSV(<code>bjd_code</code> 키)와 경계를 결합하는 경로 검토. 반출 그림에도 소표본 억제·좌표 비반출 규칙을 적용한다.</li>
   </ol>
@@ -728,7 +728,7 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
     <p>신청서에는 상단 선언문과 6절 공공성 서사를 사용한다. v11 수식과 범위는 함께 제공한 구현 명세 및 GitHub <a href="https://github.com/upjun0220/data-ansim">data-ansim</a>의 예측·ESS·접근성·GIS·결합점수 모듈에 반영한다. 모의실험 검증을 실제 지역의 효과로 쓰지 않는다.</p>
     <ol>
       <li>현재 구현(v11.4): 8-A AI 분위수 예측·급증 위험·AI 효과 비교, 8-E 두 축(<code>min_axes=2</code>), 8-F 시나리오, 9-H 새 숫자, 기온·공휴일 입력, 서울 필터, 상권 단계 비활성까지 구현했다(8절). <strong>미구현</strong>: 지표 3(자가충전 제약 주거 비율), MCLP, 300/500m 커버리지(8-D), 실제 GIS 지도(태블로 경로 검토), DEM 경사 보정. lightgbm 경로는 설치 환경에서만 검증된다.</li>
-      <li>원자료 확보 후 확인: KEPCO 일자·시각·단위·포괄 범위, CAN 식별자와 세션 신뢰도(관측 종료 시점 포함), 공휴일·SMP 정보시점, 경계 기준일과 결합키, 공동주택 주차대수 컬럼 존재 여부, 경계 도형(SHP/GeoPackage)의 안심구역 반입 가능 여부, 표준데이터 "이용자 제한 여부" 필드의 실제 값 분포, 공공성 증빙, <strong>DSZ 신청서의 분석 지역 기재(수도권 → 서울), 안심구역의 lightgbm·scikit-learn 설치 여부, 과거 기온 예보의 제공 기간·격자·발표 시각, 특일 정보 API의 분석기간 연도 조회 결과(대체·임시공휴일 포함 여부), 번들 <code>1.py</code> 안 설정 파일이 센터에서 풀리는지, 기준월 전국·서울 전기차 등록대수, 2SFCA 반경(300/500/800m) 중 현장 채택값, KEPCO_001의 계절 커버리지 실제 기간</strong>. 실제 신청 제출과 안심구역 반출 심의는 이 문서 수정과 별개다.</li>
+      <li>원자료 확보 후 확인: KEPCO 일자·시각·단위·포괄 범위, CAN 식별자와 세션 신뢰도(관측 종료 시점 포함), 공휴일·SMP 정보시점, 경계 기준일과 결합키, 공동주택 주차대수 컬럼 존재 여부, 경계 도형(SHP/GeoPackage)의 안심구역 반입 가능 여부, 표준데이터 "이용자 제한 여부" 필드의 실제 값 분포, 공공성 증빙, <strong>DSZ 신청서의 분석 지역 기재(수도권 → 서울), 안심구역의 lightgbm·scikit-learn 설치 여부, 과거 기온 예보의 제공 기간·격자·발표 시각, 특일 정보 API의 분석기간 연도 조회 결과(대체·임시공휴일 포함 여부), 설정·달력 <code>.txt</code> 파일이 반입 심사를 통과하는지, 기준월 전국·서울 전기차 등록대수, 2SFCA 반경(300/500/800m) 중 현장 채택값, KEPCO_001의 계절 커버리지 실제 기간</strong>. 실제 신청 제출과 안심구역 반출 심의는 이 문서 수정과 별개다.</li>
     </ol>
   </footer>
 

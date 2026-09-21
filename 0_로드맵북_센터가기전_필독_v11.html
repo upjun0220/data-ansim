@@ -169,7 +169,7 @@ section[id]{scroll-margin-top:16px}
     <li><strong>상권(카드 매출) 분석은 뺐다.</strong> 코드는 지우지 않고 꺼 두었다(<code>stages.commerce=false</code>). 그래서 신한카드 파일도 필요 없다.</li>
     <li><strong>AI</strong>: 그래디언트 부스팅 분위수 회귀(P50·P90). 딥러닝이 아니다. lightgbm이 없으면 scikit-learn으로, 그것도 없으면 “4주 중앙값” 기준 모델로 자동 전환한다.</li>
     <li><strong>코드는 다 짜 두었다.</strong> 가상 데이터로 전 과정이 돌고 테스트 113개가 통과한다. 센터에서는 경로와 날짜만 채워서 돌린다.</li>
-    <li><strong>반입은 10개</strong>: 코드 번들 <code>1.py</code> + 데이터 <code>2.csv</code>~<code>9.csv</code> + 폰트 <code>10.ttf</code>. 이름은 이전 반입과 겹치지 않게 숫자로 붙였다.</li>
+    <li><strong>반입</strong>: 코드 모듈 20개를 <strong>파일마다 따로</strong>(원래 이름) + 설정·달력·README·해시 목록 <code>.txt</code> + 데이터 <code>2.csv</code>~<code>9.csv</code> + 폰트 <code>10.ttf</code>. 데이터 이름은 이전 반입과 겹치지 않게 숫자로 붙였다.</li>
     <li><strong>첫날 가장 중요한 일</strong>: 킬 크라이테리아(첫날 점검)로 “이 데이터로 계획대로 갈 수 있는지”를 판정받는 것. 분석은 그다음이다.</li>
   </ul>
   <div class="warn"><b class="tag">솔직하게 알고 가야 할 것</b>
@@ -191,7 +191,7 @@ section[id]{scroll-margin-top:16px}
       <tr><td>새 입력</td><td>—</td><td>기온(실측·예보), 공휴일 달력, 전기차 등록 월별 이력, 행정동→법정동 대응표</td></tr>
       <tr><td>확장안</td><td>없음</td><td>2028·2030 충전 부하 시나리오(8-F)</td></tr>
       <tr><td>첫날 점검</td><td>16항목</td><td>21항목(17~21 신규, “해당 없음” 판정 추가)</td></tr>
-      <tr><td>반입</td><td><code>dataansimbundle.py</code> 외 영문 이름 8개</td><td><code>1.py</code>~<code>10.ttf</code> 숫자 이름 10개</td></tr>
+      <tr><td>반입</td><td><code>dataansimbundle.py</code> 외 영문 이름 8개</td><td>코드 모듈 20개(따로) + 설정 .txt 5개 + 데이터 <code>2.csv</code>~<code>9.csv</code>·<code>10.ttf</code></td></tr>
     </tbody></table></div>
 </section>
 
@@ -239,17 +239,17 @@ section[id]{scroll-margin-top:16px}
 ├── 현장준비_효과크기_문의문안_20260919.md       <span class="c">← 사무국 문의 질문</span>
 ├── pipeline.py 외 분석 모듈 20개                <span class="c">← 05장</span>
 ├── config/
-│   ├── fieldtemplate.json      <span class="c">← 센터용 설정 원본(복사해서 field.json으로)</span>
+│   ├── fieldtemplate.json      <span class="c">← 설정 원본(반입 때는 한 폴더용 fieldtemplate.txt로 만들어짐)</span>
 │   ├── mock.json               <span class="c">← 가상 데이터 연습용</span>
 │   ├── holidays.yaml           <span class="c">← 공휴일 달력(지금은 빈 자리표시자)</span>
 │   └── industrycodestemplate.json · industry_codes_mock.json  <span class="c">← 상권 단계 전용(v11에서 안 씀)</span>
 ├── tests/                      <span class="c">← 자동 검사 113개</span>
 ├── tools/
 │   ├── fetch_holidays.py       <span class="c">← 공휴일 달력 받기(인터넷 되는 곳)</span>
-│   ├── make_import_bundle.py   <span class="c">← 반입 번들 1.py 만들기</span>
+│   ├── make_import_bundle.py   <span class="c">← 반입 폴더 만들기(코드 파일별 + .txt 설정 + 해시 목록)</span>
 │   ├── check_import_bundle.py  <span class="c">← 반입 형식·개수·이름 중복 점검</span>
 │   └── build_reference_files.py <span class="c">← 법정동 참고자료 3종 만들기</span>
-├── dist/import/1.py            <span class="c">← 만들어진 반입 번들(저장소에는 안 올라감)</span>
+├── dist/import/               <span class="c">← 만들어진 반입 폴더(저장소에는 안 올라감)</span>
 ├── dist/READMEimportlist.md    <span class="c">← 반입 요청 목록·해시</span>
 ├── data/mock/  out/            <span class="c">← 가상 데이터 / 실행 결과(자동 생성, 저장소에 안 올라감)</span>
 ├── README.md                   <span class="c">← 개발자용 설명서(설정 키 전체 표)</span>
@@ -274,12 +274,16 @@ section[id]{scroll-margin-top:16px}
       <tr><td><strong>LX DEM5M</strong></td><td>표고</td><td>지도 배경·경사 보정(후속, 지금 코드는 안 씀)</td></tr>
     </tbody></table></div>
   <p>신한카드 SHC001·SHC002는 v10.1부터 신청 목록에서 뺐다.</p>
-  <h3>우리가 들고 가는 것 (반입 10개)</h3>
-  <p>반입 포털은 <strong>.py·.csv·.txt·폰트만</strong> 받고(zip·json·md 불가) 파일명은 영문·숫자만 된다. 최대 10개·총 50MB. 이름은 이전 반입(<code>dataansimbundle.py</code>·<code>bjdmaster.csv</code> 등)과 겹치지 않게 숫자로 붙였다.</p>
+  <h3>우리가 들고 가는 것 (반입)</h3>
+  <p>반입 포털은 <strong>.py·.csv·.txt·폰트만</strong> 받고(zip·json·md 불가) 파일명은 영문·숫자만 된다. 파일 개수 제한은 없고 총 50MB 이내. <strong>코드는 파일마다 따로</strong> 가져간다(알아보기 쉽고 심사에 유리). json·yaml·md는 못 올리므로 설정 원본·공휴일 달력·README는 내용 그대로 <code>.txt</code>로 담는다(코드는 확장자가 아니라 내용으로 읽는다). 데이터 이름은 이전 반입(<code>dataansimbundle.py</code>·<code>bjdmaster.csv</code> 등)과 겹치지 않게 숫자로 붙였다.</p>
   <div class="tbl"><table>
     <thead><tr><th>파일</th><th>내용</th><th>형식(열)</th><th>없으면</th></tr></thead>
     <tbody>
-      <tr><td class="num">1.py</td><td>코드 번들(모듈 20개·설정 템플릿·공휴일 달력·README)</td><td><code>%run 1.py</code>로 풀기</td><td>아무것도 못 함</td></tr>
+      <tr><td class="num">*.py 20개</td><td>분석 모듈(<code>pipeline.py</code> 등, 원래 이름)</td><td>파이썬 코드</td><td>아무것도 못 함</td></tr>
+      <tr><td class="num">fieldtemplate.txt</td><td>한 폴더용 설정 원본</td><td>내용은 JSON. <code>field.txt</code>로 복사해 채움</td><td>설정 없음</td></tr>
+      <tr><td class="num">holidays.txt</td><td>공휴일 달력 2024~2025(38일, 대체·임시·선거일 포함)</td><td>내용은 JSON</td><td>공휴일 미보정</td></tr>
+      <tr><td class="num">requirements.txt · README.txt</td><td>패키지 목록 · 개발자 설명서</td><td>텍스트</td><td>참고용</td></tr>
+      <tr><td class="num">checksums.txt</td><td>위 파일들의 SHA-256</td><td>해시  파일명</td><td>옛 버전·깨진 파일을 못 잡음</td></tr>
       <tr><td class="num">2.csv</td><td>법정동코드 마스터</td><td>법정동코드·법정동명·폐지여부</td><td>0단계 중단</td></tr>
       <tr><td class="num">3.csv</td><td>법정동 코드대응(개편 전후 코드 → 기준코드)</td><td>코드·기준코드</td><td>개편 동네가 둘로 쪼개짐</td></tr>
       <tr><td class="num">4.csv</td><td>법정동 중심점</td><td>법정동코드·위도·경도</td><td>CAN·8-C 생략</td></tr>
@@ -294,9 +298,9 @@ section[id]{scroll-margin-top:16px}
     <ul>
       <li><strong>9.csv 과거 기온 예보</strong>: 기상자료개방포털 동네예보 과거자료. 발표 시각(<code>fcst_issued_at</code>)을 꼭 같이 저장해야 한다. 코드가 전날 18시 이전 발표분만 쓰기 때문이다.</li>
       <li><strong>8.csv 대응표</strong>: 가중치는 “그 행정동 전기차 중 이 법정동 몫”. 모르면 가중치 열을 비워 두면 같은 몫으로 나누고 경고한다.</li>
-      <li><strong>공휴일 달력</strong>: <code>tools/fetch_holidays.py</code>로 받은 뒤 번들을 다시 만들어야 1.py에 들어간다(08장).</li>
+      <li><strong>공휴일 달력</strong>: 2024~2025분은 <code>holidays.txt</code>에 들어 있다. 특일 정보 API 키가 생기면 <code>tools/fetch_holidays.py</code>로 다시 대조할 수 있다.</li>
     </ul></div>
-  <p>8-C의 법정동별 전기차 대수는 7.csv·8.csv의 기준월(2026-06) 값으로 계산하므로 v10의 <code>evregistration.csv</code>는 따로 가져가지 않는다. 경계 도형이나 공동주택 자료를 더 가져가려면 10개 한도 때문에 무엇을 뺄지 정해야 한다.</p>
+  <p>8-C의 법정동별 전기차 대수는 7.csv·8.csv의 기준월(2026-06) 값으로 계산하므로 v10의 <code>evregistration.csv</code>는 따로 가져가지 않는다. 경계 도형이나 공동주택 자료를 더 가져갈지는 팀이 정한다(파일 개수 제한은 없고 총 50MB 이내).</p>
 </section>
 
 <!-- 04 -->
@@ -335,14 +339,14 @@ section[id]{scroll-margin-top:16px}
     <div class="file"><h4>pipeline.py <small>951줄 · 총감독</small></h4>
       <p class="one">0~9단계를 순서대로 부르고, 단계마다 실패를 격리하고, 실행 요약을 남긴다.</p>
       <p class="like">비유: 요리 레시피 순서표. 한 재료가 없으면 그 요리만 빼고 나머지는 계속 만든다.</p>
-      <dl><dt>실행</dt><dd><code>python pipeline.py --config config/field.json</code> 또는 <code>from pipeline import run; run("config/field.json")</code></dd>
-      <dt>넣는 것</dt><dd><code>config/field.json</code></dd>
+      <dl><dt>실행</dt><dd>센터: <code>from pipeline import run; run("field.txt")</code> · 로컬: <code>python pipeline.py --config config/mock.json</code></dd>
+      <dt>넣는 것</dt><dd>설정 파일(센터 <code>field.txt</code>)</dd>
       <dt>나오는 것</dt><dd><code>out/…/csv</code>, <code>out/…/png</code>, <code>pipeline.log</code>, <code>s0_run_summary</code></dd>
       <dt>v11</dt><dd>상권 단계 끄기, 서울 필터, 1-C·0-E·8-F 연결, AI 단계를 별도 격리</dd></dl></div>
     <div class="file"><h4>killcriteria.py <small>532줄 · 첫날 점검</small></h4>
       <p class="one">데이터가 계획대로 쓸 수 있는 상태인지 21개 항목을 판정한다(07장).</p>
       <p class="like">비유: 수술 전 건강검진. 여기서 걸리면 계획을 줄인다.</p>
-      <dl><dt>실행</dt><dd><code>python killcriteria.py --config config/field.json</code> 또는 <code>from killcriteria import run_checks</code></dd>
+      <dl><dt>실행</dt><dd>센터: <code>from killcriteria import run_checks; run_checks("field.txt")</code> · 로컬: <code>python killcriteria.py --config config/mock.json</code></dd>
       <dt>넣는 것</dt><dd>설정 파일(원자료는 일부만 읽음)</dd>
       <dt>나오는 것</dt><dd><code>out/…/kill_criteria/k_kill_criteria</code> 표(통과·경고·실패·오류·해당 없음)</dd></dl></div>
     <div class="file"><h4>mock_data.py <small>403줄 · 연습용</small></h4>
@@ -432,8 +436,8 @@ section[id]{scroll-margin-top:16px}
     <thead><tr><th>파일</th><th>하는 일</th><th>실행</th></tr></thead>
     <tbody>
       <tr><td><code>tools/fetch_holidays.py</code> <span class="pill p-info">신규</span></td><td>특일 정보 API로 공휴일을 받아 유형까지 붙여 <code>config/holidays.yaml</code>에 저장. 서비스키는 환경변수로만</td><td><code>python tools/fetch_holidays.py 2024 2025</code></td></tr>
-      <tr><td><code>tools/make_import_bundle.py</code></td><td>코드 전체를 <code>dist/import/1.py</code> 한 파일로 담고, 새 폴더에 풀어 20개 모듈 import까지 확인</td><td><code>python tools/make_import_bundle.py</code></td></tr>
-      <tr><td><code>tools/check_import_bundle.py</code></td><td>반입 형식·개수(10)·용량(50MB)·파일명(영문·숫자)·이전 반입 이름 중복 점검</td><td><code>python tools/check_import_bundle.py dist/import</code></td></tr>
+      <tr><td><code>tools/make_import_bundle.py</code></td><td>코드 모듈을 파일별로, 설정·달력·README를 .txt로 반입 폴더에 담고 <code>checksums.txt</code>를 쓴 뒤, 새 폴더에 복사해 20개 모듈 import·설정 읽기까지 확인</td><td><code>python tools/make_import_bundle.py [폴더]</code></td></tr>
+      <tr><td><code>tools/check_import_bundle.py</code></td><td>반입 형식·용량(50MB)·파일명(영문·숫자)·이전 반입 이름 중복·<code>checksums.txt</code> 해시 대조</td><td><code>python tools/check_import_bundle.py dist/import</code></td></tr>
       <tr><td><code>tools/build_reference_files.py</code></td><td>공개 법정동 원본으로 참고자료 3종 생성(반입 때 2·3·4.csv로 이름 변경)</td><td>README 참고</td></tr>
       <tr><td><code>tests/</code></td><td>자동 검사 113개(선택 패키지 없는 3개 생략). 정보 누설·분위수 교차·폴백 순서·위험 축이 증설 가정에 안 흔들리는지 등</td><td><code>python -m pytest -q tests</code></td></tr>
     </tbody></table></div>
@@ -505,7 +509,7 @@ cd data-ansim</code></pre></li>
     <li>센터·사무국 답변 받기 — 메모리, 한글 폰트, 소수 셀 기준, 한전 읍면동이 법정동인지, 고객호수 정의, KEPCO_002 실제 기간, lightgbm·scikit-learn 설치 여부</li>
     <li>연구계획서·DSZ 신청서의 분석 지역을 “수도권” → “서울”로, 반입 목록을 1~10번으로 맞추기</li>
     <li>공휴일 달력 받기: <code>$env:DATAGOKR_SERVICE_KEY="…"</code> 후 <code>python tools/fetch_holidays.py 2024 2025</code>, 대체·임시공휴일·선거일이 빠졌는지 확인</li>
-    <li>반입 번들 다시 만들기: <code>python tools/make_import_bundle.py</code> → <code>dist/import/1.py</code>, 해시를 <code>dist/READMEimportlist.md</code>에 갱신</li>
+    <li>반입 폴더 만들기: <code>python tools/make_import_bundle.py &lt;반입 폴더&gt;</code> → 코드 파일별 + <code>checksums.txt</code></li>
     <li>데이터 2~9.csv 준비(특히 9.csv 과거 기온 예보, 8.csv 대응표), 서울로 걸러 용량 줄이기</li>
     <li><code>python tools/check_import_bundle.py &lt;반입 폴더&gt;</code>로 개수·용량·형식·이름 중복 점검</li>
     <li>로컬에서 <code>pytest</code> 통과, 06장 연습 한 번</li>
@@ -514,32 +518,32 @@ cd data-ansim</code></pre></li>
 
   <p class="day">첫날 — 분석이 아니라 “판정”</p>
   <ol class="steps">
-    <li><strong>번들 풀기.</strong> 반입 폴더에서
+    <li><strong>한 폴더에 모으기.</strong> 반입받은 파일(코드·설정 .txt·데이터 2~9.csv)을 모두 <strong>한 폴더</strong>(예: <code>dataansim11</code>)에 두고 그 폴더로 이동한다. 예전 V10 폴더(<code>dataansim/</code>)와 섞지 않는다.
       <span class="env">센터 JupyterLab</span>
-<pre><code>%run 1.py
-%cd dataansim11</code></pre>
-      <code>dataansim11/</code>에 모듈 20개·설정·README가 풀리고 SHA-256으로 검증한다. 예전 V10이 풀린 <code>dataansim/</code>과 섞이지 않는다.</li>
-    <li><strong>데이터 놓기.</strong> <code>dataansim11/data/field/</code>를 만들고 <code>2.csv</code>~<code>9.csv</code>를 넣는다. 센터가 주는 KEPCO·CAN 파일 경로도 확인한다.</li>
-    <li><strong>설정 파일 복사.</strong> <code>config/fieldtemplate.json</code> → <code>config/field.json</code>. 업종 코드 파일은 v11에서 필요 없다.</li>
-    <li><strong>경로 채우기.</strong> <code>field.json</code>의 <code>paths</code>에서 <code>kepco_001</code>·<code>kepco_002</code>·<code>kepco_hourly</code>·<code>can_m</code>을 센터 실제 경로로 바꾼다(2~9.csv는 이미 적혀 있다). 열 이름이 다르면 <code>columns</code>에 그 항목만 적는다.</li>
+<pre><code>%cd dataansim11</code></pre></li>
+    <li><strong>파일 확인.</strong> 일부만 옛 버전이거나 깨진 파일이 없는지 <code>checksums.txt</code>와 대조한다(<code>tools/check_import_bundle.py</code>가 없으면 아래 한 줄).
+<pre><code>import hashlib, pathlib
+[l.split()[1] for l in open("checksums.txt", encoding="utf-8") if hashlib.sha256(pathlib.Path(l.split()[1]).read_bytes()).hexdigest() != l.split()[0]]   # 빈 목록이면 정상</code></pre></li>
+    <li><strong>설정 파일 복사.</strong> <code>fieldtemplate.txt</code> → <code>field.txt</code>. 확장자는 .txt지만 내용은 JSON이다. 업종 코드 파일은 v11에서 필요 없다.</li>
+    <li><strong>경로 채우기.</strong> <code>field.txt</code>의 <code>paths</code>에서 <code>kepco_001</code>·<code>kepco_002</code>·<code>kepco_hourly</code>·<code>can_m</code>을 센터 실제 경로로 바꾼다(2~9.csv·holidays.txt는 같은 폴더 기준으로 이미 적혀 있다). 열 이름이 다르면 <code>columns</code>에 그 항목만 적는다.</li>
     <li><strong>평가 시작일 정하기.</strong> <code>params.energy.evaluation_start</code>가 비어 있으면 8-A가 멈춘다. 이 날짜부터 28일을 평가하고, 그 앞 약 9개월(학습 182일 + 검증 8주 + 4주)의 시간별 기록이 있어야 AI가 제대로 학습한다. 연말(12/24~1/1)·설 연휴에 걸치면 경고가 뜬다.</li>
     <li><strong>첫날 점검 실행.</strong>
       <span class="env">센터 JupyterLab</span>
 <pre><code>from killcriteria import run_checks
-run_checks("config/field.json")</code></pre>
-      결과는 <code>out/field/kill_criteria/</code>에 저장된다.</li>
+run_checks("field.txt")</code></pre>
+      결과는 <code>out/kill_criteria/</code>에 저장된다.</li>
     <li><strong>판정으로 계획 조정.</strong> 07장 표의 “걸리면” 칸대로. 특히 5번(행정동 의심), 17번(AI 라이브러리), 19번(기온 예보). 판정 표는 반출 신청용으로 남긴다.</li>
   </ol>
 
   <p class="day">둘째 날 이후 — 본 분석</p>
   <span class="env">센터 JupyterLab</span>
 <pre><code>from pipeline import run
-summary = run("config/field.json")
+summary = run("field.txt")
 summary["stages"]</code></pre>
   <ul>
-    <li><code>out/field/csv/s0_run_summary.csv</code>에서 단계별 완료·생략·실패와 비고(사용 모델·기온 모드·AI 판정)를 먼저 본다.</li>
+    <li><code>out/csv/s0_run_summary.csv</code>에서 단계별 완료·생략·실패와 비고(사용 모델·기온 모드·AI 판정)를 먼저 본다.</li>
     <li>분석 뒤 <code>run_checks</code>를 한 번 더 돌려 18·21번 판정을 받는다.</li>
-    <li>반출 신청은 <code>out/field/png/</code>의 그림과 <code>s9_manifest</code>(파일 목록)로 한다.</li>
+    <li>반출 신청은 <code>out/png/</code>의 그림과 <code>s9_manifest</code>(파일 목록)로 한다.</li>
     <li>지도가 필요하면 센터 안 태블로에서 CSV(<code>bjd_code</code> 키)를 경계와 결합한다. 반출 그림에도 소표본 억제·좌표 비반출 규칙을 똑같이 적용한다.</li>
     <li>메모리가 부족하면 <code>params.kepco.chunksize</code>를 줄인다(시도 필터는 이미 서울로 걸려 있다).</li>
   </ul>
@@ -550,7 +554,7 @@ summary["stages"]</code></pre>
 <section class="ch" id="s09">
   <p class="chno">09</p>
   <h2>설정값 바꾸는 법</h2>
-  <p>모든 설정은 <code>config/field.json</code> 한 파일에서 바꾼다. 코드는 건드리지 않는다. JSON에 적지 않은 값은 <code>config.py</code>의 기본값을 쓴다. 경로는 <code>field.json</code>이 있는 <code>config/</code> 폴더 기준 상대경로다. 전체 목록은 README “새 설정 키” 표.</p>
+  <p>모든 설정은 센터에서는 <code>field.txt</code>(로컬 저장소에서는 <code>config/field.json</code>) 한 파일에서 바꾼다. 코드는 건드리지 않는다. 적지 않은 값은 <code>config.py</code>의 기본값을 쓴다. 경로는 설정 파일이 있는 폴더 기준 상대경로다. 전체 목록은 README “새 설정 키” 표.</p>
   <div class="tbl"><table>
     <thead><tr><th>이럴 때</th><th>바꿀 곳</th><th>값</th></tr></thead>
     <tbody>
@@ -568,10 +572,10 @@ summary["stages"]</code></pre>
       <tr><td>한전 읍면동이 행정동이면</td><td><code>params.analysis_level</code></td><td><code>"sigungu"</code>(서울 25개 자치구, 8-C·8-E 생략)</td></tr>
       <tr><td>시나리오 기준월을 2026-08로 옮기면</td><td><code>params.scenario.base_month</code> · <code>national_base</code> · <code>seoul_base</code></td><td>세 값과 전기차 기준월을 함께 바꾼다</td></tr>
       <tr><td>상권 단계를 다시 켜려면(비교용)</td><td><code>params.stages.commerce</code></td><td><code>true</code> + SHC 경로·업종코드 필요</td></tr>
-      <tr><td>폰트를 반입했으면</td><td><code>paths.font</code></td><td><code>"../data/field/10.ttf"</code></td></tr>
+      <tr><td>폰트를 반입했으면</td><td><code>paths.font</code></td><td><code>"10.ttf"</code></td></tr>
     </tbody></table></div>
-  <span class="env">config/field.json 일부 — 예시</span>
-<pre><code>"paths":  { ..., "font": "../data/field/10.ttf" },
+  <span class="env">field.txt 일부 — 예시</span>
+<pre><code>"paths":  { ..., "font": "10.ttf" },
 "params": {
   "energy":   { "enabled": true, "evaluation_start": "2025-12-04", "evaluation_days": 28 },
   "priority": { "enabled": true, "weights": {"risk": 0.5, "equity": 0.5} },
@@ -620,7 +624,7 @@ summary["stages"]</code></pre>
       <tr><td class="num">1</td><td>과거 기온 예보(9.csv)·행정동→법정동 대응표(8.csv) 미확보</td><td>예보 없으면 기온 없는 모델, 대응표 없으면 8-C·8-F 불가</td><td><span class="pill p-must">준비 필요</span></td></tr>
       <tr><td class="num">2</td><td>공휴일 달력이 빈 자리표시자</td><td>공휴일 미보정으로 돌아감</td><td><span class="pill p-must">준비 필요</span> fetch_holidays 후 번들 재생성</td></tr>
       <tr><td class="num">3</td><td>연구계획서·DSZ 신청서의 분석 지역·반입 목록이 v11과 다름</td><td>심사 때 앞뒤가 안 맞아 보임</td><td><span class="pill p-opt">서류 수정</span></td></tr>
-      <tr><td class="num">4</td><td>반입 10개 한도에 딱 맞음</td><td>경계 도형·공동주택 자료를 넣을 자리가 없음</td><td><span class="pill p-opt">결정 필요</span> 무엇을 뺄지</td></tr>
+      <tr><td class="num">4</td><td>경계 도형·공동주택 자료 추가 반입 여부</td><td>지도·지표 3 후속 작업</td><td><span class="pill p-opt">결정 필요</span> 개수 제한은 없음, 총 50MB</td></tr>
       <tr><td class="num">5</td><td>안심구역에 lightgbm·scikit-learn이 있는지 미확인</td><td>둘 다 없으면 AI 미실행</td><td><span class="pill p-info">문의 중</span></td></tr>
       <tr><td class="num">6</td><td>한전 읍면동이 법정동인지 행정동인지 미확인</td><td>행정동이면 자치구 단위로만 분석, 8-C·8-E 생략</td><td><span class="pill p-info">문의 중</span></td></tr>
       <tr><td class="num">7</td><td>고객호수 정의·센터 소수 셀 기준 미확인</td><td>반출 그림이 얼마나 가려질지 모름</td><td><span class="pill p-info">문의 중</span></td></tr>

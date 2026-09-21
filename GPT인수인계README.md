@@ -32,7 +32,7 @@
 | 로컬 작업 폴더 | `C:\Users\verty\OneDrive\바탕 화면\dataansim-v11.3` |
 | 설계 문서 | `docs/1_팀공유_전체설계_V11.4_20260921.html` (V11.3 설계 + 구현 확정 사항 + 8절 구현 결과) |
 | 팀 안내서 | `0_로드맵북_센터가기전_필독_v11.html` (코드 파일별 역할·작동법·센터 절차) |
-| 반입 번들 | `dist/import/1.py`(425KB, 저장소 밖 `dist/`는 gitignore). 목록·해시 `dist/READMEimportlist.md` |
+| 반입 폴더 | 코드 파일을 따로 반입(모듈 20개 + `fieldtemplate.txt`·`holidays.txt`·`requirements.txt`·`README.txt`·`checksums.txt`) + 데이터 `5.csv`·`9.csv`. 만들기 `python tools/make_import_bundle.py [폴더]`. 로컬 사본 `다운로드\반입v11\upload` |
 | 삭제한 것 | V9·V10 설계, 로드맵북 v10, V11.3 설계, 연구계획서 0917·0919(git 기록엔 남음), 이전 반입 폴더(휴지통) |
 
 ---
@@ -70,7 +70,7 @@
 | `identification.py`·`diagnostics.py`·`heterogeneity.py`·`kep007loader.py` | 상권 | 보존만(`stages.commerce=true`일 때만) |
 | `mock_data.py` | 연습 | `--energy`(기온·공휴일·이력·대응표), `--with-shc`(상권 회귀용) |
 | `tools/fetch_holidays.py` | 준비 | 특일 정보 API → `config/holidays.yaml`(서비스키 환경변수 `DATAGOKR_SERVICE_KEY`) |
-| `tools/make_import_bundle.py` | 반입 | `dist/import/1.py` 생성·풀어서 20개 모듈 import 검증 |
+| `tools/make_import_bundle.py` | 반입 | 코드를 파일별로 반입 폴더에 담고 설정·달력·README를 .txt로, `checksums.txt` 작성, 새 폴더에서 import·설정 읽기 검증 |
 | `tools/check_import_bundle.py` | 반입 | 형식·개수·용량·파일명·이전 반입 이름 중복 점검 |
 
 ## 5. 핵심 정의 (코드와 일치)
@@ -105,11 +105,11 @@
 
 ## 7. 반입·반출 규칙
 
-**반입(포털 규칙):** `.py`·`.csv`·`.txt`·폰트만(zip·json·md 불가), 파일명 영문·숫자만, 최대 10개·50MB. **이전 반입 이름(`dataansimbundle.py`, `dataansimcodev10.zip`, `bjdmaster.csv`, `bjdcrosswalk.csv`, `bjdcentroids.csv`, `smp.csv`, `evstations.csv`, `evregistration.csv`, `koreanfont.ttf`)과 겹치면 안 된다.**
+**반입(포털 규칙):** `.py`·`.csv`·`.txt`·폰트만(zip·json·md 불가), 파일명 영문·숫자만, 총 50MB(파일 개수 제한 없음). **이전 반입 이름(`dataansimbundle.py`, `dataansimcodev10.zip`, `bjdmaster.csv`, `bjdcrosswalk.csv`, `bjdcentroids.csv`, `smp.csv`, `evstations.csv`, `evregistration.csv`, `koreanfont.ttf`)과 겹치면 안 된다.**
 
 | 이름 | 내용 |
 |---|---|
-| `1.py` | 코드 번들(`%run 1.py` → `dataansim11/`에 풀림) |
+| 모듈 20개 `*.py` + `fieldtemplate.txt`·`holidays.txt`·`requirements.txt`·`README.txt`·`checksums.txt` | 코드·설정(내용은 JSON, 확장자만 .txt). 센터에서 한 폴더에 평평하게 둠 |
 | `2.csv`·`3.csv`·`4.csv` | 법정동코드 마스터·코드대응·중심점 |
 | `5.csv`·`6.csv` | SMP(`timestamp,smp`)·공용 충전소 위치 |
 | `7.csv`·`8.csv` | 행정동별 전기차 등록 월별 이력(OA-21236)·행정동→법정동 대응표(가중치) |
@@ -134,10 +134,10 @@ py -3 -m venv .venv
 .venv\Scripts\python.exe pipeline.py --config config/mock.json
 .venv\Scripts\python.exe killcriteria.py --config config/mock.json   # 18·21번은 분석 뒤 판정
 .venv\Scripts\python.exe -m pytest -q tests                         # 113 passed, 3 skipped 기대
-.venv\Scripts\python.exe tools/make_import_bundle.py                # dist/import/1.py
+.venv\Scripts\python.exe tools/make_import_bundle.py                # dist/import 에 파일별 반입 폴더
 .venv\Scripts\python.exe tools/check_import_bundle.py dist/import
 ```
-센터: `%run 1.py` → `%cd dataansim11` → `config/fieldtemplate.json`을 `config/field.json`으로 복사·경로와 `evaluation_start` 입력 → `from killcriteria import run_checks; run_checks("config/field.json")` → `from pipeline import run; run("config/field.json")`.
+센터: 반입 파일을 모두 한 폴더(예: `dataansim11`)에 두고 `%cd` → `fieldtemplate.txt`를 `field.txt`로 복사·KEPCO·CAN 경로와 `evaluation_start` 입력 → `from killcriteria import run_checks; run_checks("field.txt")` → `from pipeline import run; run("field.txt")`. 해시 확인은 `checksums.txt`.
 
 ## 10. mock 결과 (seed 42, 동작 확인용 — 성능 근거 아님)
 
@@ -151,7 +151,7 @@ py -3 -m venv .venv
 
 1. **데이터 준비:** 완료 = `5.csv` SMP(EPSIS)·`9.csv` 기온(Open-Meteo: KMA 예보모델 48시간 전 값·ERA5 실측 — 기상청 ASOS 원자료 아님)·공휴일 달력(`tools/fetch_public_inputs.py`). 남음 = `2~4.csv`(원본 `data/ref/` 없음), `6.csv` 충전소, `7.csv` 등록 이력, `8.csv` 대응표.
 2. **서류:** 연구계획서·DSZ 신청서의 분석 지역 "수도권→서울", 반입 목록 1~10번으로 수정.
-3. **결정:** 숫자 3 헤드라인 문구·`risk_threshold`, KEPCO_002 유지 여부, 반입 한도(경계 도형·공동주택 추가 시 무엇을 뺄지), 기준월 2026-08 이동 여부(`national_base`·`seoul_base` 통계누리 대조).
+3. **결정:** 숫자 3 헤드라인 문구·`risk_threshold`, KEPCO_002 유지 여부, 경계 도형·공동주택 자료 추가 반입 여부, 기준월 2026-08 이동 여부(`national_base`·`seoul_base` 통계누리 대조).
 4. **센터 문의:** lightgbm·sklearn 설치 여부, 한전 읍면동이 법정동인지, 고객호수 정의·소수 셀 기준, KEPCO_002 실제 기간, 메모리·폰트.
 5. **미구현(후속):** 지표 3(자가충전 제약 주거 비율), 300/500m 커버리지(8-D), MCLP, DEM 경사 보정, 실제 GIS 지도(안심구역 태블로로 CSV와 경계 결합하는 경로 검토 — 반출 그림에도 억제·좌표 규칙 적용).
 

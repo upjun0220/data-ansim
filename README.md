@@ -165,12 +165,15 @@
 - `5.csv` = 전력거래소 EPSIS 시간별 SMP(육지). EPSIS "1시"(00~01시 구간)를 시간 시작 시각 00:00으로 바꿔 저장한다. 주말·휴일 한낮의 0원은 실제 가격(태양광 과잉)이다.
 - `9.csv` = Open-Meteo(키 없음, CC BY 4.0), 서울 ASOS 108 지점 좌표 한 점. 예보는 **기상청(KMA) 예보모델이 대상 시각 48시간 전에 낸 값**이고 `fcst_issued_at = timestamp − 48h`로 둬 전날 18시 마감을 항상 지킨다. 예보 보관은 2025-02-28부터라 그 전 예보 칸은 비어 있다. 실측은 **ERA5 재분석(기상청 ASOS 아님)**이며 `observed` 참고 모델에만 쓴다. 설계서의 1순위 출처(기상청 ASOS·동네예보 과거자료)는 로그인·API 키가 필요해, 팀이 확보하면 같은 열로 바꿔 넣는다.
 
-**파일명은 이전 반입(2026-09-21 V10: `dataansimbundle.py`·`bjdmaster.csv` 등)과 겹치지 않게 숫자로 매긴다.**
+**데이터 파일명은 이전 반입(2026-09-21 V10: `dataansimbundle.py`·`bjdmaster.csv` 등)과 겹치지 않게 숫자로 매긴다.** 코드 모듈은 원래 이름(이전에는 번들 안에만 있었음).
 `tools/check_import_bundle.py`가 이전 이름과 겹치면 위반으로 잡는다.
 
 | 반입 이름 | 내용 | 설정 경로 |
 |---|---|---|
-| `1.py` | 코드 번들(모듈 20개·설정 템플릿·`config/holidays.yaml`·README). `%run 1.py` → `dataansim11/`에 풀림(V10의 `dataansim/`과 분리) | — |
+| 코드 모듈 20개(`pipeline.py` 등) | 원래 이름 그대로 따로 반입 | — |
+| `fieldtemplate.txt` | 한 폴더용 설정 원본(내용은 JSON). 센터에서 `field.txt`로 복사해 KEPCO·CAN 경로와 평가 시작일을 채움 | — |
+| `holidays.txt` · `requirements.txt` · `README.txt` | 공휴일 달력(내용 JSON) · 패키지 목록 · 이 README | `paths.holidays` |
+| `checksums.txt` | 위 파일들의 SHA-256. 일부만 옛 버전이거나 깨지면 `check_import_bundle.py`가 잡음 | — |
 | `2.csv` | 법정동코드 마스터(`build_reference_files.py`의 bjdmaster) | `paths.bjd_master` |
 | `3.csv` | 법정동 코드대응(bjdcrosswalk) | `paths.bjd_crosswalk` |
 | `4.csv` | 법정동 중심점(bjdcentroids) | `paths.emd_centroids` |
@@ -181,9 +184,9 @@
 | `9.csv` | 기온 실측·과거 예보 | `paths.weather` |
 | `10.ttf` | 한글 폰트(서버에 없을 때만) | `paths.font` |
 
-번들 1 + 데이터 8 = **9개, 폰트 허용 시 10개(한도)**. `python tools/make_import_bundle.py`가 `dist/import/1.py`를 만든다.
+**코드는 파일마다 따로 반입한다**(알아보기 쉽고 반입 심사에 유리). 반입 포털이 json·yaml·md를 받지 않아 설정·달력·README는 내용 그대로 `.txt`로 담는다(코드는 확장자가 아니라 내용으로 읽는다). 올린 파일은 센터에서 **한 폴더에 평평하게** 두고, 그 폴더에서 `run_checks("field.txt")`·`run("field.txt")`를 부른다. 파일 개수 제한은 없다("최대 10개"는 확인 결과 규정이 아님), 총 50MB. `python tools/make_import_bundle.py [폴더]`가 이 구성을 만들고 새 폴더에 복사해 해시·20개 모듈 import·설정 읽기를 확인한다.
 SHC 파일은 기대하지 않는다. 8-C 전기차 대수는 `evhistory`+`hdongbjd`의 기준월 값을 써서 `evregistration.csv`를 따로 반입하지 않는다.
-공동주택(선택)은 지표 3 구현 때 다시 센다(지금 넣으면 한도 초과). 새 파일명은 반입 규칙(영문·숫자만)을 따른다.
+새 파일명은 반입 규칙(영문·숫자만)을 따른다. 데이터는 이전 반입 이름과 겹치지 않게 숫자(2~9.csv, 10.ttf)로 둔다.
 
 **공휴일 달력:** `python tools/fetch_holidays.py 2024 2025`(인터넷 되는 곳, 서비스키 환경변수 `DATAGOKR_SERVICE_KEY`) →
 `config/holidays.yaml`. PyYAML이 없을 수 있어 **JSON 문법**(= 유효한 YAML)으로 저장한다. 휴일을 규칙으로 만들지 않으며, 대체·임시공휴일·
@@ -214,7 +217,7 @@ lightgbm 실경로는 설치 환경에서만 검증된다(테스트는 `importor
 1. 숫자 3 헤드라인 문구, `headline.risk_threshold`(0.1).
 2. KEPCO_002 유지 여부 — `s1_channel_share`·킬 7·16으로 판단(mock은 002 ⊆ 001).
 3. `scenario.national_base`·`seoul_base`를 통계누리 원자료로 대조(기준월 2026-08로 옮길지).
-4. 반입 한도: 폰트까지 10개로 딱 맞다. 공동주택 자료·경계 도형을 추가하려면 무엇을 뺄지.
+4. 반입 자료 범위: 경계 도형·공동주택 자료를 추가로 가져갈지(개수 제한은 없음, 총 50MB).
 5. 설계 문서 3-2절의 "현재 기본 결합 시나리오는 공용 완속충전기 3대 증설" 문장은 v11.3(증설 0대)과 어긋나므로 문서 수정 필요.
 6. 8-A 동네 특성: 설계서의 "교정기간 평균 부하"를 누설 방지를 위해 "학습기간 평균 부하"로 바꿨다.
 
