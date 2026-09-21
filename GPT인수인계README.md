@@ -116,7 +116,7 @@
 | `9.csv` | 기온 `timestamp,station_or_grid,temp_obs_c,temp_fcst_c,fcst_issued_at` |
 | `10.ttf` | 한글 폰트(없을 때만) |
 
-공휴일 달력 `config/holidays.yaml`은 번들 안에 들어간다(JSON 문법 = 유효한 YAML, PyYAML 불필요). 지금은 빈 자리표시자.
+공휴일 달력 `config/holidays.yaml`은 번들 안에 들어간다(JSON 문법 = 유효한 YAML, PyYAML 불필요). 2024~2025 공휴일 38일(대체·임시·선거일 포함, Nager.Date·정부 발표 대조)이 들어 있다.
 
 **반출(코드로 강제, 약하게 만들지 말 것):** 위도·경도·좌표 열이 든 표는 저장 거부(`OutputWriter`). 법정동 행은 대표 고객호수 < `min_cell_count`면 PNG에서 `—`. 법정동 열이 없는 합계·요약표는 소표본 법정동을 **빼고 다시 계산**해 PNG에 싣는다(차감 역산 방지). 새 표를 만들 때도 같은 규칙. **`png_df=None`을 넘기면 원본이 그대로 PNG로 나가므로, 억제 후 비면 빈 표를 넘긴다.**
 
@@ -149,7 +149,7 @@ py -3 -m venv .venv
 
 ## 11. 남은 일 · 팀 결정 대기
 
-1. **데이터 준비:** `9.csv` 과거 기온 예보(발표 시각 포함), `8.csv` 행정동→법정동 대응표, 공휴일 달력(`fetch_holidays.py` 실행 후 번들 재생성 → 해시 갱신).
+1. **데이터 준비:** 완료 = `5.csv` SMP(EPSIS)·`9.csv` 기온(Open-Meteo: KMA 예보모델 48시간 전 값·ERA5 실측 — 기상청 ASOS 원자료 아님)·공휴일 달력(`tools/fetch_public_inputs.py`). 남음 = `2~4.csv`(원본 `data/ref/` 없음), `6.csv` 충전소, `7.csv` 등록 이력, `8.csv` 대응표.
 2. **서류:** 연구계획서·DSZ 신청서의 분석 지역 "수도권→서울", 반입 목록 1~10번으로 수정.
 3. **결정:** 숫자 3 헤드라인 문구·`risk_threshold`, KEPCO_002 유지 여부, 반입 한도(경계 도형·공동주택 추가 시 무엇을 뺄지), 기준월 2026-08 이동 여부(`national_base`·`seoul_base` 통계누리 대조).
 4. **센터 문의:** lightgbm·sklearn 설치 여부, 한전 읍면동이 법정동인지, 고객호수 정의·소수 셀 기준, KEPCO_002 실제 기간, 메모리·폰트.

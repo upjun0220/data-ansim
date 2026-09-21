@@ -161,6 +161,10 @@
 
 ### 반입 묶음 (v11)
 
+**5.csv·9.csv 받기:** `python tools/fetch_public_inputs.py 2024-01-01 2025-12-31 --out dist/import`(인터넷 되는 곳).
+- `5.csv` = 전력거래소 EPSIS 시간별 SMP(육지). EPSIS "1시"(00~01시 구간)를 시간 시작 시각 00:00으로 바꿔 저장한다. 주말·휴일 한낮의 0원은 실제 가격(태양광 과잉)이다.
+- `9.csv` = Open-Meteo(키 없음, CC BY 4.0), 서울 ASOS 108 지점 좌표 한 점. 예보는 **기상청(KMA) 예보모델이 대상 시각 48시간 전에 낸 값**이고 `fcst_issued_at = timestamp − 48h`로 둬 전날 18시 마감을 항상 지킨다. 예보 보관은 2025-02-28부터라 그 전 예보 칸은 비어 있다. 실측은 **ERA5 재분석(기상청 ASOS 아님)**이며 `observed` 참고 모델에만 쓴다. 설계서의 1순위 출처(기상청 ASOS·동네예보 과거자료)는 로그인·API 키가 필요해, 팀이 확보하면 같은 열로 바꿔 넣는다.
+
 **파일명은 이전 반입(2026-09-21 V10: `dataansimbundle.py`·`bjdmaster.csv` 등)과 겹치지 않게 숫자로 매긴다.**
 `tools/check_import_bundle.py`가 이전 이름과 겹치면 위반으로 잡는다.
 
@@ -183,7 +187,7 @@ SHC 파일은 기대하지 않는다. 8-C 전기차 대수는 `evhistory`+`hdong
 
 **공휴일 달력:** `python tools/fetch_holidays.py 2024 2025`(인터넷 되는 곳, 서비스키 환경변수 `DATAGOKR_SERVICE_KEY`) →
 `config/holidays.yaml`. PyYAML이 없을 수 있어 **JSON 문법**(= 유효한 YAML)으로 저장한다. 휴일을 규칙으로 만들지 않으며, 대체·임시공휴일·
-선거일 누락은 관보로 보완해 `source`에 적는다. 저장소의 `config/holidays.yaml`은 빈 자리표시자다.
+선거일 누락은 관보로 보완해 `source`에 적는다. `config/holidays.yaml`에는 2024~2025 관공서 공휴일 38일(대체·임시공휴일·선거일 포함, Nager.Date API·정부 발표·언론 보도로 대조)과 유형이 들어 있다. 특일 정보 API 키가 생기면 `fetch_holidays.py`로 다시 대조한다.
 
 ### mock 실행 결과 (2026-09-21, seed 42) — 동작 확인용이며 성능 근거가 아니다
 
