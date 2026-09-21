@@ -1,4 +1,4 @@
-"""8-E 단계 — 안전·형평성·운영비 절감 잠재력의 재현 가능한 결합 점수."""
+"""8-E 단계 — 재현 가능한 결합 점수. v11 기본은 급증위험·형평성 두 축(build_priority_v11), 세 축(안전·형평성·경제성)은 레거시 비교용."""
 from __future__ import annotations
 
 import itertools
@@ -169,3 +169,146 @@ def seasonal_coverage(hourly):
     required = {"봄", "여름", "가을", "겨울"}
     return {"season_count": len(present), "season_status": "검증 가능" if present == required else "보류",
             "missing_seasons": ",".join(sorted(required - present))}
+
+
+# ================================================================ v11 두 축(급증위험·형평성)
+
+AXES_V11 = ("risk", "equity")
+LEGACY_AXES = list(AXES)
+
+
+def validate_weights_v11(weights, axes=AXES_V11):
+    """{"risk": w, "equity": w}(또는 같은 순서의 목록). 유한·음수 없음·합 1(허용오차 1e-6)이어야 한다(킬 14번)."""
+    w = np.asarray([weights[a] for a in axes] if isinstance(weights, dict) else weights, dtype=float)
+    if w.shape != (len(axes),) or not np.isfinite(w).all() or (w < 0).any():
+        raise ValueError(f"가중치는 {list(axes)} 순의 유한한 비음수 {len(axes)}개 값이어야 함")
+    if not np.isclose(w.sum(), 1.0, atol=1e-6):
+        raise ValueError(f"가중치 합이 1이 아님: {w.sum():.6f}")
+    return w
+
+
+def risk_axis(risk, multiplier):
+    """8-A s8a_risk 에서 기준 상한 배율의 위험 원값(증설 0대 — 증설 가정 ΔL 은 들어가지 않는다)."""
+    r = risk[np.isclose(risk["multiplier"].astype(float), float(multiplier))].copy()
+    if r.empty:
+        raise ValueError(f"8-A 급증 위험에 상한 배율 {multiplier} 결과 없음")
+    keep = ["bjd_code", "status", "surge_risk", "peak_ratio", "precision_ai", "recall_ai"] + \
+        [c for c in r if c.startswith("surge_risk_with_new_")]
+    r = r[[c for c in keep if c in r]].rename(columns={"status": "risk_status"})
+    r["bjd_code"] = r["bjd_code"].astype(str)
+    return r
+
+
+def choose_risk_metric(axis, metric="auto", pool=None, zero_share=0.5):
+    """auto: 순위 대상(pool) 중 zero_share 이상에서 surge_risk=0 이면 peak_ratio 로 바꾼다(킬 21번)."""
+    if metric not in ("auto", "surge_risk", "peak_ratio"):
+        raise ValueError(f"priority.risk_metric 은 auto|surge_risk|peak_ratio — 받은 값: {metric!r}")
+    a = axis[axis["risk_status"] == "assessed"]
+    if pool is not None:
+        a = a[a["bjd_code"].isin(pool)]
+    share = float((a["surge_risk"] == 0).mean()) if len(a) else np.nan
+    if metric != "auto":
+        return metric, share
+    return ("peak_ratio" if np.isfinite(share) and share >= zero_share else "surge_risk"), share
+
+
+def combine_two_axes(axis, access, weights, metric, min_axes=2, forecast_metrics=None):
+    """두 축 정규화·가중합. 결측 축은 0점이 아니라 남은 가중치로 재정규화하고, 순위 대상은 유효 축 min_axes 개 이상.
+
+    결측 사유: not_assessed_low_load(교정기간 최대 부하가 너무 작아 배율 상한이 무의미 — 값이 없는 것이 아니라
+    재지 않은 것), data_missing(대상인데 값 없음). 신뢰도는 표시용이며 점수를 깎지 않는다(3-7절).
+    """
+    w = validate_weights_v11(weights)
+    acc = access[["bjd_code", "access_2sfca", "access_data_present"]].assign(bjd_code=lambda d: d["bjd_code"].astype(str))
+    df = axis.merge(acc, on="bjd_code", how="outer")
+    df["risk_raw"] = pd.to_numeric(df[metric], errors="coerce").where(df["risk_status"] == "assessed")
+    df["risk_norm"] = normalize(df["risk_raw"])
+    df["equity_norm"] = normalize(df["access_2sfca"], reverse=True)
+    values = df[["risk_norm", "equity_norm"]].to_numpy(float)
+    valid = np.isfinite(values)
+    denom = (valid * w).sum(axis=1)
+    df["PriorityScore"] = np.divide(np.nansum(values * w, axis=1), denom, out=np.full(len(df), np.nan), where=denom > 0)
+    df["axes_present"] = valid.sum(axis=1)
+    df["missing_axes"] = [",".join(a for a, ok in zip(AXES_V11, row) if not ok) for row in valid]
+    reason = np.where(valid.all(axis=1), "", "data_missing")
+    low = (df["risk_status"] == "not_assessed_low_load").to_numpy()
+    df["missing_reason"] = np.where(~valid[:, 0] & low, "not_assessed_low_load", reason)
+    df["rank_eligible"] = (df["axes_present"] >= int(min_axes)) & df["PriorityScore"].notna()
+    parts = {"complete": df["axes_present"] / len(AXES_V11),
+             "access_match": df["access_data_present"].astype("boolean").fillna(False).astype(float)}
+    if forecast_metrics is not None and len(forecast_metrics):
+        fm = forecast_metrics[forecast_metrics["bjd_code"].astype(str) != ""]
+        fm = fm[~fm.get("reference_only", pd.Series(False, index=fm.index)).astype(bool)]
+        fm = fm.set_index(fm["bjd_code"].astype(str))
+        parts["forecast"] = df["bjd_code"].map(fm["ai_beats_baseline"]).astype(float)
+        parts["p90"] = df["bjd_code"].map(fm["p90_conservative_enough"]).astype(float)
+    df["confidence"] = pd.DataFrame(parts).mean(axis=1, skipna=True)
+    df["risk_metric"] = metric
+    return df
+
+
+def run_sensitivity_v11(risk, access, params, metric):
+    """상한 배율 × w_risk ∈ [중심 ± weight_delta](7단계) 격자. 상위군·강건 판정은 순위 대상 안에서만."""
+    center = validate_weights_v11(params["weights"])[0]
+    delta = float(params["weight_delta"])
+    grid = np.linspace(max(0.0, center - delta), min(1.0, center + delta), 7)
+    runs = []
+    for m in params["multipliers"]:
+        try:
+            axis = risk_axis(risk, m)
+        except ValueError:
+            continue
+        for wr in grid:
+            score = combine_two_axes(axis, access, [wr, 1 - wr], metric, int(params["min_axes"]))
+            score = score.loc[score["rank_eligible"], ["bjd_code", "PriorityScore"]]
+            if score.empty:
+                continue
+            n_top = max(1, int(np.ceil(len(score) * float(params["top_share"]))))
+            top = set(score.sort_values(["PriorityScore", "bjd_code"], ascending=[False, True]).head(n_top)["bjd_code"])
+            runs.extend({"bjd_code": c, "top": c in top} for c in score["bjd_code"])
+    if not runs:
+        raise ValueError("민감도 조합을 계산할 수 없음")
+    summary = pd.DataFrame(runs).groupby("bjd_code", as_index=False).agg(
+        sensitivity_runs=("top", "size"), top_rate=("top", "mean"))
+    summary["robust_top"] = summary["top_rate"] >= float(params["robust_share"])
+    summary["boundary"] = summary["top_rate"].between(0, 1, inclusive="neither")
+    return summary
+
+
+def display_columns(energy_results, params):
+    """점수에 넣지 않는 표시용: 경제성(SMP 비용 차이), ESS 미적용 초과 kWh(기준 시나리오, 예측 운전)."""
+    if energy_results is None:
+        return None
+    base = energy_results[(energy_results["mode"] == "forecast")
+                          & (energy_results["new_chargers"] == int(params["scenario_new_chargers"]))
+                          & np.isclose(energy_results["multiplier"], float(params["base_multiplier"]))]
+    if base.empty:
+        return None
+    return base.groupby("bjd_code", as_index=False).agg(
+        economy_smp_cost_diff_won=("energy_cost_difference_won", "mean"),
+        ess_baseline_exceedance_kwh=("baseline_exceedance_kwh", "mean")).assign(bjd_code=lambda d: d["bjd_code"].astype(str))
+
+
+def build_priority_v11(risk, access, params, energy_results=None, forecast_metrics=None):
+    """v11 기본 결합 점수(급증위험·형평성). attrs: axes_correlation, risk_metric_used, share_zero_surge_risk."""
+    min_axes = int(params["min_axes"])
+    base_axis = risk_axis(risk, params["base_multiplier"])
+    pool = set(base_axis.loc[base_axis["risk_status"] == "assessed", "bjd_code"]) & \
+        set(access.loc[access["access_2sfca"].notna(), "bjd_code"].astype(str))
+    metric, share = choose_risk_metric(base_axis, params["risk_metric"], pool)
+    out = combine_two_axes(base_axis, access, params["weights"], metric, min_axes, forecast_metrics)
+    out = out.merge(run_sensitivity_v11(risk, access, params, metric), on="bjd_code", how="left")
+    for col in ("robust_top", "boundary"):
+        out[col] = out[col].astype("boolean").fillna(False).astype(bool)
+    shown = display_columns(energy_results, params)
+    if shown is not None:
+        out = out.merge(shown, on="bjd_code", how="left")
+    out = out.sort_values(["rank_eligible", "PriorityScore", "bjd_code"], ascending=[False, False, True]).reset_index(drop=True)
+    out["rank"] = np.where(out["rank_eligible"], np.arange(1, len(out) + 1), np.nan)
+    pair = out.loc[out["rank_eligible"], ["risk_norm", "equity_norm"]].dropna()
+    corr = {"n": len(pair), "pearson": np.nan, "spearman": np.nan}
+    if len(pair) >= 3 and pair.nunique().min() >= 2:
+        corr.update(pearson=float(pair["risk_norm"].corr(pair["equity_norm"])),
+                    spearman=float(pair["risk_norm"].corr(pair["equity_norm"], method="spearman")))
+    out.attrs.update(axes_correlation=corr, risk_metric_used=metric, share_zero_surge_risk=share)
+    return out

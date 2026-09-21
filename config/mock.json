@@ -1,5 +1,5 @@
 {
-  "_설명": "mock 데이터 실행용. 상대경로는 이 파일 위치 기준.",
+  "_설명": "mock 데이터 실행용. 상대경로는 이 파일 위치 기준. v11: 상권 단계 비활성(SHC·업종코드 없음). 상권 회귀는 mock_data.py --with-shc 후 params.stages.commerce=true 와 shc001·shc002·industry_codes 경로를 넣는다. 8-C 전기차 대수는 ev_history+hdong_bjd 의 기준월 값(현장 반입 구성과 같음).",
   "paths": {
     "bjd_master": "../data/mock/bjd_master.txt",
     "emd_centroids": "../data/mock/bjd_centroids.csv",
@@ -7,21 +7,30 @@
     "kepco_002": "../data/mock/kepco_002.csv",
     "kepco_hourly": "../data/mock/kepco_001_hourly.csv",
     "smp": "../data/mock/smp_mock.csv",
+    "weather": "../data/mock/weather_mock.csv",
+    "holidays": "../data/mock/holidays.yaml",
     "access_stations": "../data/mock/access_stations.csv",
-    "ev_registration": "../data/mock/ev_registration.csv",
     "font": null,
-    "shc001": "../data/mock/shc001.csv",
-    "shc002": "../data/mock/shc002.csv",
     "can_m": "../data/mock/can_m_individual.csv",
     "kep007": "../data/mock/kep007.csv",
-    "industry_codes": "industry_codes_mock.json",
-    "out_dir": "../out/mock"
+    "out_dir": "../out/mock",
+    "ev_history": "../data/mock/ev_history.csv",
+    "hdong_bjd": "../data/mock/hdong_bjd.csv"
   },
   "params": {
-    "kepco": {"source": "002"},
-    "identification": {"n_boot": 199},
-    "energy": {"enabled": true},
-    "priority": {"enabled": true},
-    "kill": {"sample_rows": 500000, "compare_rows": 200000}
+    "energy": {
+      "enabled": true
+    },
+    "priority": {
+      "enabled": true
+    },
+    "kill": {
+      "sample_rows": 500000,
+      "compare_rows": 200000
+    },
+    "scenario": {
+      "seoul_base": null,
+      "_seoul_base": "mock 합계는 서울 실제 규모가 아니어서 5% 점검을 끈다(현장 설정은 기본값 118967 유지)"
+    }
   }
 }

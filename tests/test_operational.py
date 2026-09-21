@@ -39,9 +39,10 @@ def test_mde_null_effect_mean_is_within_two_empirical_se():
 
 def test_energy_load_window_is_minimum_needed_period():
     params = dict(DEFAULT_PARAMS["energy"])
-    start, end = _energy_load_window(params)
-    assert start == pd.Timestamp("2025-10-02")
+    start, end = _energy_load_window(params)                       # v11 기본: 평가 12-04부터 28일
+    assert start == pd.Timestamp("2025-09-11")
     assert end == pd.Timestamp("2025-12-31")
+    assert _energy_load_window(params, train_days=182)[0] == pd.Timestamp("2025-03-13")   # AI 학습기간 포함
 
 
 def test_configured_font_file_is_registered():

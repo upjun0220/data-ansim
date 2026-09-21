@@ -1,5 +1,8 @@
 """통합 테스트 — mock 데이터로 0~9단계 end-to-end + 킬 크라이테리아 + 격리·가드 동작.
 
+v11: 이 파일의 mock_env 는 상권 단계 회귀용이다(SHC 생성 + stages.commerce=true). 상권 단계 기본 비활성 경로는
+tests/test_v11.py 가 검증한다. 상권 전용 테스트에는 commerce 마커를 붙였다(pytest -m "not commerce" 로 뺄 수 있음).
+
 실행(PowerShell, 저장소 루트):
     .venv\\Scripts\\python.exe -m pytest -q tests
 """
@@ -51,7 +54,7 @@ FIGURES = ["s2_activation_examples", "s3_can_session_hist", "s5_s6_event_study",
 def mock_env(tmp_path_factory):
     base = tmp_path_factory.mktemp("ripplemap")
     data = base / "data"
-    truth = mock_data.generate(data, seed=42)
+    truth = mock_data.generate(data, seed=42, with_shc=True)
     cfg = {
         "paths": {
             "bjd_master": str(data / "bjd_master.txt"), "emd_centroids": str(data / "bjd_centroids.csv"),
@@ -60,7 +63,8 @@ def mock_env(tmp_path_factory):
             "can_m": str(data / "can_m_individual.csv"), "kep007": str(data / "kep007.csv"),
             "industry_codes": str(ROOT / "config" / "industry_codes_mock.json"), "out_dir": str(base / "out"),
         },
-        "params": {"identification": {"n_boot": 199}, "kill": {"sample_rows": 200000, "compare_rows": 200000}},
+        "params": {"stages": {"commerce": True}, "identification": {"n_boot": 199},
+                   "kill": {"sample_rows": 200000, "compare_rows": 200000}},
     }
     path = base / "config.json"
     path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
@@ -74,18 +78,21 @@ def pipeline_result(mock_env):
 
 # ---------------------------------------------------------------- end-to-end
 
+@pytest.mark.commerce
 def test_all_stages_complete(pipeline_result):
     stages = pipeline_result["stages"]
     assert (stages["상태"] == "완료").all(), stages.to_string()
     assert pipeline_result["status"] == "완료"
 
 
+@pytest.mark.commerce
 def test_energy_environment_check_is_added_when_enabled(mock_env):
     table = run_checks(mock_env["config"], params_override={"energy": {"enabled": True}}, write=False)
-    assert table["번호"].tolist() == list(range(1, 12)) + [16]
+    assert table["번호"].tolist() == list(range(1, 12)) + [16, 17, 18, 19]   # v11: 17~19 AI·기온 항목
     assert table.set_index("번호").at[9, "판정"] == "통과"
 
 
+@pytest.mark.commerce
 def test_every_stage_writes_csv_and_png(pipeline_result):
     out = Path(pipeline_result["out_dir"])
     missing = []
@@ -100,6 +107,7 @@ def test_every_stage_writes_csv_and_png(pipeline_result):
     assert not missing, missing
 
 
+@pytest.mark.commerce
 def test_activation_recovers_truth(pipeline_result, mock_env):
     act = pipeline_result["state"]["activation"]
     truth = mock_env["truth"].set_index("bjd_code")
@@ -113,6 +121,7 @@ def test_activation_recovers_truth(pipeline_result, mock_env):
     assert set(act.loc[act["status"] == "excluded_prior", "bjd_code"]) == set(truth.index[truth["role"] == "excluded_prior"])
 
 
+@pytest.mark.commerce
 def test_event_study_effect_and_placebo(pipeline_result):
     post = pipeline_result["state"]["post_summary"].set_index("구분")
     main_att = post.at["주 결과(할인 전)", "사후평균"]
@@ -124,6 +133,7 @@ def test_event_study_effect_and_placebo(pipeline_result):
     assert pipeline_result["state"]["main"]["estimator"].startswith("Callaway")
 
 
+@pytest.mark.commerce
 def test_contamination_flags_planted_regions(pipeline_result, mock_env):
     cont = pipeline_result["state"]["contamination"]
     flagged = set(cont.loc[cont["판정"].str.startswith("유보"), "bjd_code"])
@@ -132,6 +142,7 @@ def test_contamination_flags_planted_regions(pipeline_result, mock_env):
     assert len(flagged - planted) <= 2
 
 
+@pytest.mark.commerce
 def test_cate_fallback_and_quadrants(pipeline_result):
     het = pipeline_result["state"]["het"]
     assert "2×2" in het["method"]            # econml 없는 환경 → 폴백
@@ -142,6 +153,7 @@ def test_cate_fallback_and_quadrants(pipeline_result):
     assert quad["reserved"].any()
 
 
+@pytest.mark.commerce
 def test_can_path_a(pipeline_result):
     can = pipeline_result["state"]["can"]
     assert can["verdict"] == "individual"
@@ -161,6 +173,7 @@ def test_no_gps_in_exports(pipeline_result):
 
 # ---------------------------------------------------------------- 킬 크라이테리아
 
+@pytest.mark.commerce
 def test_kill_criteria(mock_env):
     table = run_checks(mock_env["config"])
     assert list(table["번호"]) == list(range(1, 9)) + [10, 11, 16]
@@ -175,12 +188,13 @@ def test_kill_criteria(mock_env):
     assert (out / "png" / "k_kill_criteria.png").exists()
 
 
+@pytest.mark.commerce
 def test_kill_criteria_model_can_and_high_fail_rate(mock_env, tmp_path):
-    # 마스터에서 가람구 법정동을 모두 지우면 KEPCO 매핑 실패율 ≈ 1/3 → 실패
+    # 마스터에서 종로구 법정동을 모두 지우면 KEPCO 매핑 실패율 ≈ 1/3 → 실패
     src = mock_env["data"] / "bjd_master.txt"
     lines = src.read_text(encoding="cp949").splitlines()
     cut = tmp_path / "master_cut.txt"
-    cut.write_text("\n".join(l for l in lines if not l.startswith("11710")) + "\n", encoding="cp949")
+    cut.write_text("\n".join(l for l in lines if not l.startswith("11110")) + "\n", encoding="cp949")
     table = run_checks(mock_env["config"], paths_override={
         "bjd_master": str(cut), "can_m": str(mock_env["data"] / "can_m_model.csv"), "out_dir": str(tmp_path / "out")})
     v = table.set_index("번호")["판정"]
@@ -188,6 +202,7 @@ def test_kill_criteria_model_can_and_high_fail_rate(mock_env, tmp_path):
     assert v[8] == "경고" and "model" in table.set_index("번호").at[8, "근거"]
 
 
+@pytest.mark.commerce
 def test_check10_uses_configured_kepco_source(mock_env, tmp_path):
     """R4: check10 은 항상 KEPCO_001이 아니라 P["kepco"]["source"]에 맞는 파일을 읽어야 한다."""
     missing = tmp_path / "missing_kepco_002.csv"
@@ -197,6 +212,7 @@ def test_check10_uses_configured_kepco_source(mock_env, tmp_path):
     assert v[10] == "오류", table.set_index("번호").at[10, "근거"]
 
 
+@pytest.mark.commerce
 def test_check10_reports_sample_shortage_as_warning_not_error(mock_env, monkeypatch):
     """R4: estimate_mde 의 표본 부족 ValueError 는 '오류'가 아니라 '경고'로 내려야 한다."""
     def boom(*args, **kwargs):
@@ -210,6 +226,7 @@ def test_check10_reports_sample_shortage_as_warning_not_error(mock_env, monkeypa
 
 # ---------------------------------------------------------------- 격리·분기
 
+@pytest.mark.commerce
 def test_can_failure_is_isolated(mock_env, tmp_path):
     broken = tmp_path / "broken_can.csv"
     broken.write_text("아무컬럼\n1\n", encoding="utf-8")
@@ -243,6 +260,7 @@ def test_can_small_sample_unknown(mock_env):
     assert canloader.verify_join_key(can, params)[0] == "unknown"
 
 
+@pytest.mark.commerce
 def test_regression_fallback_positive(pipeline_result):
     S = pipeline_result["state"]
     params = dict(DEFAULT_PARAMS["identification"], estimator="regression")
@@ -285,13 +303,13 @@ def test_bjd_matching_rules(mock_env, caplog):
     assert len(master) == 30                              # 리 단위·폐지 코드 제외
     regions = pd.DataFrame({
         "sido": ["서울", "서울특별시", "서울", "서울", "서울"],
-        "sigungu": ["가람구", "나래구", "가람구", "다솜구", "다솜구"],
-        "emd": ["가람제1동", "중앙동", "중앙동", "행복동", "중앙동"],   # 마지막: 다솜구에는 중앙동 없음 → 단독 매칭 금지
+        "sigungu": ["종로구", "중구", "종로구", "용산구", "용산구"],
+        "emd": ["가람제1동", "중앙동", "중앙동", "행복동", "중앙동"],   # 마지막: 용산구에는 중앙동 없음 → 단독 매칭 금지
     })
     out, rate, unmatched, fail = match_regions(regions, master)
     codes = out["bjd_code"].tolist()
-    assert codes[0] == "1171010100" and out.at[0, "match_method"] == "정규화일치"
-    assert codes[1] == "1172010300" and codes[2] == "1171010300"   # 동명이인 → 구로 구분
+    assert codes[0] == "1111010100" and out.at[0, "match_method"] == "정규화일치"
+    assert codes[1] == "1114010300" and codes[2] == "1111010300"   # 동명이인 → 구로 구분
     assert pd.isna(codes[3]) and pd.isna(codes[4])
     assert len(unmatched) == 2 and fail == pytest.approx(0.4)
     with caplog.at_level(logging.WARNING, logger="ripplemap"):

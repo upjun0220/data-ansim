@@ -1,4 +1,7 @@
-"""킬 크라이테리아 자동 체크 — 첫 방문 반나절(목표 30분) 안에 8개 항목을 한 번에 판정.
+"""킬 크라이테리아 자동 체크 — 첫 방문 반나절(목표 30분) 안에 한 번에 판정.
+
+v11: 상권 단계(stages.commerce=false, 기본)에서는 SHC·T_r 항목(2·3·4·6·10)을 "해당 없음"으로 표시하고 SHC 경로가
+비어 있어도 실패하지 않는다. 16번은 "KEPCO_002를 001과 대조할 수 있는 기간" 점검이 된다.
 
 실행:
     .venv\\Scripts\\python.exe killcriteria.py --config config/mock.json
@@ -6,7 +9,7 @@
 
 업종 코드 매핑(industry_codes)이 아직 비어 있어도 돈다 — 첫 방문에 코드값을 확인하는 것도 이 스크립트의 목적이다.
 대용량 원천은 표본만 읽는다(params.kill.sample_rows · compare_rows · kepco_max_chunks).
-판정: 통과 / 경고 / 실패 / 오류(파일·컬럼 문제). 결과는 out_dir/kill_criteria/{csv,png}/k_kill_criteria.*
+판정: 통과 / 경고 / 실패 / 오류(파일·컬럼 문제) / 해당 없음. 결과는 out_dir/kill_criteria/{csv,png}/k_kill_criteria.*
 """
 from __future__ import annotations
 
@@ -22,9 +25,12 @@ import canloader
 import equityaccess
 import identification
 import kepcoloader
+import loadforecast
+import loadscenario
 import priorityscore
-from common import log, mi_to_ym, setup_logging, ym_to_mi
-from config import deep_merge, load_config
+import weatherloader
+from common import keep_region, log, mi_to_ym, setup_logging, ym_to_mi
+from config import deep_merge, load_config, resolve_region
 from outputs import OutputWriter, setup_korean_font
 
 PACKAGES = [
@@ -34,18 +40,21 @@ PACKAGES = [
     ("econml", False, "없으면 2x2 서브그룹 폴백"),
     ("linearmodels", False, "없어도 됨 — 내장 CS·FE 회귀"),
     ("statsmodels", False, "없어도 됨 — 내장 클러스터 SE·p값"),
+    ("lightgbm", False, "없으면 sklearn HistGradientBoosting 분위수 → 그것도 없으면 기준 모델(킬 17)"),
 ]
 
 
 def run_checks(config_path, params_override=None, paths_override=None, write=True):
     cfg = load_config(config_path, require_industry=False)
     if params_override:
-        cfg["params"] = deep_merge(cfg["params"], params_override)
+        cfg["params"] = resolve_region(deep_merge(cfg["params"], params_override))
     bjdmapping.set_analysis_level(cfg["params"]["analysis_level"])
     if paths_override:
         cfg["paths"].update({k: (str(Path(v).resolve()) if v else None) for k, v in paths_override.items()})
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
     K = P["kill"]
+    commerce = bool(P["stages"]["commerce"])
+    prefix = P["region"]["sido_prefix"]
     out_dir = Path(paths["out_dir"]) / "kill_criteria"
     setup_logging(out_dir)
     rows = []
@@ -53,6 +62,9 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     def add(no, item, verdict, evidence, action=""):
         rows.append({"번호": no, "항목": item, "판정": verdict, "근거": evidence, "조치": action})
         log.info("[%d] %s → %s | %s", no, item, verdict, evidence)
+
+    def not_applicable(no, item, why="상권 단계 비활성(v11) — SHC·T_r 미사용"):
+        add(no, item, "해당 없음", why)
 
     def guarded(no, item, fn):
         try:
@@ -82,7 +94,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     kepco_state = {}
 
     def load_kepco():
-        master = bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"])
+        master = keep_region(bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"]), prefix)
         raw = kepcoloader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"], "KEPCO_001",
                                                    max_chunks=K["kepco_max_chunks"])
         mh, rate, unmatched, fail = kepcoloader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
@@ -102,7 +114,10 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(2, "활성화 후보 지역 수", "경고", ev, f"{K['cf_min_regions']}곳 미만 — Causal Forest 포기, 2x2 서브그룹")
         else:
             add(2, "활성화 후보 지역 수", "통과", ev)
-    guarded(2, "활성화 후보 지역 수", check2)
+    if commerce:
+        guarded(2, "활성화 후보 지역 수", check2)
+    else:
+        not_applicable(2, "활성화 후보 지역 수(T_r 분포)")
 
     # 3·4·6. SHC002 표본
     shc_state = {}
@@ -119,7 +134,10 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(3, "시간대구간 수", "경고", ev, f"{K['min_tizo']}개 미만 — 시간대 축 포기")
         else:
             add(3, "시간대구간 수", "통과", ev)
-    guarded(3, "시간대구간 수", check3)
+    if commerce:
+        guarded(3, "시간대구간 수", check3)
+    else:
+        not_applicable(3, "시간대구간 수")
 
     def check4():
         if "stats" not in shc_state:
@@ -136,11 +154,14 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(4, "유입거리구간 정의", "경고", ev, "거주자 구간 미설정 — 코드 정의서 확인 후 resident_dist_codes 입력")
         else:
             add(4, "유입거리구간 정의", "통과", ev + f" / 거주자 = {sorted(resident)}")
-    guarded(4, "유입거리구간 정의", check4)
+    if commerce:
+        guarded(4, "유입거리구간 정의", check4)
+    else:
+        not_applicable(4, "유입거리구간 정의")
 
     def check5():
         if "fail" not in kepco_state:
-            raise RuntimeError("KEPCO 로드 실패(2번 참조)")
+            load_kepco()
         fail = kepco_state["fail"]
         ev = f"KEPCO 지역 {kepco_state['n_regions']}곳 중 미매칭 {fail:.1%} (예: " + \
             ", ".join(kepco_state["unmatched"][["sido", "sigungu", "emd"]].head(3).agg(" ".join, axis=1)) + ")"
@@ -162,10 +183,16 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(6, "마스킹 비율", "경고", ev, "PK 축소(성별·연령·소득 제거) 재신청 권고 · use_log1p 검토")
         else:
             add(6, "마스킹 비율", "통과", ev)
-    guarded(6, "마스킹 비율", check6)
+    if commerce:
+        guarded(6, "마스킹 비율", check6)
+    else:
+        not_applicable(6, "마스킹 비율")
 
     # 7. KEPCO_001/002 포함관계
     def check7():
+        if not paths["kepco_002"]:
+            not_applicable(7, "KEPCO_001/002 포함관계", "paths.kepco_002 없음 — 002 미사용")
+            return
         kp = dict(P["kepco"], chunksize=K["compare_rows"])
         keys = ["sido", "sigungu", "emd", "mi", "hour"]
         a = kepcoloader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], kp, "KEPCO_001", max_chunks=1)
@@ -224,7 +251,10 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         add(10, "검출 가능 최소효과(MDE)", verdict,
             f"{note} · MDE: {evidence} · 반복 {int(row['반복수'])}회 · 처치 {int(row['처치수_가정'])}곳",
             "상권 효과는 MDE 이상 여부만 보고" if verdict == "경고" else "")
-    guarded(10, "검출 가능 최소효과(MDE)", check10)
+    if commerce:
+        guarded(10, "검출 가능 최소효과(MDE)", check10)
+    else:
+        not_applicable(10, "검출 가능 최소효과(MDE)")
 
     # 11. PNG 반출용 한글 폰트
     def check11():
@@ -258,6 +288,26 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         guarded(9, "ESS LP 실행 환경", check9)
 
     # 16. 선택한 원천의 마지막 수록 달이 활성화 창 끝보다 이른가(KEPCO_002 는 가공일자가 제공기간보다 이르다)
+    def check16_channel():
+        """v11: 002(사업자 채널)를 001과 대조할 수 있는 기간 — 두 원천의 관측 일자가 겹치는 기간."""
+        item = "원천 수록 기간(002↔001 대조 가능 기간)"
+        if not paths["kepco_002"]:
+            not_applicable(16, item, "paths.kepco_002 없음 — 002 미사용")
+            return
+        spans = {}
+        for src, cols in (("001", C["kepco"]), ("002", C["kepco_cpo"])):
+            dates = pd.to_datetime(kepcoloader.scan_observed_dates(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}")["date"])
+            if dates.empty:
+                add(16, item, "경고", f"KEPCO_{src} 관측 일자를 못 읽음", "period 열·컬럼 설정 확인")
+                return
+            spans[src] = (dates.min(), dates.max())
+        start, end = max(s[0] for s in spans.values()), min(s[1] for s in spans.values())
+        ev = " · ".join(f"{k} {a:%Y-%m-%d}~{b:%Y-%m-%d}" for k, (a, b) in spans.items())
+        if end < start:
+            add(16, item, "경고", ev + " · 겹치는 기간 없음", "002 채널 비교(s1_channel_share) 불가 — 002 유지 여부 팀 결정")
+        else:
+            add(16, item, "통과", ev + f" · 대조 가능 {start:%Y-%m-%d}~{end:%Y-%m-%d}")
+
     def check16():
         src = str(P["kepco"]["source"])
         cols = C["kepco"] if src == "001" else C["kepco_cpo"]
@@ -275,21 +325,112 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 "activation.window 끝을 줄이거나 activation.clip_to_data=true")
         else:
             add(16, "원천 수록 기간", "통과", label)
-    guarded(16, "원천 수록 기간", check16)
+    if commerce:
+        guarded(16, "원천 수록 기간", check16)
+    else:
+        guarded(16, "원천 수록 기간(002↔001 대조 가능 기간)", check16_channel)
+
+    csv_dir = Path(paths["out_dir"]) / "csv"
+
+    def read_output(name):
+        path = csv_dir / f"{name}.csv"
+        return pd.read_csv(path, encoding="utf-8-sig", dtype={"bjd_code": str}) if path.exists() else None
+
+    if P["energy"]["enabled"]:
+        # 17. ML 라이브러리 → 폴백 경로
+        def check17():
+            name, _ = loadforecast.select_model(P["forecast"]["model"])
+            if name == "baseline":
+                add(17, "AI 예측 라이브러리", "경고", "lightgbm·scikit-learn(분위수 손실) 모두 없음",
+                    "8-A 는 기준 모델만 — 'AI 예측 미실행' 표시, 숫자 2 미실행")
+            else:
+                add(17, "AI 예측 라이브러리", "통과", f"사용 모델: {name}" + (" (lightgbm 없음 → sklearn 폴백)"
+                                                                         if name == "sklearn" else ""))
+        guarded(17, "AI 예측 라이브러리", check17)
+
+        # 18. AI 성능 — P50 MAE ≤ 기준 모델, P90 적중률 ≥ 80%
+        def check18():
+            metrics = read_output("s8a_forecast_metrics")
+            if metrics is None:
+                add(18, "AI 성능(기준 모델 대비)", "경고", "8-A 산출물 없음", "파이프라인 실행 후 재확인")
+                return
+            ok, why = loadforecast.ai_improvement(metrics, P["forecast"]["min_p90_coverage"])
+            add(18, "AI 성능(기준 모델 대비)", "통과" if ok else "실패", why,
+                "" if ok else "'AI 개선 없음' 표시 · 숫자 2는 경보 비교만 보고 · 보수성 부족이면 경보·ESS에 표시")
+        guarded(18, "AI 성능(기준 모델 대비)", check18)
+
+        # 19. 기온 예보 확보·발표 시각
+        def check19():
+            item = "기온 예보·발표 시각"
+            cutoff = P["weather"]["fcst_cutoff"]
+            if not paths["weather"]:
+                add(19, item, "경고", "paths.weather 없음", "기온 없는 모델(none)로 발표 숫자 — 실측 기온 모델은 참고만")
+                return
+            weather = weatherloader.load_weather(paths["weather"])
+            n_fcst = int(weather["temp_fcst_c"].notna().sum())
+            if n_fcst == 0:
+                add(19, item, "경고", "예보 기온 열이 비어 있음(실측만)", "none·observed 두 모델 병기, 발표는 none 기준")
+                return
+            usable = weatherloader.forecast_temps(weather, cutoff)
+            weatherloader.assert_forecast_before_cutoff(usable, cutoff)
+            targets = weather.loc[weather["temp_fcst_c"].notna(), ["station_or_grid", "timestamp"]].drop_duplicates()
+            share = len(usable) / max(1, len(targets))
+            ev = f"예보 대상 시각 {len(targets):,} 중 전날 {cutoff} 이전 발표분 있음 {share:.1%} · 마감 뒤 발표 행은 제외"
+            if share < 0.5:
+                add(19, item, "실패", ev, "발표 시각이 마감 이후인 예보가 대부분 — 예보 모드 불가, none 으로 실행")
+            else:
+                add(19, item, "통과", ev)
+        guarded(19, "기온 예보·발표 시각", check19)
+
+    if paths["ev_history"]:
+        # 20. 시나리오 — 행정동→법정동 매핑률, β 안정성, k_goal 보정 가능 여부
+        def check20():
+            item = "시나리오 매핑·β·k_goal"
+            if not paths["hdong_bjd"]:
+                add(20, item, "실패", "paths.hdong_bjd 없음", "행정동→법정동 대응표(가중치) 확보")
+                return
+            sp = P["scenario"]
+            hist = loadscenario.load_ev_history(paths["ev_history"], C["ev_history"], sp["fuel_value"], prefix)
+            mapping = loadscenario.load_hdong_bjd(paths["hdong_bjd"], C["hdong_bjd"])
+            _, fail = loadscenario.map_to_bjd(hist, mapping, base_month=sp["base_month"])
+            parts = [f"매핑 실패 {fail:.1%}(기준월 전기차 기준)"]
+            verdict = "실패" if fail > P["bjd"]["fail_warn_rate"] else "경고" if fail > 0.10 else "통과"
+            beta = read_output("s8f_beta")
+            if beta is None:
+                parts.append("β·k_goal 은 파이프라인 실행 후 확인")
+                verdict = "경고" if verdict == "통과" else verdict
+            else:
+                b = beta.iloc[0]
+                parts.append(f"β {b['beta']:.2f}" + (f"(불안정: {b['reason']} → 1, 0.8·1.2 민감도)"
+                                                    if str(b["fallback"]).lower() == "true" else ""))
+                parts.append("k_goal 없음 — 고 시나리오 생략" if pd.isna(b["k_goal"]) else f"k_goal {b['k_goal']:.3f}")
+                if pd.isna(b["k_goal"]) and verdict == "통과":
+                    verdict = "경고"
+            add(20, item, verdict, " · ".join(parts),
+                "대응표 보완(미매핑 행정동 목록 확인)" if fail > 0.10 else "")
+        guarded(20, "시나리오 매핑·β·k_goal", check20)
 
     if P["priority"]["enabled"]:
         # 12. 외부 접근성 자료의 법정동 매칭
+        def ev_from_history():
+            sp = P["scenario"]
+            hist = loadscenario.load_ev_history(paths["ev_history"], C["ev_history"], sp["fuel_value"], prefix)
+            ev, _ = loadscenario.map_to_bjd(hist, loadscenario.load_hdong_bjd(paths["hdong_bjd"], C["hdong_bjd"]),
+                                            base_month=sp["base_month"])
+            return ev.loc[ev["ym"] == sp["base_month"], ["bjd_code", "ev_count"]]
+
         def check12():
             if bjdmapping.ANALYSIS_LEVEL == "sigungu":
                 add(12, "접근성 지역키 매칭", "경고", "analysis_level=sigungu — 2SFCA(8-C)는 시군구 규모에서 의미가 없어 생략",
                     "형평성 축은 읍면동(법정동) 모드에서만 계산")
                 return
-            if not paths["access_stations"] or not paths["ev_registration"] or not paths["emd_centroids"]:
+            from_history = not paths["ev_registration"] and paths["ev_history"] and paths["hdong_bjd"]
+            if not paths["access_stations"] or not (paths["ev_registration"] or from_history) or not paths["emd_centroids"]:
                 add(12, "접근성 지역키 매칭", "경고", "접근성 입력 경로 미설정", "공개자료 반입 후 다시 실행")
                 return
-            cent = bjdmapping.load_emd_centroids(paths["emd_centroids"], C["centroid"])
+            cent = keep_region(bjdmapping.load_emd_centroids(paths["emd_centroids"], C["centroid"]), prefix)
             _stations, points = equityaccess.load_access_inputs(
-                paths["access_stations"], paths["ev_registration"], C, cent)
+                paths["access_stations"], paths["ev_registration"], C, cent, ev_counts=ev_from_history() if from_history else None)
             rate = float(points["ev_count"].notna().mean())
             verdict = "통과" if rate >= K["access_match_min"] else "실패"
             add(12, "접근성 지역키 매칭", verdict, f"중심점 기준 EV 등록자료 매칭 {rate:.1%}",
@@ -312,9 +453,15 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 "단일 평가기간 결과에 계절 미검증 표시" if verdict == "경고" else "")
         guarded(13, "계절 커버리지", check13)
 
-        # 14. 설정 가중치와 선택 AHP 행렬
+        # 14. 설정 가중치 유효성(v11 두 축: 합 1·음수 없음). AHP 는 레거시 세 축에서만.
+        legacy = list(P["priority"]["axes"]) == priorityscore.LEGACY_AXES
+
         def check14():
-            w = priorityscore.validate_weights(P["priority"]["weights"])
+            if not legacy:
+                w = priorityscore.validate_weights_v11(P["priority"]["weights"])
+                add(14, "가중치 유효성", "통과", f"급증위험·형평성 {w.round(4).tolist()} (합 1, 음수 없음) · AHP 미사용(두 축)")
+                return
+            w = priorityscore.validate_weights(P["priority"]["legacy_weights"])
             matrix = P["priority"].get("ahp_matrix")
             if matrix is None:
                 add(14, "가중치/AHP 일관성", "통과", f"설정 가중치 {w.round(4).tolist()} · AHP 입력 없음")
@@ -322,7 +469,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             cr = priorityscore.ahp_consistency_ratio(matrix)
             add(14, "가중치/AHP 일관성", "통과" if cr < 0.1 else "실패", f"CR={cr:.4f}",
                 "CR<0.1이 되도록 쌍대비교 재검토" if cr >= 0.1 else "")
-        guarded(14, "가중치/AHP 일관성", check14)
+        guarded(14, "가중치 유효성" if not legacy else "가중치/AHP 일관성", check14)
 
         # 15. 파이프라인 산출 후 강건 상위군 존재 확인
         def check15():
@@ -339,8 +486,28 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             share = float(pool["robust_top"].astype(str).str.lower().isin(["true", "1"]).mean())
             verdict = "통과" if share >= K["robust_top_min_share"] else "경고"
             add(15, "민감도 강건 상위군", verdict, f"순위 대상 {len(pool)}곳 중 {share:.1%}",
-                "단일 결합순위 대신 축별 순위 병기" if verdict == "경고" else "")
+                ("축별 순위표 2장(s8e_rank_risk·s8e_rank_equity)을 결합순위 대신 병기" if not legacy
+                 else "단일 결합순위 대신 축별 순위 병기") if verdict == "경고" else "")
         guarded(15, "민감도 강건 상위군", check15)
+
+        # 21. 급증위험 0 동네가 순위 대상의 절반 이상인가(v11.3)
+        def check21():
+            item = "급증위험 변별력(0 비율)"
+            if legacy:
+                not_applicable(21, item, "레거시 세 축 모드")
+                return
+            result = read_output("s8e_priority")
+            if result is None or "surge_risk" not in result:
+                add(21, item, "경고", "8-E 산출물 없음", "파이프라인 실행 후 재확인")
+                return
+            share = float((pd.to_numeric(result["surge_risk"], errors="coerce") == 0).mean())
+            metric = result["risk_metric"].iloc[0] if "risk_metric" in result and len(result) else "?"
+            ev = f"순위 대상 {len(result)}곳 중 급증위험 0 {share:.1%} · 사용 위험 지표 {metric}"
+            if share >= 0.5:
+                add(21, item, "경고", ev, "위험 축을 피크비율(peak_ratio)로 대체했음을 표시(risk_metric=auto)")
+            else:
+                add(21, item, "통과", ev)
+        guarded(21, "급증위험 변별력(0 비율)", check21)
 
     table = pd.DataFrame(rows).sort_values("번호").reset_index(drop=True)
     if write:

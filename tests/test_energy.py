@@ -167,12 +167,54 @@ def test_forecast_failure_stays_unavailable():
     data = history()
     data = data[~((data.date == "2025-12-18") & (data.hour == 0))]
     ep = copy.deepcopy(DEFAULT_PARAMS["energy"])
-    ep.update(evaluation_days=1, calibration_days=6, multipliers=[1.2], new_chargers=[0])
+    ep.update(evaluation_start="2025-12-25", evaluation_days=1, calibration_days=6, multipliers=[1.2], new_chargers=[0])
     val = pd.DataFrame([backtest_forecast(data, "1100010100", end_date="2025-12-24")])
     result, _ = run_scenarios(data, ["1100010100"], ep, val)
     forecast = result[result["mode"] == "forecast"].iloc[0]
     assert not forecast.plan_feasible and forecast.method == "unavailable"
     assert result[result["mode"] == "oracle"].iloc[0].method == "lp_peak"
+
+
+def _ai_pred(data, days, scale50=1.0, scale90=1.3):
+    """시험용 AI 예측: 실측 × 배율(정답을 아는 예측이 아니라 입력 경로 시험용)."""
+    d = data[data.date.isin(days)]
+    return d.assign(q50=d.kw * scale50, q90=d.kw * scale90)[["bjd_code", "date", "hour", "q50", "q90"]]
+
+
+def test_ess_uses_ai_input_and_compares_inputs_with_same_capacity():
+    data = history()
+    ep = copy.deepcopy(DEFAULT_PARAMS["energy"])
+    ep.update(evaluation_start="2025-12-25", evaluation_days=2, multipliers=[1.2], new_chargers=[0, 3],
+              ess={"forecast_input": "p90", "compare_inputs": True, "compare_new_chargers": 3})
+    val = pd.DataFrame([backtest_forecast(data, "1100010100", end_date="2025-12-24")])
+    days = pd.date_range("2025-12-25", periods=2)
+    results, _ = run_scenarios(data, ["1100010100"], ep, val, ai_pred=_ai_pred(data, days))
+    fc = results[results["mode"] == "forecast"]
+    assert fc["forecast_input"].eq("p90").all()
+    cmp = results[results["mode"] == "compare"]
+    assert set(cmp["forecast_input"]) == {"baseline", "p50"} and cmp["new_chargers"].eq(3).all()
+    for _, g in results[results["new_chargers"] == 3].groupby("date"):
+        assert g["energy_kwh"].nunique() == 1                     # 입력만 바꾸고 용량은 같다
+    from essoptimizer import ai_effect, ai_effect_summary
+    effect = ai_effect(results)
+    assert len(effect) == 1 and {"ai_effect", "over_discharge_kwh_p90", "n_common_days"} <= set(effect)
+    assert effect.at[0, "n_common_days"] == 2
+    assert not ai_effect_summary(effect).empty
+    no_ai, _ = run_scenarios(data, ["1100010100"], ep, val)       # AI 없으면 기준 모델로 운전·표시
+    assert no_ai.loc[no_ai["mode"] == "forecast", "forecast_input"].eq("baseline(AI 없음)").all()
+
+
+def test_ai_effect_skips_zero_baseline_denominator_and_keeps_negative():
+    from essoptimizer import ai_effect
+    rows = []
+    for code, base_exc, p90_exc in (("A", 0.0, 0.0), ("B", 10.0, 12.0)):
+        for mode, inp, exc in (("forecast", "p90", p90_exc), ("compare", "baseline", base_exc),
+                               ("compare", "p50", base_exc), ("oracle", "oracle", 0.0)):
+            rows.append({"bjd_code": code, "multiplier": 1.2, "new_chargers": 3, "date": "2025-12-25", "mode": mode,
+                         "forecast_input": inp, "method": "lp_peak", "exceedance_kwh": exc, "over_discharge_kwh": 0.0})
+    out = ai_effect(pd.DataFrame(rows)).set_index("bjd_code")
+    assert not out.at["A", "ai_effect_eligible"] and np.isnan(out.at["A", "ai_effect"])
+    assert out.at["B", "ai_effect"] == pytest.approx(-0.2)          # AI가 더 나빠도 그대로 보고
 
 
 def test_hourly_loader_preserves_days_and_rejects_monthly(tmp_path):

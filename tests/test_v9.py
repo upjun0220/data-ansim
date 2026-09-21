@@ -126,14 +126,25 @@ def test_filter_sido_code_keeps_only_listed_prefixes():
 def test_import_bundle_accepts_py_csv_txt_font_but_not_zip_json_md(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import check, collect
-    (tmp_path / "dataansimbundle.py").write_text("x = 1\n", encoding="utf-8")
-    for name in ("bjdmaster.csv", "smp.txt"):
+    (tmp_path / "1.py").write_text("x = 1\n", encoding="utf-8")               # v11: 이전 반입과 겹치지 않는 숫자 이름
+    for name in ("2.csv", "5.txt"):
         (tmp_path / name).write_text("a,b\n1,2\n", encoding="utf-8")
-    (tmp_path / "koreanfont.ttf").write_bytes(b"x")
+    (tmp_path / "10.ttf").write_bytes(b"x")
     assert check(collect([tmp_path]))[1] == []                      # 코드 1 + 데이터 2 + 폰트 1
     for bad in ("b.zip", "c.json", "d.md"):
         (tmp_path / bad).write_bytes(b"x")
     assert sum("허용되지 않는 형식" in p for p in check(collect([tmp_path]))[1]) == 3
+
+
+def test_import_bundle_rejects_previous_import_names(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from check_import_bundle import PREVIOUS_NAMES, SAFE_NAME, check, collect
+    from make_import_bundle import IMPORT_NAMES
+    (tmp_path / "1.py").write_text("x = 1\n", encoding="utf-8")
+    for old in ("dataansimbundle.py", "bjdmaster.csv", "koreanfont.ttf"):
+        (tmp_path / old).write_bytes(b"x = 1\n")
+    assert sum("이전 반입 파일명과 중복" in p for p in check(collect([tmp_path]))[1]) == 3
+    assert all(SAFE_NAME.match(n) and n not in PREVIOUS_NAMES for n in IMPORT_NAMES) and len(IMPORT_NAMES) <= 10
 
 
 def test_import_bundle_rejects_unsafe_names_count_and_broken_python(tmp_path):

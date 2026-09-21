@@ -1,4 +1,4 @@
-# 충전 리플맵 4.2 — 분석 파이프라인
+# 충전 부하, 하루 먼저 본다 (구 충전 리플맵) — 분석 파이프라인
 
 2026 데이터+AI 혁신 챌린지(데이터안심구역 부문) 제출용. 현재 설계 기준은 루트의 V9 HTML과 이 README다.
 
@@ -10,6 +10,207 @@ V9 현재 회귀 검증은 55개 성공·실패 0개·선택 패키지 2개 생�
 
 > ⚠ `data/mock/` 은 전부 **가상** 데이터다. 로더·파이프라인 동작 검증용이며 결론에 쓰지 않는다.
 
+## v11.3 — 현재 기준 (`docs/1_팀공유_전체설계_V11.3_20260921.html`)
+
+**현재 설계 기준은 `docs/`의 V11.3 HTML이다.** 이 절 아래의 V10 서술(구조표·폴백·설계 결정·mock 검증 결과)은 이력이며, 이 절과
+다르면 이 절이 우선한다.
+
+> **정직한 스코핑.** 급증 위험은 변압기 과부하가 아니라 **"그 동네의 교정기간 최대 부하 × 배율을 넘는 급증"**이다. 목표 상한은
+> 정책 가정이지 공학 기준·변압기 용량이 아니다. AI는 그래디언트 부스팅 분위수 회귀이며 딥러닝·실시간 제어가 아니다. 8-F는
+> **시나리오(예측 아님), 충전기 추가 설치 없음 가정**이다. **mock에서 AI가 기준 모델을 이겨도 성능 근거가 아니다** — 기온·요일·
+> 휴일·추세 반응을 mock에 직접 심었기 때문이다.
+
+### 파이프라인 순서
+
+`0·1(정합·집계) → 1-C(KEPCO_002 채널 비교) → 3(CAN u(t)·KEP_007) → [2·4~7 상권 단계: 기본 비활성] → 8(load_axis) → 8-C →
+0-E(공휴일·기온 점검) → 8-A(기준 모델 검증) → 8-A(AI 분위수 예측·급증 위험) → 8-B → 8-E → 8-F → 9-H → 9`
+
+8-A는 8-C의 동네 특성(전기차·충전기 수)을 입력으로 쓰므로 8-C 뒤에 돈다. 8-C가 실패하면 8-A는 동네 특성 없이 학습한다.
+0·1만 필수이고 나머지는 모두 격리(실패해도 다음 단계와 9단계 반출은 계속)된다.
+
+| 단계 | 파일 | 주요 산출물 | 실패·없을 때 |
+|---|---|---|---|
+| 0·1 정합·집계 | `bjdmapping.py` · `kepcoloader.py` | `s0_bjd_match_rate` · `s1_kepco_monthly` | 중단 |
+| 1-C 채널 비교 | `pipeline.py` | `s1_channel_share`(002/001 비율의 시간대별 분포, **합산하지 않음**) | 002 없으면 생략 |
+| 3 CAN | `canloader.py` | 세션 길이·반복 충전 위치 비율·u(t) (처치 정제는 상권 단계에서만) | 격리 |
+| 2·4~7 상권 | `identification.py` 외 | `stages.commerce=true` 일 때만 | 기본 비활성 — 실행 요약에 "상권 단계 비활성(v11)" |
+| 8 부하 집중도 | `loadaxis.py` | `s8_load_concentration` · `s8_load_type`(고·저, 공공 검토 유형) · 4사분면은 상권 단계에서만 | 격리 |
+| 8-C 접근성 | `equityaccess.py` | `s8c_accessibility`(2SFCA·지표 1·2) | 격리 |
+| 0-E 외부 입력 | `weatherloader.py` | `s0_external_inputs`(공휴일 달력·기온 지점·예보 사용 가능 시각·기온 모드) | 없으면 공휴일 미보정·기온 none |
+| 8-A AI 예측 | `loadforecast.py` | `s8a_validation`(기준 모델) · `s8a_forecast_metrics` · `s8a_risk` · `s8a_risk_summary` | lightgbm → sklearn → 기준 모델 폴백 |
+| 8-B ESS | `essoptimizer.py` | `s8b_scenarios`(`forecast_input` 열) · `s8b_ai_effect` · `s8b_ai_effect_summary` · `s9_public_review` | AI 없으면 기준 모델 운전("baseline(AI 없음)") |
+| 8-E 결합 점수 | `priorityscore.py` | `s8e_priority` · `s8e_not_ranked` · `s8e_rank_risk` · `s8e_rank_equity` · `s8e_priority_summary` | 8-A·8-C 없으면 생략 |
+| 8-F 시나리오 | `loadscenario.py` | `s8f_scenario` · `s8f_scenario_region` · `s8f_beta` · `s8f_scenario_2030_mid`(PNG) | `paths.ev_history` 없으면 생략 |
+| 9-H 발표 숫자 | `headline.py` | `s9_headline` | 격리 |
+
+### 8-A — AI 분위수 예측과 급증 위험
+
+- **모델:** 서울 법정동 전체를 한 모델로 학습(global, 법정동 ID 미사용). P50·P90을 따로 학습하고 `q90 = max(q90, q50)`.
+  입력: 시간·요일·휴일유형·전날 같은 시간·7일 전 같은 시간·기준 모델 값·기온 예보·동네 특성(전기차 등록, 공용 충전기 수, 학습기간
+  평균 부하). 하이퍼파라미터는 학습기간 안 시간 순 확장창 교차검증(pinball)으로만 고른다(격자 8조합).
+  - 설계서의 "교정기간 평균 부하"는 검증기간과 겹쳐 누설이 되므로 **학습기간 평균 부하**(`train_mean_kw`)로 바꿨다.
+- **기간:** 학습(평가 시작 − 8주 이전 `train_days`일) < 검증(평가 시작 전 8주) < 평가(`energy.evaluation_days`, v11 기본 28일). 겹치지 않는다.
+- **정보 누설 방지:** 예측일 d의 입력은 d−1일까지의 관측과, 발표 시각이 d−1일 `weather.fcst_cutoff`(18:00) 이전인 예보 중 최신
+  발표분뿐이다. 어기면 `assert_no_leakage`가 예외를 내고 킬 19번이 실패로 표시한다. `observed`(실측 기온)는 상한 참고 모델로만
+  학습하며 발표 숫자·경보에 쓰지 않는다. 예보가 없으면 `none`과 `observed`를 함께 학습해 지표만 나란히 낸다.
+- **검증(`s8a_forecast_metrics`):** 전체(`bjd_code` 빈칸)와 법정동별 persistence·기준 모델·AI P50 MAE, 증가일 평균 오차,
+  피크 시간 오차, P90 적중률, pinball, 검증일 수, 사용 모델, 기온 모드. AI가 기준 모델을 못 이긴 동네는 `ai_beats_baseline=False`로
+  남긴다(숨기지 않음).
+- **급증 위험(`s8a_risk`, 상한 1.1·1.2·1.3배별, 모든 서울 법정동):** 급증경보(r,d) = 1[max_h q̂0.9 > 교정기간 최대 × 배율],
+  `surge_risk` = 평가일 중 경보일 비율(**증설 0대 — 점수용**), `peak_ratio` = 평가일 평균 max_h q̂0.9 ÷ 교정기간 최대.
+  실측 급증과 대조한 경보 정밀도·재현율을 AI와 기준 모델에 같은 방식으로 낸다. 두 예측이 모두 있는 **공통일**만 비교하고 제외 일수를
+  `n_excluded_days`로 적는다(기준 모델은 같은 유형 휴일 4개가 없으면 그날 예측을 실패로 둔다). 교정기간 최대가
+  `risk.min_calib_peak_kw` 미만이면 `not_assessed_low_load`. `surge_risk_with_new_N`(증설 2/3/5대, ΔL 가정)은 **참고 레이어**이며
+  점수·검증에 쓰지 않는다. ΔL(`essoptimizer.compute_added_load`·`utilization_profile`)과 목표 상한(`policy_target`)은 8-A·8-B·8-F 공용이다.
+
+### 8-B — AI 입력과 AI 효과
+
+`ess.forecast_input`(기본 p90)으로 스케줄을 짠다. `ess.compare_inputs`면 증설 3대·상한 1.1·1.2·1.3배에서 **같은 사전 선정 용량**으로
+기준 모델·P50·P90·oracle을 모두 실측에 재현한다. `ai_effect = 1 − 초과kWh(P90)/초과kWh(기준 모델)`(모든 입력의 계획이 있는 공통일
+합산), 기준 모델 초과가 0이면 대상에서 빼고 대상 수를 적는다. 과잉 방전 kWh(실측 기준 필요 없었던 방전)를 함께 낸다. 음수·0 근처도
+그대로 보고한다.
+
+### 8-E — 두 축 결합 점수
+
+`PriorityScore = w_risk·위험_norm + w_equity·형평성_norm`(기본 1/2씩). 위험 축은 8-A의 **증설 0대** `surge_risk`이며, `risk_metric=auto`
+이면 순위 대상의 50% 이상에서 0일 때 `peak_ratio`로 바꾸고 실행 요약·킬 21번에 남긴다. 형평성은 2SFCA(접근성 낮을수록 높음).
+경제성(SMP 비용 차이)·ESS 미적용 초과 kWh·`surge_risk_with_new_N`은 표시 열이다. `min_axes=2`, 결측 사유(`not_assessed_low_load`·
+`data_missing`)와 순위 밖 목록 유지, 결측 축은 0점이 아니라 재정규화. 민감도는 상한 3배율 × `w_risk ∈ [0.35, 0.65]`(7단계), 강건
+상위군·경계선은 순위 대상 안에서만. 두 축의 피어슨·스피어만 상관을 매번 보고한다. AHP·`axes_redundant`는 레거시 세 축
+(`priority.axes=["safety","equity","economy"]`)에서만 동작한다.
+
+### 8-F — 2028·2030 충전 부하 시나리오 (시나리오, 예측 아님)
+
+- 입력: 행정동별 전기차 등록 월별 이력(OA-21236 형식, `paths.ev_history`) + **행정동→법정동 대응표**(`paths.hdong_bjd`, 가중치 =
+  그 행정동 전기차 중 법정동 몫; 가중치가 없으면 같은 몫으로 나누고 경고). 매핑 실패율(기준월 전기차 중 대응표에 없는 행정동 몫)을
+  킬 20번과 `s8f_beta`에 보고한다.
+- `EV_Y = EV_now × (1 + k·g)^(Y−Y0)`, g = 기준월 이전 36개월 연평균 증가율, `Y−Y0`는 기준월 말부터 월 단위(2026-06 → 2030년 말 4.5년).
+  저 k=0.5, 중 k=1.0, 고 k=`k_goal`(서울 합계 배율 = `goal_national/national_base` ≈ 3.835가 되도록 이분법). 고 시나리오는 서울의
+  전국 비중 유지 가정과 같다.
+- β: 동네 간 log(대표 부하) ~ log(전기차) OLS + 부트스트랩 95% 구간. 대표 부하 = 평가기간 평일 저녁 피크 기준 P90 날의 일 최대.
+  구간이 0을 포함하거나 `beta_bounds` 밖이면 β=1, 0.8·1.2 민감도 행(`beta_case`)만 낸다. `L_Y = L_typ × (EV_Y/EV_now)^β` —
+  **8-A 트리 모델로 외삽하지 않는다.**
+- 판정: 현재 상한(1.1·1.2·1.3배) 초과 동네 수, 고 시나리오에서만 추가로 넘는 동네(`over_only_high`), 8-B 후보 격자로 본 필요 ESS
+  용량 변화, 지표 1 미래값(충전기 수 현재 유지).
+- 기준값: `base_month` 2026-06, `goal_national` 4,200,000(제1차 국가 탄소중립녹색성장 기본계획 2030 목표), `national_base`
+  1,095,218(2026-06 국토교통부 자동차 등록현황 연료별 — 6월 말 보도자료 "전기 1,095천대"와 일치 확인), `seoul_base` 118,967(2026-06,
+  2차 출처 DataFact, 원자료 미대조 — 계산에 쓰지 않는 점검용, OA-21236 합계와 5% 넘게 다르면 경고). 전국 값은 보도자료로 대조했고
+  서울 값은 보도자료에 시도별 수치가 없어 대조하지 못했다(계산에 쓰지 않아 결과에 영향 없음). **통계누리에 2026년 8월 자료까지
+  있으므로, 팀이 원자료 xlsx를 받으면 기준월을 2026-08로 옮겨도 된다 — 그때는 세 값과 EV_now(r)의 월을 함께 바꾼다.**
+
+### 9-H — 발표 숫자 (각 행에 증설 대수·상한 배율·이용률 배율·기온 모드·사용 모델 병기)
+
+- 숫자 1: 충전기 1기당 전기차 대수의 지역 간 배수(V10 그대로).
+- 숫자 2: 증설 0대 급증 경보 정밀도·재현율(AI = `값`, 기준 모델 = `비교`) → AI 효과 법정동 평균과 범위(상한 1.1~1.3)·대상 수.
+  AI 미실행이면 "미실행", 킬 18번 기준 미달이면 "AI 개선 없음(킬 18)"을 가정 열에 적는다.
+- 숫자 3: (a) 현재 증설 0대 급증위험 ≥ `headline.risk_threshold`(0.1) 동네 수(상한 1.2배, 평가기간 예측·관측),
+  (b) 2030 중 시나리오에서 현재 상한 1.2배를 넘는 동네 수(`비교`·괄호 = 고 시나리오). 둘 다 "충전기 추가 없음" 기준이지만 (a)는 예측·관측,
+  (b)는 보급 증가 시나리오다. **헤드라인 문구는 팀이 확정한다.**
+
+### 새 설정 키 (전체는 `config.py`의 `DEFAULT_PARAMS`, 현장 예시는 `config/fieldtemplate.json`)
+
+| 키 | 기본값 | 뜻 |
+|---|---|---|
+| `stages.commerce` | `false` | `true`면 V10 상권 단계(T_r·Y_ddd·이벤트 스터디·위약·처치오염·CATE·4사분면). 이때만 SHC·업종코드 필수 |
+| `region.sido_prefix` / `region.sido_name` | `"11"` / `"서울특별시"` | 코드 앞 2자리 필터 / KEPCO 시도 텍스트 필터(청크 단위). `kepco.sido`는 하위 호환 별칭, region 우선 |
+| `weather.mode` / `weather.fcst_cutoff` | `"forecast"` / `"18:00"` | forecast·none·observed(참고용). 예보 없으면 none 폴백 |
+| `holidays.long_min_days` / `holidays.count_weekends` | `3` / `true` | 연휴(`long_holiday`) 기준, 앞·뒤 평일은 `pre_post_holiday` |
+| `energy.evaluation_start` / `energy.evaluation_days` | `"2025-12-04"` / `28` | 평가 28일(급증위험이 1/7 단위로만 나오지 않게) |
+| `forecast.model` | `"auto"` | lightgbm → sklearn(분위수) → baseline |
+| `forecast.quantiles` / `train_days` / `cv_folds` / `max_iter` / `grid` / `random_state` | `[0.5,0.9]` / `182` / `3` / `100` / 8조합 / `42` | AI 학습 설정 |
+| `forecast.min_p90_coverage` | `0.8` | 킬 18번·"보수성 부족" 기준 |
+| `risk.min_calib_peak_kw` | `1.0` | 이 미만이면 `not_assessed_low_load` |
+| `ess.forecast_input` / `compare_inputs` / `compare_new_chargers` | `"p90"` / `true` / `3` | 8-B 입력과 AI 효과 비교 |
+| `priority.axes` / `weights` / `min_axes` / `risk_metric` | `["risk","equity"]` / `{"risk":0.5,"equity":0.5}` / `2` / `"auto"` | 두 축 결합. 레거시는 `legacy_weights`·`legacy_min_axes`·`ahp_matrix` |
+| `headline.risk_threshold` | `0.1` | 숫자 3(a) 기준(10일에 하루 이상 경보). 팀 확정 대상 |
+| `scenario.*` | 위 8-F 기준값, `years [2028,2030]`, `k {저:0.5, 중:1.0}`, `growth_months 36`, `beta_bounds [0.3,2.0]`, `n_boot 999` | 8-F |
+| `paths.weather` · `paths.holidays` · `paths.ev_history` · `paths.hdong_bjd` | — | 기온 CSV · 공휴일 달력 · 전기차 등록 이력 · 행정동→법정동 대응표. `ev_registration`이 비면 8-C도 이력의 기준월 값을 쓴다 |
+
+### 킬 크라이테리아 — 설계 문서 번호 ↔ 코드 번호
+
+| 설계 문서 | 코드 | 항목 | v11 판정 |
+|---|---|---|---|
+| 9 | 9 | ESS LP(scipy) | 그대로 |
+| 10 | 8 | CAN 식별번호 | 그대로 |
+| 11 | 2 | T_r 분포(활성화 후보) | `commerce=false`면 "해당 없음"(3·4·6·10번 SHC·MDE 항목도 같음) |
+| 12 | 12 | 접근성 지역키 매칭 | 그대로(ev_history 경로 지원) |
+| 13 | 13 | 계절 커버리지 | 그대로 |
+| 14 | 14 | 가중치/AHP | v11: 가중치 유효성(합 1·음수 없음), AHP는 레거시에서만 |
+| 15 | 15 | 강건 상위군 | 대응 문구 "축별 순위표 2장"(`s8e_rank_risk`·`s8e_rank_equity`) |
+| — | 16 | 원천 수록 기간 | `commerce=false`면 "002를 001과 대조할 수 있는 기간" |
+| 17 | 17 | ML 라이브러리 | 폴백 경로 표시 |
+| 18 | 18 | AI P50 MAE ≤ 기준 모델, P90 적중률 ≥ 80% | 실패 시 "AI 개선 없음"(파이프라인 실행 후 판정) |
+| 19 | 19 | 기온 예보·발표 시각 | 예보 없음 경고, 마감 뒤 발표가 대부분이면 실패 |
+| 20 | 20 | 시나리오 매핑률·β·k_goal | 매핑 실패 10% 초과 경고, 30% 초과 실패 |
+| 21 | 21 | 급증위험 0 비율 ≥ 50% | 경고 + 피크비율 대체 표시 |
+
+판정 값은 통과·경고·실패·오류·**해당 없음**이다.
+
+### 반출 규칙 추가분
+
+새 표(`s1_channel_share`·`s8a_*`·`s8b_ai_effect*`·`s8e_rank_*`·`s8f_*`·`s9_headline`)도 같은 규칙이다: 좌표 열이 든 표는 저장 거부,
+법정동 행은 대표 고객호수 < `output.min_cell_count`면 PNG에서 `—`, 법정동 열이 없는 합계·요약표(채널 비교·경보 요약·AI 효과 요약·
+시나리오 요약·발표 숫자·예측 지표의 전체 행)는 소표본 법정동을 **빼고 다시 계산한 값**을 PNG에 싣는다(차감 역산 방지). 기온 지점
+좌표(`station_lat`·`station_lon`)는 입력 전용이며 표에 싣지 않는다. 안심구역 안에서는 태블로로 CSV(`bjd_code` 키)를 경계와 결합해
+지도를 만들 수 있으며, 반출하는 그림에도 이 규칙을 그대로 적용한다.
+
+### 반입 묶음 (v11)
+
+**파일명은 이전 반입(2026-09-21 V10: `dataansimbundle.py`·`bjdmaster.csv` 등)과 겹치지 않게 숫자로 매긴다.**
+`tools/check_import_bundle.py`가 이전 이름과 겹치면 위반으로 잡는다.
+
+| 반입 이름 | 내용 | 설정 경로 |
+|---|---|---|
+| `1.py` | 코드 번들(모듈 20개·설정 템플릿·`config/holidays.yaml`·README). `%run 1.py` → `dataansim11/`에 풀림(V10의 `dataansim/`과 분리) | — |
+| `2.csv` | 법정동코드 마스터(`build_reference_files.py`의 bjdmaster) | `paths.bjd_master` |
+| `3.csv` | 법정동 코드대응(bjdcrosswalk) | `paths.bjd_crosswalk` |
+| `4.csv` | 법정동 중심점(bjdcentroids) | `paths.emd_centroids` |
+| `5.csv` | SMP | `paths.smp` |
+| `6.csv` | 공용 충전소 위치 | `paths.access_stations` |
+| `7.csv` | 행정동별 전기차 등록 월별 이력(OA-21236) | `paths.ev_history` |
+| `8.csv` | 행정동→법정동 대응표(가중치) | `paths.hdong_bjd` |
+| `9.csv` | 기온 실측·과거 예보 | `paths.weather` |
+| `10.ttf` | 한글 폰트(서버에 없을 때만) | `paths.font` |
+
+번들 1 + 데이터 8 = **9개, 폰트 허용 시 10개(한도)**. `python tools/make_import_bundle.py`가 `dist/import/1.py`를 만든다.
+SHC 파일은 기대하지 않는다. 8-C 전기차 대수는 `evhistory`+`hdongbjd`의 기준월 값을 써서 `evregistration.csv`를 따로 반입하지 않는다.
+공동주택(선택)은 지표 3 구현 때 다시 센다(지금 넣으면 한도 초과). 새 파일명은 반입 규칙(영문·숫자만)을 따른다.
+
+**공휴일 달력:** `python tools/fetch_holidays.py 2024 2025`(인터넷 되는 곳, 서비스키 환경변수 `DATAGOKR_SERVICE_KEY`) →
+`config/holidays.yaml`. PyYAML이 없을 수 있어 **JSON 문법**(= 유효한 YAML)으로 저장한다. 휴일을 규칙으로 만들지 않으며, 대체·임시공휴일·
+선거일 누락은 관보로 보완해 `source`에 적는다. 저장소의 `config/holidays.yaml`은 빈 자리표시자다.
+
+### mock 실행 결과 (2026-09-21, seed 42) — 동작 확인용이며 성능 근거가 아니다
+
+`mock_data.py --energy`는 SHC 없이 서울 3개 자치구 이름·코드(종로구·중구·용산구, 법정동 이름은 가상) 30개 법정동, 2025-05~12 일별
+부하(기온·요일·휴일·추세 반응을 **심어 둠**), 기온(전날 17시·20시 발표 예보), 공휴일 달력, 행정동 단위 전기차 이력·대응표를 만든다.
+`--with-shc`로만 SHC를 만든다.
+
+| 확인 | 결과 |
+|---|---|
+| 전체 실행 | SHC 없이 전 단계 완료, 상권 단계 "비활성" 1행. 킬 21항목 중 오류 0 |
+| 8-A(sklearn 폴백, 기온 forecast, 검증 56일) | MAE persistence 0.542 · 기준 0.486 · AI P50 0.433, 증가일 오차 기준 0.387 · AI 0.295, 피크 시간 오차 기준 1.487 · AI 1.496, P90 적중률 **0.77(80% 미달 → 킬 18 실패, "AI 개선 없음" 표시)**, 법정동 27/30곳에서 AI 우세 |
+| 급증 경보(상한 1.2배, 평가 28일) | 급증위험 0인 동네 93% → 위험 축 **피크비율로 대체**(킬 21 경고). 1.1배에서 AI 정밀도 0.10·재현율 0.23, 기준 모델 경보 0건. 12-25(단일 공휴일)는 기준 모델 실패로 비교에서 30법정동·일 제외 |
+| AI 효과(증설 3대) | 1.2배 평균 0.21(대상 10/15곳), 1.1배 0.32, 1.3배 0.70(대상 2곳). P90 운전의 과잉 방전이 기준 모델보다 큼(1.2배 81.8 대 9.3 kWh) |
+| 8-E 순위 대상 | **30/30곳(100%)** — V10은 절반이 "부하 미평가". 급증위험·형평성 상관 피어슨 −0.15 |
+| 8-F | 매핑 실패 0.35%(심어 둔 미매핑 행정동), β 구간이 0 포함 → β=1(0.8·1.2 민감도), k_goal 1.22. mock 증가율이 커서 2030 중 시나리오 30곳 모두 현재 1.2배 상한 초과 |
+
+### 미구현(남은 것)
+
+지표 3(자가충전 제약 주거 비율), 300/500m 커버리지(8-D), MCLP, DEM 경사 보정, 실제 GIS 지도(안심구역 태블로 경로 검토).
+lightgbm 실경로는 설치 환경에서만 검증된다(테스트는 `importorskip`).
+
+### 팀이 결정·확인할 것
+
+1. 숫자 3 헤드라인 문구, `headline.risk_threshold`(0.1).
+2. KEPCO_002 유지 여부 — `s1_channel_share`·킬 7·16으로 판단(mock은 002 ⊆ 001).
+3. `scenario.national_base`·`seoul_base`를 통계누리 원자료로 대조(기준월 2026-08로 옮길지).
+4. 반입 한도: 폰트까지 10개로 딱 맞다. 공동주택 자료·경계 도형을 추가하려면 무엇을 뺄지.
+5. 설계 문서 3-2절의 "현재 기본 결합 시나리오는 공용 완속충전기 3대 증설" 문장은 v11.3(증설 0대)과 어긋나므로 문서 수정 필요.
+6. 8-A 동네 특성: 설계서의 "교정기간 평균 부하"를 누설 방지를 위해 "학습기간 평균 부하"로 바꿨다.
+
+## V10 기록(이력) — 아래는 V10 기준 서술이며 위 v11.3 절이 우선한다
+
 ## 실행
 
 로컬(PowerShell, 저장소 루트):
@@ -18,7 +219,7 @@ V9 현재 회귀 검증은 55개 성공·실패 0개·선택 패키지 2개 생�
 py -3 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe mock_data.py --out data/mock --energy
-.venv\Scripts\python.exe killcriteria.py --config config/mock.json
+.venv\Scripts\python.exe killcriteria.py --config config/mock.json   # v11: mock 은 --energy 로 생성
 .venv\Scripts\python.exe pipeline.py --config config/mock.json
 .venv\Scripts\python.exe -m pytest -q tests
 ```

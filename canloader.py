@@ -190,7 +190,11 @@ def station_agreement(points, stations, radius_m):
 
 
 def run_can_stage(path, columns, params, centroids, stations, activation, feature_before):
-    """3단계 전체. 반환 dict 의 표는 전부 법정동 집계(좌표 없음)."""
+    """3단계 전체. 반환 dict 의 표는 전부 법정동 집계(좌표 없음).
+
+    activation=None(v11 상권 단계 비활성): 처치 정제(treated_excl_base)와 변화점 신뢰도 표시를 만들지 않는다.
+    세션 시간대 모양 u(t)(charging_shape)과 반복 충전 위치 비율(공간 반복성 참고)은 그대로 낸다.
+    """
     can = load_can_m(path, columns, params)
     verdict, evidence = verify_join_key(can, params)
     path_label = "A(개별 차량)" if verdict == "individual" else "B(법정동 밀집도, 정황상 보조 근거)"
@@ -217,15 +221,17 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
         reg = sessions.dropna(subset=["bjd_code"]).groupby("bjd_code").agg(
             세션수=("start", "size"), 차량수=("vehicle_id", "nunique"), 거점성비율=("is_base", "mean"),
             평균세션_분=("duration_min", "mean")).reset_index()
-        reg["변화점_신뢰도"] = np.where(reg["거점성비율"] >= params["base_share_flag"], "낮음(거점성 다수)", "보통")
         out["region_table"] = reg
         feats = feat_sessions.dropna(subset=["bjd_code"]).groupby("bjd_code").agg(
             CAN_평균세션_분=("duration_min", "mean"), CAN_거점성비율=("is_base", "mean"), _n=("start", "size")).reset_index()
-        low = set(reg.loc[reg["변화점_신뢰도"].str.startswith("낮음"), "bjd_code"])
-        treated = activation[activation["status"] == "treated"][["bjd_code", "T_r"]].copy()
-        treated["CAN_거점성비율"] = treated["bjd_code"].map(reg.set_index("bjd_code")["거점성비율"])
-        treated["거점성제외_포함"] = ~treated["bjd_code"].isin(low)
-        out["treated_excl_base"] = treated
+        out["treated_excl_base"] = None
+        if activation is not None:
+            reg["변화점_신뢰도"] = np.where(reg["거점성비율"] >= params["base_share_flag"], "낮음(거점성 다수)", "보통")
+            low = set(reg.loc[reg["변화점_신뢰도"].str.startswith("낮음"), "bjd_code"])
+            treated = activation[activation["status"] == "treated"][["bjd_code", "T_r"]].copy()
+            treated["CAN_거점성비율"] = treated["bjd_code"].map(reg.set_index("bjd_code")["거점성비율"])
+            treated["거점성제외_포함"] = ~treated["bjd_code"].isin(low)
+            out["treated_excl_base"] = treated
         agree, n_pts = station_agreement(sessions[~sessions["is_base"]], stations, params["station_match_m"]) \
             if stations is not None else (np.nan, 0)
         out["region_table_export"] = _suppress(reg, "차량수", min_n)

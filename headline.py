@@ -62,3 +62,78 @@ def headline_table(access, results, params, utilization_scale, codes=None):
     if not rows:
         raise ValueError("8-C 접근성과 8-B ESS 결과가 모두 없음")
     return pd.DataFrame(rows)
+
+# ================================================================ v11 발표 숫자(1지도 3숫자)
+
+def headline_table_v11(access, risk=None, effect=None, scenario_region=None, ai=None, params=None, codes=None):
+    """v11.3 s9_headline. 각 행에 가정(증설 대수·상한 배율·이용률 배율·기온 모드·사용 모델)을 찍는다.
+
+    숫자 1: 충전기 1기당 전기차 배수(V10 그대로).
+    숫자 2: 증설 0대 급증 경보 정밀도·재현율(AI 대 기준 모델) → AI 효과(ESS 초과 kWh 감소율) 평균·범위·대상 수.
+            AI 가 실행되지 않았거나 킬 18번 기준을 못 넘으면 "미실행"/"AI 개선 없음"을 적는다.
+    숫자 3: (a) 현재 증설 0대 급증위험 ≥ risk_threshold 인 동네 수(상한 base_multiplier),
+            (b) 2030 중 시나리오에서 현재 상한을 넘는 동네 수(괄호에 고 시나리오). 둘 다 충전기 추가 없음 기준.
+    codes 를 주면 그 법정동만 집계한다(PNG 는 소표본 법정동을 뺀 목록을 넘긴다).
+    """
+    from loadforecast import ai_improvement
+
+    p = params
+    base_m, n_new = float(p["base_multiplier"]), int(p["scenario_new_chargers"])
+    model = ai["model_used"] if ai else "미실행"
+    wmode = ai["weather_mode"] if ai else "-"
+    common = f"기온 {wmode} · 모델 {model}"
+    keep = (lambda df: df if codes is None or df is None else df[df["bjd_code"].astype(str).isin(codes)])
+    rows = []
+    if access is not None:
+        a = keep(access)
+        multiple, n = ev_per_charger_multiple(a)
+        rows.append({"번호": "숫자 1", "내용": "충전기 1기당 전기차 대수의 지역 간 배수(상위10%÷하위10% 평균)", "값": multiple,
+                     "비교": np.nan, "범위": "", "가정": f"법정동 중심점 최근접 배정(폴리곤 공간조인 아님) · 대상 {n}곳"})
+    ok, why = ai_improvement(ai["metrics"] if ai else None, float(p.get("min_p90_coverage", 0.8)))
+    status = "" if ok else (" · 미실행" if not ai or model.startswith("baseline") else " · AI 개선 없음(킬 18)")
+    if risk is not None:
+        r = keep(risk)
+        r = r[np.isclose(r["multiplier"].astype(float), base_m) & (r["status"] == "assessed")]
+        for label, key in (("정밀도", "precision"), ("재현율", "recall")):
+            tp = r["tp_ai"].sum()
+            denom_ai = r["alerts_ai" if key == "precision" else "actual_ai"].sum()
+            denom_b = r["alerts_base" if key == "precision" else "actual_base"].sum()
+            rows.append({"번호": "숫자 2", "내용": f"증설 0대 급증 경보 {label} — AI(값) 대 기준 모델(비교)",
+                         "값": tp / denom_ai if denom_ai else np.nan,
+                         "비교": r["tp_base"].sum() / denom_b if denom_b else np.nan, "범위": "",
+                         "가정": f"증설 0대 · 상한 {base_m}배 · 공통일 법정동·일 합산 · {common} · {len(r)}곳{status}"})
+    if effect is not None and len(effect):
+        e = keep(effect)
+        e = e[e["new_chargers"] == n_new]
+        at = e[np.isclose(e["multiplier"].astype(float), base_m)]
+        spans = [g["ai_effect"].mean() for _, g in e.groupby("multiplier") if g["ai_effect"].notna().any()]
+        rows.append({"번호": "숫자 2", "내용": "AI 효과 — ESS 초과 kWh 감소율(1 − P90/기준 모델), 법정동 평균",
+                     "값": at["ai_effect"].mean(), "비교": np.nan,
+                     "범위": f"상한 1.1~1.3: {min(spans):.2f}~{max(spans):.2f}" if spans else "",
+                     "가정": f"증설 {n_new}대 · 상한 {base_m}배 · 이용률 배율 {p['utilization_scale']} · {common} · "
+                             f"대상 {int(at['ai_effect_eligible'].sum())}/{len(at)}곳(기준 모델 초과 0 제외){status}"})
+    elif ai is not None:
+        rows.append({"번호": "숫자 2", "내용": "AI 효과 — ESS 초과 kWh 감소율", "값": np.nan, "비교": np.nan, "범위": "",
+                     "가정": f"8-B 비교 운전 없음 · {common}{status}"})
+    if risk is not None:
+        r = keep(risk)
+        r = r[np.isclose(r["multiplier"].astype(float), base_m) & (r["status"] == "assessed")]
+        th = float(p["risk_threshold"])
+        rows.append({"번호": "숫자 3(a)", "내용": f"현재 급증위험 ≥ {th:g}인 동네 수(평가일 중 경보일 비율)",
+                     "값": int((r["surge_risk"] >= th).sum()), "비교": np.nan, "범위": f"평가 {len(r)}곳 중",
+                     "가정": f"충전기 추가 없음(증설 0대) · 상한 {base_m}배 · 평가기간 예측·관측 기준 · {common}"})
+    if scenario_region is not None and len(scenario_region):
+        s = keep(scenario_region)
+        s = s[(s["year"] == 2030) & (s["beta_case"] == "main")]
+        col = f"over_limit_{base_m}"
+        mid, high = s[s["scenario"] == "중"], s[s["scenario"] == "고"]
+        rows.append({"번호": "숫자 3(b)", "내용": "2030 중 시나리오(추세 연장)에서 현재 상한을 넘는 동네 수 (괄호: 고 시나리오)",
+                     "값": int(mid[col].sum()) if len(mid) else np.nan, "비교": int(high[col].sum()) if len(high) else np.nan,
+                     "범위": f"({int(high[col].sum())})" if len(high) else "(고 시나리오 생략)",
+                     "가정": f"시나리오(예측 아님) · 충전기 추가 설치 없음 · 상한 {base_m}배 · β={s['beta'].iloc[0]:.2f} · "
+                             f"{len(mid)}곳"})
+    if not rows:
+        raise ValueError("발표 숫자 재료(8-C·8-A·8-B·8-F) 없음")
+    out = pd.DataFrame(rows)
+    out.attrs["ai_check"] = why
+    return out

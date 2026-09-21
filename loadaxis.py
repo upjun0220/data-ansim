@@ -1,4 +1,4 @@
-"""8단계 — 전력 축(부하 집중도) + 4사분면 처방.
+"""8단계 — 전력 축(부하 집중도) + 공공 검토 유형. 4사분면 처방은 상권 단계(stages.commerce=true)에서만.
 
 집중도(r) = max_h Load(r, h) / Σ_h Load(r, h)      h: 시각(0~23)
 
@@ -34,6 +34,24 @@ QUADRANTS_LOAD_ONLY = {
     True: ("⑤ 부하 집중(CATE 미보고)", "CATE 미보고 · 충전 부하 집중 → ESS 시뮬레이션·현장 검토"),
     False: ("⑥ 부하 분산(CATE 미보고)", "CATE 미보고 · 충전 부하 분산 → 매출 효과와 별도로 공공 필요 확인"),
 }
+
+
+# v10.1~: 상권(CATE) 축을 빼고 부하 집중도 고·저만으로 공공 검토 유형을 낸다.
+LOAD_TYPES = {
+    True: ("부하 집중", "충전 부하 집중 → ESS 시뮬레이션·현장 검토"),
+    False: ("부하 분산", "충전 부하 분산 → 공공 접근성·수요 확인"),
+}
+
+
+def classify_load(concentration, params):
+    """부하 집중도 고·저 구분과 공공 검토 유형(상권 단계 비활성 기본 경로)."""
+    df = concentration.copy()
+    conc_cut = _cut(df["concentration"], params["conc_cut"])
+    high = df["concentration"] > conc_cut
+    df["load_group"] = [LOAD_TYPES[bool(b)][0] for b in high]
+    df["검토유형"] = [LOAD_TYPES[bool(b)][1] for b in high]
+    log.info("8단계 부하 집중도 구분: %s (기준 %.3f)", df["load_group"].value_counts().to_dict(), conc_cut)
+    return df.sort_values(["load_group", "concentration"], ascending=[True, False]).reset_index(drop=True), conc_cut
 
 
 def compute_concentration(kepco_mh, period):

@@ -1,6 +1,10 @@
 """반입 묶음 점검 — 반입 가능한 것은 .py(코드)·.csv/.txt(데이터)·.ttf 등 폰트뿐이다(zip·json·md 불가, 최대 10개·총 50MB·파일명 영문·숫자만).
 
 사용: python tools/check_import_bundle.py <폴더 또는 파일> [...]   (위반이 있으면 종료코드 1)
+
+v11 기준 예: 반입 번들 1.py 1(공휴일 달력 config/holidays.yaml 포함 — 따로 세지 않음) + 데이터 CSV 8(2.csv~9.csv)
+= 9개, 폰트(10.ttf) 허용 시 10개(한도). 이름은 tools/make_import_bundle.py 의 IMPORT_NAMES, 이전 반입 이름과 겹치면 위반.
+신한카드(SHC) 파일은 더 이상 기대하지 않는다. 공동주택(선택)을 넣으면 한도를 넘으므로 지표 3 구현 때 다시 센다.
 """
 from __future__ import annotations
 
@@ -13,6 +17,11 @@ MAX_FILES, MAX_BYTES = 10, 50 * 1024 * 1024
 FONT_EXT = {".ttf", ".otf", ".ttc"}
 # 반입 포털 규칙: 파일명에는 영문 대·소문자와 숫자만(공백·한글·_·- 불가). 확장자 앞의 점 하나만 허용한다.
 SAFE_NAME = re.compile(r"^[A-Za-z0-9]+\.[A-Za-z0-9]+$")
+
+
+# 이전에 반입했거나 반입 요청한 파일명(2026-09-21 V10 반입). 새 반입에 같은 이름을 쓰지 않는다.
+PREVIOUS_NAMES = {"dataansimbundle.py", "dataansimcodev10.zip", "bjdmaster.csv", "bjdcrosswalk.csv",
+                  "bjdcentroids.csv", "smp.csv", "evstations.csv", "evregistration.csv", "koreanfont.ttf"}
 
 
 def collect(paths):
@@ -41,6 +50,7 @@ def check(files):
         problems.append("파이썬(.py) 파일이 없음")
     problems += [f"허용되지 않는 형식(.py·.csv·.txt·폰트만 가능): {n}" for n, k, _ in rows if k == "other"]
     problems += [f"파일명 규칙 위반(영문·숫자만): {n}" for n, _, _ in rows if not SAFE_NAME.match(n)]
+    problems += [f"이전 반입 파일명과 중복: {n}" for n, _, _ in rows if n.lower() in PREVIOUS_NAMES]
     for f in files:
         if kind(f) == "code":
             try:

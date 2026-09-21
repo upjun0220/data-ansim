@@ -42,12 +42,26 @@ DEFAULT_COLUMNS = {
     # 외부 공개자료는 분석 기준 법정동코드로 사전 매핑한 파일을 받는다.
     "access_station": {"lat": "위도", "lon": "경도", "chargers": "충전기수"},
     "ev_registration": {"code": "법정동코드", "ev_count": "전기차등록대수"},
+    # 8-F: 행정동별 전기차 등록 월별 이력(OA-21236 형식)과 행정동→법정동 대응표(가중치 = 그 행정동 전기차 중 법정동 몫)
+    "ev_history": {"ym": "기준년월", "code": "행정동코드", "fuel": "연료", "count": "대수"},
+    "hdong_bjd": {"hdong": "행정동코드", "bjd": "법정동코드", "weight": "가중치"},
 }
 
 DEFAULT_PARAMS = {
     # 분석 지역 단위. "emd"=법정동(기본), "sigungu"=시군구(한전 읍면동이 행정동이어서 법정동과 못 맞출 때의 폴백).
     # 시군구 모드: 지역키가 시군구5자리+"00000". 8-C(2SFCA·중심점 근사)·8-E는 시군구 규모에서 의미가 없어 생략된다.
     "analysis_level": "emd",
+    # v11: 상권 파급효과(T_r·Y_ddd·이벤트 스터디·위약·처치오염·CATE·4사분면)는 끈다. 코드는 지우지 않고 True면 V10처럼 돈다.
+    "stages": {"commerce": False},
+    # v11.2: 분석 지역. KEPCO는 시도 텍스트(sido_name), 외부 자료는 법정동·행정동 코드 앞 2자리(sido_prefix)로 거른다.
+    # kepco.sido 는 하위 호환 별칭 — region.sido_name 이 있으면 그쪽이 우선한다. None 이면 거르지 않는다.
+    "region": {"sido_prefix": "11", "sido_name": "서울특별시"},
+    # v11: 기온(paths.weather). mode: forecast(예보, 기본) | none(기온 없음) | observed(실측 — 상한 참고용, 발표 숫자 금지).
+    # 예보는 발표 시각이 예측일 전날 fcst_cutoff 이전인 것 중 가장 늦은 발표분만 쓴다.
+    "weather": {"mode": "forecast", "fcst_cutoff": "18:00"},
+    # v11: 공휴일 달력(paths.holidays, JSON 문법의 holidays.yaml). long_min_days 이상 이어진 쉬는 날 = 연휴.
+    # count_weekends: 연휴 길이에 토·일을 셈. 파일이 없으면 "공휴일 미보정". 휴일을 규칙으로 만들지 않는다.
+    "holidays": {"long_min_days": 3, "count_weekends": True},
     "kepco": {
         "source": "001",                  # 변화점 탐지에 쓸 원천. 001/002 는 포함관계 불명 → 합산 금지
         "layout": "auto",                 # auto | long | wide
@@ -134,20 +148,44 @@ DEFAULT_PARAMS = {
     "output": {"min_cell_count": None},
     "kep007": {"sido_code_remap": {"42": "51", "45": "52"}},
     "load_axis": {"period": ["2025-01", "2025-12"], "cate_cut": "median", "conc_cut": "median"},
-    "energy": {"enabled": False, "evaluation_start": "2025-12-25", "evaluation_days": 7,
+    # v11: 평가 28일(급증위험이 1/7 단위로만 나오지 않게). 28일이 2025-12-31에 끝나도록 시작일을 12-04로 둔다.
+    "energy": {"enabled": False, "evaluation_start": "2025-12-04", "evaluation_days": 28,
                "weeks": 4, "holdout_weeks": 8, "calibration_days": 28, "holidays": {},
                "multipliers": [1.1, 1.2, 1.3], "new_chargers": [0, 2, 3, 5],
                "charger_kw": 7.0, "utilization_scale": 0.5,
                "utilization_shape": [0.1] * 7 + [0.3] * 5 + [0.6] * 5 + [1.0] * 5 + [0.3] * 2,
                "solver": "auto", "ess_params": {}, "candidates": None,
                "min_validation_days": 28, "max_relative_bias": 0.1, "priority_multiplier": 1.2},
+    # v11 8-A AI 분위수 예측. model: auto(lightgbm → sklearn → baseline) | lightgbm | sklearn | baseline.
+    # 학습 = 검증 시작(평가 시작 − holdout_weeks) 전 train_days 일. grid 는 학습기간 안 시간 순 교차검증으로만 고른다.
+    "forecast": {"model": "auto", "quantiles": [0.5, 0.9], "train_days": 182, "random_state": 42, "cv_folds": 3,
+                 "max_iter": 100, "min_p90_coverage": 0.8,
+                 "grid": {"learning_rate": [0.05, 0.1], "max_leaf_nodes": [15, 31], "min_samples_leaf": [20, 60]}},
+    # v11.3 급증 위험: 교정기간 최대 부하가 이 값(kW) 미만이면 not_assessed_low_load(배율 상한이 무의미하게 작음).
+    "risk": {"min_calib_peak_kw": 1.0},
+    # v11 9-H: 숫자 3(a) "현재 급증 위험 동네" 기준 — 평가일 중 경보일 비율이 이 값 이상(0.1 = 10일에 하루). 팀 확정 대상.
+    "headline": {"risk_threshold": 0.1},
+    # v11 8-B: ESS 스케줄 입력(p90 기본 | p50 | baseline). compare_inputs 면 증설 compare_new_chargers 대(기준 3대)에서
+    # 상한 1.1·1.2·1.3배 모두 같은 사전 선정 용량으로 기준 모델·P50·P90·oracle 을 돌려 AI 효과를 낸다.
+    "ess": {"forecast_input": "p90", "compare_inputs": True, "compare_new_chargers": 3},
+    # v11 8-F 시나리오(선택). base_month 는 전국 값의 기준월이며 EV_now 도 이 달 값을 쓴다.
+    # goal_national: 제1차 국가 탄소중립녹색성장 기본계획 2030 누적 보급 목표. national_base: 2026-06 전국 전기차 등록
+    # (국토교통부 자동차 등록현황 연료별, 6월 말 보도자료 "전기 1,095천대"와 일치). seoul_base: 2026-06 서울(2차 출처
+    # DataFact, 원자료 미대조) — 계산에 쓰지 않는 점검용. goal_national·national_base 가 비면 고 시나리오만 생략.
+    "scenario": {"base_month": "2026-06", "goal_national": 4_200_000, "national_base": 1_095_218, "seoul_base": 118_967,
+                 "years": [2028, 2030], "k": {"저": 0.5, "중": 1.0}, "growth_months": 36, "fuel_value": "전기",
+                 "beta_bounds": [0.3, 2.0], "n_boot": 999, "seed": 42},
     "priority": {"enabled": False, "radii_m": [300, 500, 800], "default_radius_m": 500,
-                 "weights": [1 / 3, 1 / 3, 1 / 3], "ahp_matrix": None,
+                 # v11: axes 기본 ["risk","equity"](급증위험·형평성, 1/2씩). ["safety","equity","economy"]는 레거시
+                 # 비교 모드(legacy_weights·legacy_min_axes·ahp_matrix 는 이때만 쓴다).
+                 # risk_metric: auto(순위 대상 50% 이상이 surge_risk=0 이면 peak_ratio) | surge_risk | peak_ratio.
+                 "axes": ["risk", "equity"], "weights": {"risk": 0.5, "equity": 0.5}, "risk_metric": "auto",
+                 "legacy_weights": [1 / 3, 1 / 3, 1 / 3], "legacy_min_axes": 3, "ahp_matrix": None,
                  "base_multiplier": 1.2, "scenario_new_chargers": 3, "multipliers": [1.1, 1.2, 1.3],
                  "weight_delta": 0.15, "top_share": 0.20, "robust_share": 0.90,
-                 # min_axes: 순위 대상(ranking_pool)에 필요한 최소 유효 축 수. 3=세 축 모두(기본).
-                 # redundant_corr: 안전·경제성 축 상관이 이 값 이상이면 axes_redundant 경고.
-                 "min_axes": 3, "redundant_corr": 0.90},
+                 # min_axes: 순위 대상(ranking_pool)에 필요한 최소 유효 축 수. 2=두 축 모두(v11 기본).
+                 # redundant_corr: (레거시) 안전·경제성 축 상관이 이 값 이상이면 axes_redundant 경고.
+                 "min_axes": 2, "redundant_corr": 0.90},
     "kill": {"sample_rows": 2_000_000, "compare_rows": 1_000_000, "kepco_max_chunks": None,
              "cf_min_regions": 30, "es_min_regions": 10, "min_tizo": 4, "mask_max_rate": 0.30,
              "access_match_min": 0.70, "robust_top_min_share": 0.05,
@@ -176,7 +214,7 @@ DEFAULT_INDUSTRY = {
 
 PATH_KEYS = ("bjd_master", "bjd_crosswalk", "emd_centroids", "kepco_001", "kepco_002", "shc001", "shc002",
              "can_m", "kep007", "industry_codes", "out_dir", "kepco_hourly", "smp", "public_evidence",
-             "access_stations", "ev_registration", "font")
+             "access_stations", "ev_registration", "font", "weather", "holidays", "ev_history", "hdong_bjd")
 
 
 def _strip_comments(obj):
@@ -225,6 +263,16 @@ def _resolve_min_cell_count(params):
     return params
 
 
+def resolve_region(params):
+    """region 이 kepco.sido(하위 호환 별칭)·shc.sido 보다 우선한다. 이후 코드는 kepco.sido·shc.sido 만 읽는다."""
+    region = params["region"]
+    if region.get("sido_name"):
+        params["kepco"]["sido"] = [region["sido_name"]]
+    if region.get("sido_prefix"):
+        params["shc"]["sido"] = [str(region["sido_prefix"])]
+    return params
+
+
 def load_config(path, require_industry=True):
     path = Path(path).resolve()
     raw = _strip_comments(json.loads(path.read_text(encoding="utf-8")))
@@ -236,10 +284,13 @@ def load_config(path, require_industry=True):
     paths = {key: (str((base / given[key]).resolve()) if given.get(key) else None) for key in PATH_KEYS}
     if not paths["out_dir"]:
         raise ValueError("paths.out_dir 는 필수")
+    params = resolve_region(_resolve_min_cell_count(deep_merge(DEFAULT_PARAMS, raw.get("params"))))
+    # 업종코드 매핑은 상권 단계(SHC) 전용이다. 상권 단계를 끄면 없어도 된다.
+    required = require_industry and bool(params["stages"]["commerce"])
     return {
         "config_path": str(path),
         "paths": paths,
         "columns": deep_merge(DEFAULT_COLUMNS, raw.get("columns")),
-        "params": _resolve_min_cell_count(deep_merge(DEFAULT_PARAMS, raw.get("params"))),
-        "industry": load_industry_codes(paths["industry_codes"], required=require_industry),
+        "params": params,
+        "industry": load_industry_codes(paths["industry_codes"], required=required),
     }

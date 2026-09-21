@@ -1,25 +1,31 @@
 {
   "_설명": "현장(안심구역)용 — field.json 으로 복사해 paths 만 실제 경로로 바꾼다. 헤더가 다르면 columns 에 그 항목만 적는다(접두 일치 허용).",
-  "_참고자료": "bjd_master · bjd_crosswalk · emd_centroids 는 tools/build_reference_files.py 가 만드는 bjdmaster.csv · bjdcrosswalk.csv · bjdcentroids.csv 3개(각각 따로 반입). 반입은 .py·.csv·.txt·폰트(.ttf)만 가능(zip·json·md 불가)하고 파일명은 영문 대소문자·숫자만 가능(공백·한글·_·- 불가)",
+  "_참고자료": "2~4.csv 는 tools/build_reference_files.py 가 만드는 bjdmaster·bjdcrosswalk·bjdcentroids 를 반입 때 숫자 이름으로 바꾼 것",
   "paths": {
-    "bjd_master": "../data/field/bjdmaster.csv",
-    "bjd_crosswalk": "../data/field/bjdcrosswalk.csv",
-    "emd_centroids": "../data/field/bjdcentroids.csv",
+    "bjd_master": "../data/field/2.csv",
+    "bjd_crosswalk": "../data/field/3.csv",
+    "emd_centroids": "../data/field/4.csv",
     "kepco_001": "../data/field/KEPCO_001.csv",
     "kepco_002": "../data/field/KEPCO_002.csv",
     "kepco_hourly": "../data/field/KEPCO_001.csv",
-    "smp": null,
-    "_반입파일명": "smp=smp.csv · access_stations=evstations.csv · ev_registration=evregistration.csv · font=koreanfont.ttf 처럼 영문·숫자 파일명으로 반입한 뒤 ../data/field/ 아래 경로를 적는다",
-    "access_stations": null,
+    "smp": "../data/field/5.csv",
+    "weather": "../data/field/9.csv",
+    "holidays": "holidays.yaml",
+    "_반입파일명": "반입 파일명은 이전 반입과 겹치지 않게 숫자: 1.py 번들 · 2 법정동마스터 · 3 코드대응 · 4 중심점 · 5 SMP · 6 충전소 위치 · 7 전기차 등록 이력 · 8 행정동→법정동 대응표 · 9 기온 · 10.ttf 폰트(font 경로에 지정)",
+    "access_stations": "../data/field/6.csv",
     "ev_registration": null,
     "public_evidence": null,
     "font": null,
-    "shc001": "../data/field/SHC001.csv",
-    "shc002": "../data/field/SHC002.csv",
+    "shc001": null,
+    "shc002": null,
     "can_m": "../data/field/CAN_M.csv",
     "kep007": null,
-    "industry_codes": "industry_codes.json",
-    "out_dir": "../out/field"
+    "industry_codes": null,
+    "out_dir": "../out/field",
+    "_shc": "v11 상권 단계 비활성 — shc001·shc002·industry_codes 는 null. params.stages.commerce=true 일 때만 채운다",
+    "ev_history": "../data/field/7.csv",
+    "hdong_bjd": "../data/field/8.csv",
+    "_ev_registration": "v11: null 이면 8-C 가 ev_history+hdong_bjd 의 기준월 값을 쓴다(반입 파일 1개 절약)"
   },
   "columns": {
     "_kepco": "시각이 별도 열이면 \"hour\": \"시간대\" 처럼 지정. 시간대별 가로 열이면 params.kepco.layout=wide",
@@ -29,20 +35,99 @@
   "params": {
     "analysis_level": "emd",
     "_analysis_level": "emd=법정동(기본). 킬 5번이 행정동 기준을 의심하면 sigungu(시군구 폴백)로 바꿔 다시 실행. 시군구 모드는 8-C·8-E 생략",
-    "kepco": {"source": "002", "layout": "auto", "chunksize": 2000000, "sido": null},
-    "shc": {"sido": null, "chunksize": 2000000,
+    "stages": {
+      "commerce": false,
+      "_commerce": "v11 기본 false: 상권 단계(T_r·DDD·CATE·4사분면) 비활성. true면 V10처럼 SHC·업종코드 필요"
+    },
+    "region": {
+      "sido_prefix": "11",
+      "sido_name": "서울특별시",
+      "_region": "서울 한정(v11.2). KEPCO는 sido_name 텍스트, 외부 자료는 코드 앞 2자리. kepco.sido 는 하위 호환 별칭(region 우선)"
+    },
+    "weather": {
+      "mode": "forecast",
+      "fcst_cutoff": "18:00",
+      "_weather": "forecast(예보)|none|observed(실측, 상한 참고용·발표 숫자 금지). 예보는 전날 fcst_cutoff 이전 발표분 중 최신만"
+    },
+    "holidays": {
+      "long_min_days": 3,
+      "count_weekends": true,
+      "_holidays": "연휴 기준(쉬는 날 연속 일수). 휴일 날짜는 holidays.yaml 에서만 온다"
+    },
+    "kepco": {
+      "source": "001",
+      "layout": "auto",
+      "chunksize": 2000000,
+      "sido": null
+    },
+    "shc": {
+      "sido": null,
+      "chunksize": 2000000,
       "_shc_sido": "RAM 8GB 이하면 시도 코드 앞 2자리 목록으로 분할(예 [\"11\"] 서울). 16GB 이상이면 null(전체).",
-      "_chunksize": "RAM 8GB 이하 500000~1000000, 16GB 이상 2000000(기본). 작을수록 메모리 적게 쓰고 느림."},
-    "activation": {"clip_to_data": false, "source_label": null,
-      "_activation": "clip_to_data=true면 창 끝을 원천의 마지막 수록 달로 줄임(KEPCO_002 가공일자가 제공기간보다 이름). source_label=null이면 source 002 공용(사업자 채널) 충전 활성화, 001 충전 활성화(전체)"},
-    "_kepco_sido": "메모리 부족 시 [\"서울\"] 처럼 시도별로 나눠 실행",
-    "identification": {"n_boot": 499, "use_log1p": false, "control_group": "never_treated"},
-    "energy": {"enabled": true, "evaluation_start": null, "evaluation_days": 7, "holidays": {}},
-    "priority": {"enabled": true, "weights": [0.333333, 0.333333, 0.333334], "min_axes": 3, "redundant_corr": 0.9,
-      "_priority": "min_axes=순위 대상에 필요한 최소 유효 축 수(3=세 축 모두). redundant_corr=안전·경제성 축 상관 경고 기준."},
+      "_chunksize": "RAM 8GB 이하 500000~1000000, 16GB 이상 2000000(기본). 작을수록 메모리 적게 쓰고 느림."
+    },
+    "activation": {
+      "clip_to_data": false,
+      "source_label": null,
+      "_activation": "clip_to_data=true면 창 끝을 원천의 마지막 수록 달로 줄임(KEPCO_002 가공일자가 제공기간보다 이름). source_label=null이면 source 002 공용(사업자 채널) 충전 활성화, 001 충전 활성화(전체)"
+    },
+    "identification": {
+      "n_boot": 499,
+      "use_log1p": false,
+      "control_group": "never_treated"
+    },
+    "energy": {
+      "enabled": true,
+      "evaluation_start": null,
+      "evaluation_days": 28,
+      "holidays": {},
+      "_evaluation": "평가 28일(급증위험 해상도). 시간별 원자료가 평가 시작 전 학습 182일+검증 8주+4주를 덮어야 AI 학습이 된다"
+    },
+    "priority": {
+      "enabled": true,
+      "axes": [
+        "risk",
+        "equity"
+      ],
+      "weights": {
+        "risk": 0.5,
+        "equity": 0.5
+      },
+      "min_axes": 2,
+      "risk_metric": "auto",
+      "_priority": "v11 두 축(급증위험 증설 0대·형평성 2SFCA) 1/2씩. risk_metric auto 는 순위 대상 50% 이상이 급증위험 0이면 피크비율로 대체(킬 21). 레거시 비교는 axes=[\"safety\",\"equity\",\"economy\"]"
+    },
     "_energy": "관측기간에 맞춰 평가일 조정. 최소 12주 연속 일별 이력·공식 공휴일 확인 필요. SMP는 timestamp(KST),smp(원/kWh) 정규화 CSV. 접근성 자료는 법정동코드 매핑 완료본을 지정. 공공성 증빙 미확보는 null 유지. KEP_007 미신청이면 paths.kep007=null.",
-    "output": {"min_cell_count": 3, "_min_cell_count": "소표본 억제 기준. 사무국 답변으로 바꿀 것. can.min_cell_count 는 하위 호환 별칭(output 이 우선)"},
-    "outputs": {"font_fallback": "ascii", "_font_fallback": "한글 폰트가 없으면 ascii=영문 라벨로 PNG 생성, none=한글 그대로"},
-    "kill": {"sample_rows": 2000000, "compare_rows": 1000000, "kepco_max_chunks": 3}
+    "output": {
+      "min_cell_count": 3,
+      "_min_cell_count": "소표본 억제 기준. 사무국 답변으로 바꿀 것. can.min_cell_count 는 하위 호환 별칭(output 이 우선)"
+    },
+    "outputs": {
+      "font_fallback": "ascii",
+      "_font_fallback": "한글 폰트가 없으면 ascii=영문 라벨로 PNG 생성, none=한글 그대로"
+    },
+    "kill": {
+      "sample_rows": 2000000,
+      "compare_rows": 1000000,
+      "kepco_max_chunks": 3
+    },
+    "forecast": {
+      "model": "auto",
+      "train_days": 182,
+      "_forecast": "auto: lightgbm → sklearn(분위수) → 기준 모델. 사용 모델은 실행 요약·킬 17"
+    },
+    "ess": {
+      "forecast_input": "p90",
+      "compare_inputs": true,
+      "_ess": "ESS 스케줄 입력 p90|p50|baseline. compare_inputs 면 증설 3대·상한 1.1~1.3배에서 AI 효과 산출"
+    },
+    "headline": {
+      "risk_threshold": 0.1,
+      "_headline": "숫자 3(a) 급증 위험 동네 기준(평가일 중 경보일 비율). 팀 확정 대상"
+    },
+    "scenario": {
+      "base_month": "2026-06",
+      "_scenario": "goal_national 4200000 · national_base 1095218 · seoul_base 118967(점검용) 기본값. 통계누리 원자료로 2026-08 로 옮기면 세 값과 EV_now 월을 함께 바꾼다"
+    }
   }
 }

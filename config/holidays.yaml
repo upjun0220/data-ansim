@@ -1,0 +1,3 @@
+{
+ "_설명": "자리표시자 — tools/fetch_holidays.py 로 특일 정보 API 결과를 받아 덮어쓴다. 비어 있으면 공휴일 미보정. JSON 문법(=유효한 YAML)"
+}

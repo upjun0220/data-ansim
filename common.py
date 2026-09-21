@@ -28,6 +28,13 @@ def filter_sido_code(chunk, col, sidos):
     return chunk[chunk[col].astype(str).str.replace(r"\D", "", regex=True).str[:2].isin(keep)]
 
 
+def keep_region(df, prefix, col="bjd_code"):
+    """코드 앞 2자리가 region.sido_prefix 인 행만(v11.2 서울 한정). prefix 가 비면 그대로."""
+    if not prefix:
+        return df
+    return df[df[col].astype(str).str.startswith(str(prefix))]
+
+
 def setup_logging(out_dir=None, level=logging.INFO):
     """콘솔 + out_dir/pipeline.log. 여러 번 호출해도 핸들러가 중복되지 않는다."""
     logger = logging.getLogger(LOGGER_NAME)

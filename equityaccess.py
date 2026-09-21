@@ -8,10 +8,15 @@ from bjdmapping import canonicalize
 from common import clean_code, read_columns, to_num
 
 
-def load_access_inputs(station_path, ev_path, columns, centroids, crosswalk=None):
-    """외부 공개자료를 최소 공통 스키마로 읽는다. EV 자료는 법정동 매핑 완료본이어야 한다."""
+def load_access_inputs(station_path, ev_path, columns, centroids, crosswalk=None, ev_counts=None):
+    """외부 공개자료를 최소 공통 스키마로 읽는다. EV 자료는 법정동 매핑 완료본이어야 한다.
+
+    ev_counts(bjd_code, ev_count)를 주면 ev_path 대신 쓴다 — v11 은 8-F 등록 이력의 기준월 값을 행정동→법정동
+    대응표로 배분해 넘긴다(반입 파일 하나를 줄이려고).
+    """
     st = read_columns(station_path, columns["access_station"], "공용충전소")
-    ev = read_columns(ev_path, columns["ev_registration"], "전기차등록")
+    ev = read_columns(ev_path, columns["ev_registration"], "전기차등록") if ev_counts is None else \
+        ev_counts.rename(columns={"bjd_code": "code"})
     stations = pd.DataFrame({
         "lat": to_num(st["lat"]), "lon": to_num(st["lon"]), "chargers": to_num(st["chargers"]),
     }).dropna()
@@ -95,6 +100,7 @@ def add_access_indicators(access, stations, demand_points):
     out = access.reset_index(drop=True).copy()
     out["chargers_assigned"] = np.bincount(dist.argmin(axis=0), weights=chargers, minlength=len(d))
     ev = pd.to_numeric(d["ev_count"], errors="coerce")
+    out["ev_count"] = ev   # 8-A AI 동네 특성·8-F 시나리오 입력
     out["ev_per_charger"] = (ev / out["chargers_assigned"]).where(out["chargers_assigned"] > 0)
     out["nearest_charger_km"] = dist.min(axis=1)
     return out
