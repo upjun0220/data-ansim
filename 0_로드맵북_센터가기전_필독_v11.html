@@ -154,7 +154,7 @@ section[id]{scroll-margin-top:16px}
   <p class="eyebrow">2026 데이터안심구역 경진대회 · 팀 공부용 · 센터 가기 전 필독</p>
   <h1>충전 부하, 하루 먼저 본다<br>로드맵북 v11</h1>
   <p class="lede">센터에 가기 전에 이것 하나만 읽으면 된다. 무엇을 하려는지, 어떤 데이터를 들고 가는지, 코드 파일 하나하나가 무슨 일을 하고 어떻게 돌리는지, 센터에서 첫날 무엇을 누르고 무엇을 확인하는지를 순서대로 적었다.</p>
-  <div class="meta"><span>v11 · 기준일 2026-09-21</span><span>기준 문서: 전체설계 V11.4(<code>docs/1_팀공유_전체설계_V11.4_20260921.html</code>)</span><span>코드: GitHub <code>upjun0220/data-ansim</code> · 테스트 113개 통과·3개 생략</span></div>
+  <div class="meta"><span>v11 · 기준일 2026-09-22</span><span>기준 문서: 전체설계 V11.4(<code>docs/1_팀공유_전체설계_V11.4_20260921.html</code>)</span><span>코드: GitHub <code>upjun0220/data-ansim</code> · 테스트 113개 통과·3개 생략</span></div>
 </header>
 
 <!-- 00 -->
@@ -169,7 +169,7 @@ section[id]{scroll-margin-top:16px}
     <li><strong>상권(카드 매출) 분석은 뺐다.</strong> 코드는 지우지 않고 꺼 두었다(<code>stages.commerce=false</code>). 그래서 신한카드 파일도 필요 없다.</li>
     <li><strong>AI</strong>: 그래디언트 부스팅 분위수 회귀(P50·P90). 딥러닝이 아니다. lightgbm이 없으면 scikit-learn으로, 그것도 없으면 “4주 중앙값” 기준 모델로 자동 전환한다.</li>
     <li><strong>코드는 다 짜 두었다.</strong> 가상 데이터로 전 과정이 돌고 테스트 113개가 통과한다. 센터에서는 경로와 날짜만 채워서 돌린다.</li>
-    <li><strong>반입</strong>: 코드 모듈 20개를 <strong>파일마다 따로</strong>(원래 이름) + 설정·달력·README·해시 목록 <code>.txt</code> + 데이터 <code>2.csv</code>~<code>9.csv</code> + 폰트 <code>10.ttf</code>. 데이터 이름은 이전 반입과 겹치지 않게 숫자로 붙였다.</li>
+    <li><strong>반입</strong>: 코드 모듈 20개를 <strong>파일마다 따로</strong>(원래 이름) + 설정·달력·README·해시 목록 <code>.txt</code> + 데이터 <code>2.csv</code>~<code>9.csv</code> + 폰트 <code>10.ttf</code>. 데이터 이름은 이전 반입과 겹치지 않게 숫자로 붙였다. <strong>2026-09-22 현재 데이터 파일 2~10번이 모두 준비됐다</strong>(03장 “준비 상태”).</li>
     <li><strong>첫날 가장 중요한 일</strong>: 킬 크라이테리아(첫날 점검)로 “이 데이터로 계획대로 갈 수 있는지”를 판정받는 것. 분석은 그다음이다.</li>
   </ul>
   <div class="warn"><b class="tag">솔직하게 알고 가야 할 것</b>
@@ -274,6 +274,8 @@ section[id]{scroll-margin-top:16px}
       <tr><td><strong>LX DEM5M</strong></td><td>표고</td><td>지도 배경·경사 보정(후속, 지금 코드는 안 씀)</td></tr>
     </tbody></table></div>
   <p>신한카드 SHC001·SHC002는 v10.1부터 신청 목록에서 뺐다.</p>
+  <div class="easy"><b class="tag">2026-09-22 확인</b>
+    <p>대회 상호제공 정의서(16개 기관)와 안심구역 홈페이지 제공 데이터 조회(576건)를 대조했다. <strong>KEPCO_001·002</strong>는 상호제공 목록에 있다(법정동 단위, 2023-01~2025-12, KEPCO_002 가공일자 20250825). <strong>CAN</strong>은 홈페이지 일반 카탈로그의 <code>TBE_001·002</code>(티벨 M-Type·G-Type), <strong>KEP_007</strong>은 <code>KEP_007</code>(한전 전기차충전소설치현황), <strong>지표 3 후보</strong>는 <code>KLH_001</code>(임대주택 계약, 시군구), <strong>전기차 등록 대체 후보</strong>는 <code>KTS_014</code>(운행등록 전체차량정보, 2024-04~2026-03)다. 이들이 우리 신청 범위에 들어가는지는 신청서에서 확인해야 한다. 법정동 경계·마스터·충전소 위치·행정동 대응표는 어느 목록에도 없어 공개 자료로 밖에서 만들어 반입한다.</p></div>
   <h3>우리가 들고 가는 것 (반입)</h3>
   <p>반입 포털은 <strong>.py·.csv·.txt·폰트만</strong> 받고(zip·json·md 불가) 파일명은 영문·숫자만 된다. 파일 개수 제한은 없고 총 50MB 이내. <strong>코드는 파일마다 따로</strong> 가져간다(알아보기 쉽고 심사에 유리). json·yaml·md는 못 올리므로 설정 원본·공휴일 달력·README는 내용 그대로 <code>.txt</code>로 담는다(코드는 확장자가 아니라 내용으로 읽는다). 데이터 이름은 이전 반입(<code>dataansimbundle.py</code>·<code>bjdmaster.csv</code> 등)과 겹치지 않게 숫자로 붙였다.</p>
   <div class="tbl"><table>
@@ -294,12 +296,22 @@ section[id]{scroll-margin-top:16px}
       <tr><td class="num">9.csv</td><td>기온 실측·과거 예보(서울)</td><td><code>timestamp,station_or_grid,temp_obs_c,temp_fcst_c,fcst_issued_at</code></td><td>기온 없는 모델로 진행</td></tr>
       <tr><td class="num">10.ttf</td><td>한글 폰트(서버에 없을 때만)</td><td>—</td><td>영문 라벨로 그림 생성</td></tr>
     </tbody></table></div>
-  <div class="warn"><b class="tag">아직 준비 안 된 것</b>
-    <ul>
-      <li><strong>9.csv 과거 기온 예보</strong>: 기상자료개방포털 동네예보 과거자료. 발표 시각(<code>fcst_issued_at</code>)을 꼭 같이 저장해야 한다. 코드가 전날 18시 이전 발표분만 쓰기 때문이다.</li>
-      <li><strong>8.csv 대응표</strong>: 가중치는 “그 행정동 전기차 중 이 법정동 몫”. 모르면 가중치 열을 비워 두면 같은 몫으로 나누고 경고한다.</li>
-      <li><strong>공휴일 달력</strong>: 2024~2025분은 <code>holidays.txt</code>에 들어 있다. 특일 정보 API 키가 생기면 <code>tools/fetch_holidays.py</code>로 다시 대조할 수 있다.</li>
-    </ul></div>
+  <h3>준비 상태와 출처 (2026-09-22)</h3>
+  <p>반입 폴더는 세 개다. <code>dist/import</code>(코드 20개 + 설정·달력·README + 5·9.csv) · <code>dist/import2</code>(데이터 2·3·4·6·7·8.csv + 10.ttf) · <code>dist/import3</code>(갱신된 <code>fieldtemplate.txt</code>·<code>checksums.txt</code>). 올릴 때는 세 폴더를 한 폴더로 합치고 이름이 겹치는 두 파일은 import3 것을 쓴다.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>파일</th><th>상태</th><th>출처·기준일</th><th>알아 둘 한계</th></tr></thead>
+    <tbody>
+      <tr><td class="num">2.csv</td><td><span class="pill p-iso">준비됨</span></td><td>국토교통부 전국 법정동 CSV(공공데이터포털 15063424), 2026-07-29 기준</td><td>21,356행 전국</td></tr>
+      <tr><td class="num">3.csv · 4.csv</td><td><span class="pill p-iso">준비됨</span></td><td>2.csv + GIS Developer 읍면동 경계(2023-07-29) → <code>build_reference_files.py</code></td><td>서울 법정동은 전부 매칭. 미매칭 7곳은 경기·충북·경북(서울 분석 무관)</td></tr>
+      <tr><td class="num">5.csv</td><td><span class="pill p-iso">준비됨</span></td><td>전력거래소 EPSIS 시간별 SMP, 2024~2025</td><td>주말·휴일 한낮 0원은 실제 가격</td></tr>
+      <tr><td class="num">6.csv</td><td><span class="pill p-opt">준비됨(옛 기준)</span></td><td>한국환경공단 충전소 위치 및 운영정보(<strong>2022-10-27</strong>) 서울 33,792기를 카카오 로컬 API로 좌표 변환</td><td>4년 전 스냅샷이라 이후 설치분이 빠짐. 6,585곳 중 6,494곳 변환(충전기 99.2%). 좌표 4,488행으로 합침. 이용자 제한은 반영 안 함</td></tr>
+      <tr><td class="num">7.csv</td><td><span class="pill p-iso">준비됨</span></td><td>서울 열린데이터광장 OA-21236 월별 xlsx 44개월(2023-01~2026-08)</td><td>행정동 이름이 경계와 안 맞아 빠진 몫 전기차 기준 약 1.6%(킬 20 경고선 10%보다 작음). 2026-06 서울 전기차 117,055대</td></tr>
+      <tr><td class="num">8.csv</td><td><span class="pill p-opt">준비됨(면적 가중)</span></td><td>행정동 경계(vuski/admdongkor 2026-07-01) × 법정동 경계 면적 겹침, 427개 행정동·1,106행</td><td>가중치는 README가 정한 “전기차 몫”이 아니라 <strong>면적 비율</strong>. 행정동 2026-07 vs 법정동 2023-07 경계 기준일 차이</td></tr>
+      <tr><td class="num">9.csv</td><td><span class="pill p-iso">준비됨</span></td><td>Open-Meteo(예보 = KMA 예보모델 48시간 전 발표, 실측 = ERA5)</td><td>기상청 ASOS·동네예보 원자료 아님. 예보는 2025-02-28부터. 센터의 <code>KIS_010</code>(ASOS 정규격자)으로 대체 가능한지 확인</td></tr>
+      <tr><td class="num">10.ttf</td><td><span class="pill p-iso">준비됨</span></td><td>NanumGothic(OFL, google/fonts)</td><td>서버에 한글 폰트가 있으면 안 써도 됨</td></tr>
+      <tr><td class="num">holidays.txt</td><td><span class="pill p-iso">준비됨</span></td><td>2024~2025 관공서 공휴일 38일</td><td>특일 정보 API 키가 생기면 <code>fetch_holidays.py</code>로 재대조</td></tr>
+    </tbody></table></div>
+  <p>원본 자료는 <code>data/ref/</code>, 생성 스크립트는 <code>tools/build_reference_files.py</code>·<code>tools/build_import2.py</code>·<code>tools/geocode_stations.py</code>다. 카카오 키는 환경변수(<code>KAKAO_REST_KEY</code>)로만 쓰고 저장소에 남기지 않았으니 작업이 끝나면 폐기해도 된다.</p>
   <p>8-C의 법정동별 전기차 대수는 7.csv·8.csv의 기준월(2026-06) 값으로 계산하므로 v10의 <code>evregistration.csv</code>는 따로 가져가지 않는다. 경계 도형이나 공동주택 자료를 더 가져갈지는 팀이 정한다(파일 개수 제한은 없고 총 50MB 이내).</p>
 </section>
 
@@ -510,7 +522,7 @@ cd data-ansim</code></pre></li>
     <li>연구계획서·DSZ 신청서의 분석 지역을 “수도권” → “서울”로, 반입 목록을 1~10번으로 맞추기</li>
     <li>공휴일 달력 받기: <code>$env:DATAGOKR_SERVICE_KEY="…"</code> 후 <code>python tools/fetch_holidays.py 2024 2025</code>, 대체·임시공휴일·선거일이 빠졌는지 확인</li>
     <li>반입 폴더 만들기: <code>python tools/make_import_bundle.py &lt;반입 폴더&gt;</code> → 코드 파일별 + <code>checksums.txt</code></li>
-    <li>데이터 2~9.csv 준비(특히 9.csv 과거 기온 예보, 8.csv 대응표), 서울로 걸러 용량 줄이기</li>
+    <li>데이터 2~10번은 준비 끝(<code>dist/import2</code>). <code>dist/import</code>·<code>import2</code>·<code>import3</code>를 한 폴더로 합쳐 <code>check_import_bundle.py</code>로 점검(합계 약 12MB)</li>
     <li><code>python tools/check_import_bundle.py &lt;반입 폴더&gt;</code>로 개수·용량·형식·이름 중복 점검</li>
     <li>로컬에서 <code>pytest</code> 통과, 06장 연습 한 번</li>
     <li>이 책 04·07·10장 읽고 오기</li>
@@ -621,10 +633,10 @@ summary["stages"]</code></pre>
   <div class="tbl"><table>
     <thead><tr><th>#</th><th>문제</th><th>영향</th><th>해결</th></tr></thead>
     <tbody>
-      <tr><td class="num">1</td><td>과거 기온 예보(9.csv)·행정동→법정동 대응표(8.csv) 미확보</td><td>예보 없으면 기온 없는 모델, 대응표 없으면 8-C·8-F 불가</td><td><span class="pill p-must">준비 필요</span></td></tr>
+      <tr><td class="num">1</td><td>9.csv는 기상청 원자료가 아니고, 8.csv는 면적 가중, 6.csv는 2022-10 스냅샷</td><td>기온 예보 품질·형평성 분모·접근성 지표의 최신성에 영향</td><td><span class="pill p-opt">임시 확보</span> 센터에서 KIS_010·KEP_007 등으로 보강 가능한지 확인</td></tr>
       <tr><td class="num">2</td><td>공휴일 달력이 빈 자리표시자</td><td>공휴일 미보정으로 돌아감</td><td><span class="pill p-must">준비 필요</span> fetch_holidays 후 번들 재생성</td></tr>
       <tr><td class="num">3</td><td>연구계획서·DSZ 신청서의 분석 지역·반입 목록이 v11과 다름</td><td>심사 때 앞뒤가 안 맞아 보임</td><td><span class="pill p-opt">서류 수정</span></td></tr>
-      <tr><td class="num">4</td><td>경계 도형·공동주택 자료 추가 반입 여부</td><td>지도·지표 3 후속 작업</td><td><span class="pill p-opt">결정 필요</span> 개수 제한은 없음, 총 50MB</td></tr>
+      <tr><td class="num">4</td><td>CAN(TBE_001·002)·KEP_007·KTS_014·KLH_001이 신청 범위에 들어가는지</td><td>지도·지표 3 후속 작업</td><td><span class="pill p-opt">결정 필요</span> 개수 제한은 없음, 총 50MB</td></tr>
       <tr><td class="num">5</td><td>안심구역에 lightgbm·scikit-learn이 있는지 미확인</td><td>둘 다 없으면 AI 미실행</td><td><span class="pill p-info">문의 중</span></td></tr>
       <tr><td class="num">6</td><td>한전 읍면동이 법정동인지 행정동인지 미확인</td><td>행정동이면 자치구 단위로만 분석, 8-C·8-E 생략</td><td><span class="pill p-info">문의 중</span></td></tr>
       <tr><td class="num">7</td><td>고객호수 정의·센터 소수 셀 기준 미확인</td><td>반출 그림이 얼마나 가려질지 모름</td><td><span class="pill p-info">문의 중</span></td></tr>
@@ -687,7 +699,7 @@ summary["stages"]</code></pre>
   </dl>
 </section>
 
-<footer>v11 · 작성 2026-09-21 · 근거: 코드(GitHub upjun0220/data-ansim, pytest 113 통과·3 생략), 전체설계 V11.4, 구현 명세(docs/claude-code-프롬프트-V11.3-구현-20260921.md). “가상 데이터 기준” 수치는 동작 확인용이며 실제 결과가 아니다.</footer>
+<footer>v11 · 작성 2026-09-21, 데이터 반입 현황 갱신 2026-09-22 · 근거: 코드(GitHub upjun0220/data-ansim, pytest 113 통과·3 생략), 전체설계 V11.4, 구현 명세(docs/claude-code-프롬프트-V11.3-구현-20260921.md). “가상 데이터 기준” 수치는 동작 확인용이며 실제 결과가 아니다.</footer>
 </main>
 </div>
 </body>
