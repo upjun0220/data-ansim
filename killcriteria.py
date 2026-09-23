@@ -30,7 +30,7 @@ import loadscenario
 import priorityscore
 import weatherloader
 from common import keep_region, log, mi_to_ym, setup_logging, ym_to_mi
-from config import deep_merge, load_config, resolve_region
+from config import deep_merge, load_config, resolve_region, select_kepco_source
 from outputs import OutputWriter, setup_korean_font
 
 PACKAGES = [
@@ -55,6 +55,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     K = P["kill"]
     commerce = bool(P["stages"]["commerce"])
     prefix = P["region"]["sido_prefix"]
+    kepco_src, kepco_preliminary = select_kepco_source(paths, P)
+    kepco_cols = C["kepco"] if kepco_src == "001" else C["kepco_cpo"]
     out_dir = Path(paths["out_dir"]) / "kill_criteria"
     setup_logging(out_dir)
     rows = []
@@ -95,7 +97,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
 
     def load_kepco():
         master = keep_region(bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"]), prefix)
-        raw = kepcoloader.load_kepco_monthly_hour(paths["kepco_001"], C["kepco"], P["kepco"], "KEPCO_001",
+        raw = kepcoloader.load_kepco_monthly_hour(paths[f"kepco_{kepco_src}"], kepco_cols, P["kepco"], f"KEPCO_{kepco_src}",
                                                    max_chunks=K["kepco_max_chunks"])
         mh, rate, unmatched, fail = kepcoloader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"])
         kepco_state.update(master=master, mh=mh, fail=fail, n_regions=len(raw[["sido", "sigungu", "emd"]].drop_duplicates()),
@@ -163,8 +165,9 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
         if "fail" not in kepco_state:
             load_kepco()
         fail = kepco_state["fail"]
-        ev = f"KEPCO 지역 {kepco_state['n_regions']}곳 중 미매칭 {fail:.1%} (예: " + \
-            ", ".join(kepco_state["unmatched"][["sido", "sigungu", "emd"]].head(3).agg(" ".join, axis=1)) + ")"
+        n_unmatched = len(kepco_state["unmatched"])
+        ev = (f"KEPCO_{kepco_src}{' 잠정' if kepco_preliminary else ''} 지역 "
+              f"{kepco_state['n_regions']}곳 중 미매칭 {n_unmatched}곳({fail:.1%}) · 원천 지역명은 반출표에서 제외")
         if fail >= P["bjd"]["fail_warn_rate"]:
             add(5, "한전 읍면동 매핑 실패율", "실패", ev,
                 "행정동 기준일 가능성 — params.analysis_level=\"sigungu\"(시군구 폴백)로 다시 실행하거나 행정동↔법정동 매핑표 확보")
@@ -190,8 +193,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
 
     # 7. KEPCO_001/002 포함관계
     def check7():
-        if not paths["kepco_002"]:
-            not_applicable(7, "KEPCO_001/002 포함관계", "paths.kepco_002 없음 — 002 미사용")
+        if not paths["kepco_001"] or not paths["kepco_002"]:
+            not_applicable(7, "KEPCO_001/002 포함관계", "001·002 중 하나가 없어 포함관계 대조 불가")
             return
         kp = dict(P["kepco"], chunksize=K["compare_rows"])
         keys = ["sido", "sigungu", "emd", "mi", "hour"]
@@ -227,8 +230,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             load_shc()
         # R4(2026-09-19): 본 분석(pipeline)은 P["kepco"]["source"]의 원천을 쓰는데, 이 항목은
         # KEPCO_001을 하드코딩해 원천이 다르면(현장 002) 처치 수가 실제와 어긋났다.
-        src = str(P["kepco"]["source"])
-        cols = C["kepco"] if src == "001" else C["kepco_cpo"]
+        src, cols = kepco_src, kepco_cols
         master = kepco_state["master"] if "master" in kepco_state else bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"])
         raw = kepcoloader.load_kepco_monthly_hour(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}",
                                                    max_chunks=K["kepco_max_chunks"])
@@ -286,6 +288,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 f"scipy {scipy.__version__} · HiGHS: {result.message}",
                 "데이터별 실행가능성은 8-B에서 별도 검증")
         guarded(9, "ESS LP 실행 환경", check9)
+    else:
+        not_applicable(9, "ESS LP 실행 환경", "energy.enabled=false")
 
     # 16. 선택한 원천의 마지막 수록 달이 활성화 창 끝보다 이른가(KEPCO_002 는 가공일자가 제공기간보다 이르다)
     def check16_channel():
@@ -309,8 +313,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(16, item, "통과", ev + f" · 대조 가능 {start:%Y-%m-%d}~{end:%Y-%m-%d}")
 
     def check16():
-        src = str(P["kepco"]["source"])
-        cols = C["kepco"] if src == "001" else C["kepco_cpo"]
+        src, cols = kepco_src, kepco_cols
         dates = kepcoloader.scan_observed_dates(paths[f"kepco_{src}"], cols, P["kepco"], f"KEPCO_{src}")
         if dates.empty:
             add(16, "원천 수록 기간", "경고", f"KEPCO_{src} 관측 일자를 못 읽음", "period 열·컬럼 설정 확인")
@@ -325,7 +328,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
                 "activation.window 끝을 줄이거나 activation.clip_to_data=true")
         else:
             add(16, "원천 수록 기간", "통과", label)
-    if commerce:
+    if commerce or not (paths["kepco_001"] and paths["kepco_002"]):
         guarded(16, "원천 수록 기간", check16)
     else:
         guarded(16, "원천 수록 기간(002↔001 대조 가능 기간)", check16_channel)
@@ -381,6 +384,10 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             else:
                 add(19, item, "통과", ev)
         guarded(19, "기온 예보·발표 시각", check19)
+    else:
+        not_applicable(17, "AI 예측 라이브러리", "energy.enabled=false")
+        not_applicable(18, "AI 성능(기준 모델 대비)", "energy.enabled=false")
+        not_applicable(19, "기온 예보·발표 시각", "energy.enabled=false")
 
     if paths["ev_history"]:
         # 20. 시나리오 — 행정동→법정동 매핑률, β 안정성, k_goal 보정 가능 여부
@@ -409,6 +416,8 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             add(20, item, verdict, " · ".join(parts),
                 "대응표 보완(미매핑 행정동 목록 확인)" if fail > 0.10 else "")
         guarded(20, "시나리오 매핑·β·k_goal", check20)
+    else:
+        not_applicable(20, "시나리오 매핑·β·k_goal", "paths.ev_history 없음")
 
     if P["priority"]["enabled"]:
         # 12. 외부 접근성 자료의 법정동 매칭
@@ -508,12 +517,21 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             else:
                 add(21, item, "통과", ev)
         guarded(21, "급증위험 변별력(0 비율)", check21)
+    else:
+        not_applicable(12, "접근성 지역키 매칭", "priority.enabled=false")
+        not_applicable(13, "계절 커버리지", "priority.enabled=false")
+        not_applicable(14, "가중치 유효성", "priority.enabled=false")
+        not_applicable(15, "민감도 강건 상위군", "priority.enabled=false")
+        not_applicable(21, "급증위험 변별력(0 비율)", "priority.enabled=false")
 
     table = pd.DataFrame(rows).sort_values("번호").reset_index(drop=True)
     if write:
         configured_font = paths["font"] if paths["font"] and Path(paths["font"]).is_file() else None
         writer = OutputWriter(out_dir, **P["outputs"], font_path=configured_font)
-        writer.table(table, "k_kill_criteria", f"킬 크라이테리아 {len(table)}항목 판정")
+        # 오류 메시지에는 원본 값(조회기간 예)·센터 경로가 섞일 수 있어 PNG 에는 예외 종류만 싣는다(전문은 내부 CSV).
+        error = table["판정"] == "오류"
+        png = table.assign(근거=table["근거"].where(~error, table["근거"].str.split(":").str[0] + " — 상세는 내부 CSV"))
+        writer.table(table, "k_kill_criteria", f"킬 크라이테리아 {len(table)}항목 판정", png_df=png)
     return table
 
 

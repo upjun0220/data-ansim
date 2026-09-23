@@ -137,3 +137,99 @@ def headline_table_v11(access, risk=None, effect=None, scenario_region=None, ai=
     out = pd.DataFrame(rows)
     out.attrs["ai_check"] = why
     return out
+
+
+# ================================================================ 발표 본문용: 발견 문장·새 3숫자·동네 카드
+
+def _pick(head, contains):
+    rows = head[head["내용"].astype(str).str.contains(contains, regex=False)]
+    return (float(rows["값"].iloc[0]), float(rows["비교"].iloc[0])) if len(rows) else (np.nan, np.nan)
+
+
+def story_table(head, sim=None):
+    """s9_story — 발표 본문의 '발견 한 문장'과 새 3숫자(격차·예측·개입). ESS·2030 은 s9_headline(부록)에 남긴다.
+
+    head: headline_table_v11 결과. sim: 8-G 충전기 추가 실험 표(첫 행 = 우선순위 전략, 둘째 = 비교 전략).
+    문구는 초안이며 팀이 확정한다. 값이 없으면 '미산출'로 적고 지어내지 않는다.
+    """
+    gap = head.loc[head["번호"] == "숫자 1", "값"]
+    gap = float(gap.iloc[0]) if len(gap) else np.nan
+    p_ai, p_b = _pick(head, "정밀도")
+    r_ai, r_b = _pick(head, "재현율")
+    rows = []
+    if np.isfinite(r_ai) and np.isfinite(r_b):
+        if r_ai > r_b:
+            sentence = (f"전날 AI 경보가 실제 급증일의 {r_ai:.0%}를 미리 잡아 기준 모델({r_b:.0%})보다 "
+                        f"{(r_ai - r_b) * 100:.0f}%p 높았다")
+        else:
+            sentence = f"AI 경보 재현율 {r_ai:.0%}로 기준 모델({r_b:.0%})을 넘지 못했다 — 그대로 보고"
+    else:
+        sentence = "AI 경보 재현율 미산출 — 평가기간에 실제 급증일이 없거나 8-A 미실행(s8a_risk 확인)"
+    col = [c for c in (sim.columns if sim is not None else []) if c.endswith("개선율") and c.startswith("하위")]
+    gain = gain_b = np.nan
+    if col and len(sim) >= 1:
+        gain = float(sim[col[0]].iloc[0])
+        gain_b = float(sim[col[0]].iloc[1]) if len(sim) >= 2 else np.nan
+        if np.isfinite(gain):
+            sentence += (f". 이 순위대로 충전기를 더하면 접근성 하위 동네가 {gain:+.0%} 개선된다"
+                         + (f"(전기차 많은 순 {gain_b:+.0%})" if np.isfinite(gain_b) else ""))
+        elif "접근성 0 동네(후)" in sim:   # 하위 동네가 모두 0 이면 개선율을 못 구한다 → 0 동네 수로 말한다
+            z0, z1 = int(sim["접근성 0 동네(전)"].iloc[0]), int(sim["접근성 0 동네(후)"].iloc[0])
+            sentence += (f". 이 순위대로 충전기를 더하면 접근성 0 동네가 {z0}→{z1}곳으로 준다"
+                         + (f"(전기차 많은 순 {int(sim['접근성 0 동네(후)'].iloc[1])}곳)" if len(sim) >= 2 else ""))
+    rows.append({"구분": "발견 문장(초안)", "내용": sentence, "값": np.nan, "비교": np.nan})
+    rows.append({"구분": "숫자 A 격차", "내용": "충전기 1기당 전기차 수 — 상위 10% 동네가 하위 10%의 몇 배",
+                 "값": gap, "비교": np.nan})
+    rows.append({"구분": "숫자 B 예측", "내용": "전날 AI 급증 경보 재현율(값) 대 기준 모델(비교)", "값": r_ai, "비교": r_b})
+    rows.append({"구분": "숫자 B 예측", "내용": "전날 AI 급증 경보 정밀도(값) 대 기준 모델(비교)", "값": p_ai, "비교": p_b})
+    if sim is not None and len(sim):
+        rows.append({"구분": "숫자 C 개입", "내용": f"{sim['전략'].iloc[0]}에 충전기 추가 시 {col[0] if col else '개선율'}"
+                                                 f"(값) 대 비교 전략(비교)", "값": gain, "비교": gain_b})
+    else:
+        rows.append({"구분": "숫자 C 개입", "내용": "충전기 추가 가정 실험 미산출(8-G)", "값": np.nan, "비교": np.nan})
+    return pd.DataFrame(rows)
+
+
+def recommend(risk_norm, equity_norm, cut=0.5):
+    """규칙 기반 권고 초안. 실제 설치·점검 결정이 아니다."""
+    high_r, high_e = bool(risk_norm >= cut), bool(equity_norm >= cut)
+    if high_r and high_e:
+        return "부하 현장 점검 + 공용 충전기 추가 검토"
+    if high_r:
+        return "배전 부하 현장 점검(한전 협의)"
+    if high_e:
+        return "공용 충전기 추가 검토"
+    return "관찰 유지"
+
+
+def region_cards(priority, risk, access, master, params, codes=None):
+    """s9_region_cards — 우선순위 상위 card_top_n 곳의 동네 카드. codes 를 주면 그 법정동만(PNG 소표본 제외)."""
+    base_m = float(params["base_multiplier"])
+    p = priority[priority["rank_eligible"].astype(bool)].copy()
+    p["bjd_code"] = p["bjd_code"].astype(str)
+    p["접근성 순위(낮은 순)"] = p["access_2sfca"].rank(method="min").astype("Int64")
+    if codes is not None:
+        p = p[p["bjd_code"].isin(set(map(str, codes)))]
+    p = p.sort_values("rank").head(int(params["card_top_n"]))
+    out = p[["rank", "bjd_code"]].rename(columns={"rank": "순위"}).astype({"순위": "Int64"})
+    names = master.drop_duplicates("bjd_code").set_index("bjd_code")["region_name"] if master is not None else {}
+    out["법정동"] = p["bjd_code"].map(names)
+    out["결합점수"] = p["PriorityScore"].to_numpy()
+    out["급증위험"] = p["risk_raw"].to_numpy()
+    if risk is not None:
+        r = risk[np.isclose(risk["multiplier"].astype(float), base_m)].copy()
+        r["bjd_code"] = r["bjd_code"].astype(str)
+        r = r.set_index("bjd_code")
+        hit = p["bjd_code"].map(lambda c: f"{int(r.at[c, 'tp_ai'])}/{int(r.at[c, 'actual_ai'])}일"
+                                if c in r.index and r.at[c, "actual_ai"] > 0 else "실제 급증 없음")
+        out["AI 경보 적중(급증일)"] = hit.to_numpy()
+    out["접근성 순위(낮은 순)"] = [f"{v}/{len(priority[priority['rank_eligible'].astype(bool)])}"
+                               for v in p["접근성 순위(낮은 순)"]]
+    if access is not None:
+        a = access.assign(bjd_code=access["bjd_code"].astype(str)).set_index("bjd_code")
+        per, n_ch = p["bjd_code"].map(a["ev_per_charger"]), p["bjd_code"].map(a["chargers_assigned"])
+        out["충전기 1기당 EV"] = [f"{v:.1f}" if pd.notna(v) else "충전기 없음" if n == 0 else "—"
+                              for v, n in zip(per, n_ch)]
+    out["강건 상위"] = p["robust_top"].to_numpy() if "robust_top" in p else np.nan
+    out["권고(초안)"] = [recommend(rn, en) for rn, en in zip(p["risk_norm"], p["equity_norm"])]
+    return out.reset_index(drop=True)

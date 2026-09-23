@@ -85,6 +85,55 @@ def compute_2sfca(stations, demand_points, radii_m=(300, 500, 800), default_radi
     return out
 
 
+def _present(access):
+    return access.loc[access["access_data_present"]].set_index("bjd_code")["access_2sfca"].astype(float)
+
+
+def bottom_codes(access, share=0.20):
+    """접근성 하위 share 동네(동률 포함 — 0 이 많아도 임의로 자르지 않는다). 수요가 있는 동네만."""
+    a = _present(access)
+    cut = a.nsmallest(max(1, int(np.ceil(len(a) * share)))).max()
+    return list(a.index[a <= cut])
+
+
+def access_gap(access, codes):
+    """codes(개선 전 하위 동네로 고정) 평균 2SFCA, 전체 평균, 접근성 0 동네 수."""
+    a = _present(access)
+    return {"bottom_mean": float(a.reindex(codes).mean()), "mean": float(a.mean()), "zero": int((a <= 0).sum()),
+            "n": len(a)}
+
+
+def simulate_added_chargers(stations, demand_points, strategies, chargers_each, radii_m=(300, 500, 800),
+                            default_radius_m=500, share=0.20):
+    """전략별로 대상 법정동 중심점에 가상 충전소(chargers_each 기)를 더해 2SFCA 를 다시 계산한다.
+
+    strategies: {전략 이름: 대상 bjd_code 목록}. 입지 최적화가 아니라 '어디부터 더하면 격차가 더 줄어드나'를
+    같은 충전기 수로 비교하는 가정 실험이다(중심점 근사·반경 내 균등 이용 가정).
+    하위 동네는 개선 전 기준으로 고정해 전략 간에 같은 동네를 비교한다.
+    """
+    base = compute_2sfca(stations, demand_points, radii_m, default_radius_m)
+    low = bottom_codes(base, share)
+    before = access_gap(base, low)
+    pts = demand_points.drop_duplicates("bjd_code").set_index("bjd_code")
+    rows = []
+    for name, codes in strategies.items():
+        codes = [c for c in dict.fromkeys(map(str, codes)) if c in pts.index]
+        extra = pd.DataFrame({"lat": pts.loc[codes, "lat"].to_numpy(), "lon": pts.loc[codes, "lon"].to_numpy(),
+                              "chargers": float(chargers_each)})
+        after = access_gap(compute_2sfca(pd.concat([stations, extra], ignore_index=True), demand_points,
+                                         radii_m, default_radius_m), low)
+        rows.append({"전략": name, "대상 동네 수": len(codes), "추가 충전기(기)": len(codes) * chargers_each,
+                     f"하위 {share:.0%} 동네 수(동률 포함)": len(low),
+                     f"하위 {share:.0%} 평균 접근성(전)": before["bottom_mean"],
+                     f"하위 {share:.0%} 평균 접근성(후)": after["bottom_mean"],
+                     f"하위 {share:.0%} 개선율": after["bottom_mean"] / before["bottom_mean"] - 1
+                     if before["bottom_mean"] > 0 else np.nan,
+                     "접근성 0 동네(전)": before["zero"], "접근성 0 동네(후)": after["zero"],
+                     "전체 평균 개선율": after["mean"] / before["mean"] - 1 if before["mean"] > 0 else np.nan,
+                     "비교 동네 수": before["n"]})
+    return pd.DataFrame(rows)
+
+
 def add_access_indicators(access, stations, demand_points):
     """지표 1(충전기 1기당 EV 수)·지표 2(최근접 공용충전기 거리)를 8-C 표에 붙인다.
 

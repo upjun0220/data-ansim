@@ -12,19 +12,34 @@ CHARGE_KWH 컬럼이 없다 → 충전량은 배터리상태_SOC 차분(%p)으�
 GPS 규칙: 이 모듈이 돌려주는 반출용 표에는 좌표가 없다(법정동 집계만). 세션 좌표는 내부 계산에만 쓴다.
 
 격리: run_can_stage 전체를 pipeline 이 try/except 로 감싼다. 여기서 실패해도 다른 단계는 영향이 없다.
-단독 실행하지 않는다.
+센터 첫 확인 때는 COPY_PATH 한 곳만 채운 뒤 직접 실행해 원본을 저장하지 않는 집계 진단을 할 수 있다.
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from common import EARTH_RADIUS_KM, haversine_km, log, mi_to_ym, nearest_region, read_columns, to_num, ym_to_mi
+from common import (EARTH_RADIUS_KM, detect_columns, haversine_km, log, mi_to_ym, nearest_region, read_columns,
+                    resolve_csv_path, to_num, ym_to_mi)
 
 DURATION_BINS = [0, 10, 20, 30, 40, 60, 90, 120, 240, 480, 1440]
 
+# 안심데이터센터 Jupyter 첫 확인용. 직원에게 받은 Copy Path를 따옴표 안에 그대로 붙여 넣는다.
+# 예상 후보(현장 확인 필요): r"Import_data/TBE/TB_TBE_TERMINAL_LOGMOCEAN.csv"
+COPY_PATH = r""
+
+CAN_COLUMN_ALIASES = {
+    "time": ("발생시간", "발생일시", "OCCUR_DTM", "EVENT_DTM", "LOG_DTM"),
+    "vehicle_id": ("차종_식별번호", "차종식별번호", "VHCL_ID", "VEHICLE_ID", "CAR_ID"),
+    "charging": ("충전중여부", "충전여부", "CHRG_YN", "CHARGING_YN", "CHARGERCONNECTION"),
+    "soc": ("배터리상태_SOC", "배터리상태SOC", "SOC", "BATTERY_SOC", "BATTERYSOC"),
+    "lat": ("위도", "LAT", "LATITUDE", "GPSLAT", "LTD"),
+    "lon": ("경도", "LON", "LONGITUDE", "GPSLON", "LNGT"),
+}
+
 
 def load_can_m(path, columns, params, nrows=None):
+    path = resolve_csv_path(path, "CAN_M")
     true_values = {str(v).upper() for v in params["charging_true_values"]}
     parts = []
     for chunk in read_columns(path, columns["can_m"], "CAN_M", chunksize=params["chunksize"], nrows=nrows):
@@ -45,6 +60,37 @@ def load_can_m(path, columns, params, nrows=None):
     log.info("CAN M-Type: %s행 · 식별번호 %d · %s ~ %s · 충전중 %.1f%%", f"{len(df):,}", df["vehicle_id"].nunique(),
              df["time"].min(), df["time"].max(), 100 * df["charging"].mean())
     return df
+
+
+def inspect_can_copy_path(path, nrows=200_000):
+    """센터 CAN CSV 일부를 읽어 원본 행·식별번호·좌표 없이 집계 진단만 반환한다."""
+    from config import DEFAULT_PARAMS
+
+    path = resolve_csv_path(path, "TB_TBE_TERMINAL_LOGMOCEAN")
+    detected = detect_columns(
+        path, CAN_COLUMN_ALIASES, "TB_TBE_TERMINAL_LOGMOCEAN", required=set(CAN_COLUMN_ALIASES)
+    )
+    params = dict(DEFAULT_PARAMS["can"])
+    params["chunksize"] = min(params["chunksize"], nrows)
+    can = load_can_m(path, {"can_m": detected}, params, nrows=nrows)
+    verdict, evidence = verify_join_key(can, params)
+    mode = "vehicle" if verdict == "individual" else "geo_cell"
+    sessions = build_sessions(can, params, mode)
+    path_label = "A(개별 차량)" if verdict == "individual" else "B(집계 근사, 정황상 보조 근거)"
+    duration_table, duration_summary = duration_distribution(sessions, path_label)
+    summary = pd.DataFrame([
+        {"항목": "사용 파일", "값": path.name},
+        {"항목": "자동 판별 컬럼", "값": str(detected)},
+        {"항목": "점검 범위", "값": f"앞 {len(can):,}행(최대 {nrows:,}행)"},
+        {"항목": "원본 저장", "값": "안 함"},
+        {"항목": "식별번호·좌표 반환", "값": "안 함"},
+    ])
+    return {
+        "summary": summary,
+        "evidence": evidence,
+        "duration_summary": duration_summary,
+        "duration_table": duration_table,
+    }
 
 
 def verify_join_key(can_df, params):
@@ -189,7 +235,7 @@ def station_agreement(points, stations, radius_m):
     return float((d[:, 0] * EARTH_RADIUS_KM * 1000 <= radius_m).mean()), len(pts)
 
 
-def run_can_stage(path, columns, params, centroids, stations, activation, feature_before):
+def run_can_stage(path, columns, params, centroids, stations, activation, feature_before, kepco_mh=None):
     """3단계 전체. 반환 dict 의 표는 전부 법정동 집계(좌표 없음).
 
     activation=None(v11 상권 단계 비활성): 처치 정제(treated_excl_base)와 변화점 신뢰도 표시를 만들지 않는다.
@@ -209,6 +255,8 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
     feat_sessions = sessions[sessions["start"] < before]
     out = {"verdict": verdict, "path": path_label, "evidence": evidence,
            "duration_table": dist_table, "duration_summary": dist_summary}
+    if kepco_mh is not None:
+        out["kepco_shape"], out["kepco_check"] = kepco_cross_check(sessions, kepco_mh, min_n)
 
     if verdict == "individual":
         sessions = mark_base_sessions(sessions, params)
@@ -258,10 +306,8 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
     return out
 
 
-def charging_shape(sessions):
-    """사전기간 세션의 시간대 점유 모양(최대=1). 충전기 수 분모가 없어 실제 이용률은 아니다."""
-    if len(sessions) < 3:
-        return None
+def _occupancy(sessions):
+    """세션이 시각(0~23)별로 충전 중이던 시간(h)의 합."""
     occupancy = np.zeros(24)
     for row in sessions.itertuples():
         start, end = pd.Timestamp(row.start), pd.Timestamp(row.end)
@@ -270,7 +316,55 @@ def charging_shape(sessions):
         for hour in pd.date_range(start.floor("h"), end.floor("h"), freq="h"):
             overlap = (min(end, hour + pd.Timedelta(hours=1)) - max(start, hour)).total_seconds()
             occupancy[hour.hour] += max(0, overlap) / 3600
+    return occupancy
+
+
+def charging_shape(sessions):
+    """사전기간 세션의 시간대 점유 모양(최대=1). 충전기 수 분모가 없어 실제 이용률은 아니다."""
+    if len(sessions) < 3:
+        return None
+    occupancy = _occupancy(sessions)
     return occupancy / occupancy.max() if occupancy.max() > 0 else None
+
+
+def kepco_cross_check(sessions, kepco_mh, min_n):
+    """CAN 충전 세션과 KEPCO_001을 겹치는 달에서 맞대 본다 — 서로 다른 안심구역 원천의 교차검증.
+
+    kepco_mh: 법정동×월×시각 KEPCO 집계(소표본 셀을 뺀 반출용). 둘 다 서울 전체·법정동 집계만 쓴다.
+    ① 시간대 모양: CAN 충전 점유 시간 비중 vs KEPCO 사용량 비중(각각 합 1) — 피어슨 상관·피크 시각
+    ② 공간 순위: 세션 min_n 이상 법정동의 CAN 세션 수 vs KEPCO 사용량 — 스피어만 순위 상관
+    CAN 은 일부 차량 표본이라 모집단 부하가 아니다. 상관이 낮아도 그대로 보고한다.
+    반환: (시각별 비중 표 또는 None, 요약 표)
+    """
+    s = sessions.dropna(subset=["bjd_code"])
+    s = s.assign(mi=s["start"].dt.year * 12 + s["start"].dt.month - 1)
+    months = sorted(set(s["mi"]) & set(kepco_mh["mi"]))
+    if not months:
+        can_span = f"{mi_to_ym(s['mi'].min())}~{mi_to_ym(s['mi'].max())}" if len(s) else "세션 없음"
+        kep_span = f"{mi_to_ym(kepco_mh['mi'].min())}~{mi_to_ym(kepco_mh['mi'].max())}" if len(kepco_mh) else "없음"
+        return None, pd.DataFrame([{"항목": "겹치는 달", "값": f"없음 (CAN {can_span} · KEPCO {kep_span})"}])
+    s, k = s[s["mi"].isin(months)], kepco_mh[kepco_mh["mi"].isin(months)]
+    can_h = _occupancy(s)
+    kep_h = k.groupby("hour")["kwh"].sum().reindex(range(24), fill_value=0).to_numpy(float)
+    shape = pd.DataFrame({"시각": range(24), "CAN_충전점유_비중": can_h / can_h.sum() if can_h.sum() else np.nan,
+                          "KEPCO_사용량_비중": kep_h / kep_h.sum() if kep_h.sum() else np.nan})
+    r_shape = shape["CAN_충전점유_비중"].corr(shape["KEPCO_사용량_비중"])
+
+    counts = s.groupby("bjd_code").size()
+    counts = counts[counts >= min_n]
+    kwh = k.groupby("bjd_code")["kwh"].sum()
+    both = pd.concat([counts.rename("can"), kwh.rename("kepco")], axis=1, join="inner")
+    rho = both["can"].rank().corr(both["kepco"].rank()) if len(both) >= 3 else np.nan
+    summary = pd.DataFrame([
+        {"항목": "비교 기간", "값": f"{mi_to_ym(months[0])}~{mi_to_ym(months[-1])} ({len(months)}개월)"},
+        {"항목": "CAN 세션 수(기간 내)", "값": f"{len(s):,}"},
+        {"항목": "시간대 모양 상관(피어슨)", "값": f"{r_shape:.3f}" if np.isfinite(r_shape) else "—"},
+        {"항목": "피크 시각 CAN / KEPCO", "값": f"{int(np.argmax(can_h))}시 / {int(np.argmax(kep_h))}시"},
+        {"항목": f"공간 비교 법정동 수(CAN 세션 {min_n}건 이상)", "값": f"{len(both)}"},
+        {"항목": "법정동 순위 상관(스피어만)", "값": f"{rho:.3f}" if np.isfinite(rho) else "— (3곳 미만)"},
+        {"항목": "해석", "값": "CAN 은 일부 차량 표본 — 모양·순위 일치 여부만 참고, 부하 크기 추정에 쓰지 않음"},
+    ])
+    return shape, summary
 
 
 def _suppress(df, count_col, min_n):
@@ -281,3 +375,11 @@ def _suppress(df, count_col, min_n):
             out[c] = out[c].astype("float64")
             out.loc[small, c] = np.nan
     return out
+
+
+if __name__ == "__main__":
+    if not COPY_PATH:
+        raise ValueError("canloader.py 상단 COPY_PATH에 센터의 CAN CSV Copy Path를 붙여 넣으세요")
+    result = inspect_can_copy_path(COPY_PATH)
+    for name, table in result.items():
+        print(f"\n[{name}]\n{table.to_string(index=False)}")

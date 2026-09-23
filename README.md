@@ -25,10 +25,30 @@
 > **시나리오(예측 아님), 충전기 추가 설치 없음 가정**이다. **mock에서 AI가 기준 모델을 이겨도 성능 근거가 아니다** — 기온·요일·
 > 휴일·추세 반응을 mock에 직접 심었기 때문이다.
 
+### v11.5 — 현장 실행기·발표 본문 보강 (2026-09-24)
+
+현장 1·2일차 결과(KEPCO_001 = `조회기간` YYYYMMDD + `01:00`~`24:00` 가로 열, KEPCO_002 사용량 열 없음)와 심사 관점 점검을 반영했다.
+
+- **현장 번들을 저장소에서 만든다:** `python tools/make_day1bundle.py` → `dist/day1/day1bundle3.py`(모듈 20개 + `fieldday1.py` +
+  공휴일 달력을 파일 하나에). 현장에서만 고쳐졌던 모듈 6개(`bjdmapping`·`canloader`·`common`·`config`·`killcriteria`·`pipeline`)와
+  `fieldday1.py`를 저장소에 합쳤다. `select_kepco_source`는 상권 단계가 꺼져 있으면 001을 쓰고, 001이 없을 때만 002로 잠정 폴백한다.
+- **현장 실행기(`fieldday1.py`, Copy Path만 붙여 넣음 — 센터에서는 코드를 손으로 입력):**
+  `run_first_visit`(킬 21개 + 0·1단계) · `run_full(kepco_001_path, import_dir, can_path)`(전체 분석. `import_dir`은 2~9.csv 폴더
+  또는 그중 파일 하나의 경로, 평가 창은 수록 마지막 28일 자동) · `run_seasons(...)`(평가 창을 3개월씩 옮겨 4번, 상위 20곳 유지 비교).
+  킬 판정표는 꺼진 항목도 “해당 없음”으로 남겨 **항상 21개**다. 법정동 별칭 `읍면동코드`는 기본값에 들어가 별칭 셀이 필요 없다.
+- **새 산출물:** `s3_can_kepco_check`·`s3_can_kepco_shape`(CAN×KEPCO_001 겹치는 달 교차검증 — 시간대 모양 상관·피크 시각·법정동
+  순위 상관) · `s8g_charger_sim`(8-G: 순위 상위 20곳 vs 전기차 등록 상위 20곳에 같은 기수의 충전기를 가상 추가해 2SFCA 재계산,
+  개선 전 하위 20% 동네(동률 포함) 고정 비교) · `s9_story`(발견 문장 초안과 새 3숫자: 격차·예측·개입) · `s9_region_cards`(동네 카드
+  10곳, 규칙 기반 권고 초안) · `s9_season_robustness`·`s9_season_stable`(`run_seasons`).
+- **발표 본문 재구성:** 본문은 AI 급증 경보 → 경보 검증 → 접근성 결합 지도 → 충전기 추가 효과. ESS(8-B)·2030(8-F)·`s9_headline`은
+  부록이다. `stages.ess`·`stages.scenario`로 끌 수 있다(`run_seasons`는 창마다 끈다).
+- **반출 안전:** PNG에는 오류 전문(원본 값·센터 경로가 섞일 수 있음) 대신 예외 종류만, 산출물 목록에는 절대경로 대신 파일 이름만,
+  미매칭 목록은 지역명 대신 건수만 싣는다(킬 5번 근거·`s0_bjd_unmatched`·`s0_run_summary`·`s3_can_skipped`·`s9_manifest`).
+
 ### 파이프라인 순서
 
-`0·1(정합·집계) → 1-C(KEPCO_002 채널 비교) → 3(CAN u(t)·KEP_007) → [2·4~7 상권 단계: 기본 비활성] → 8(load_axis) → 8-C →
-0-E(공휴일·기온 점검) → 8-A(기준 모델 검증) → 8-A(AI 분위수 예측·급증 위험) → 8-B → 8-E → 8-F → 9-H → 9`
+`0·1(정합·집계) → 1-C(KEPCO_002 채널 비교) → 3(CAN u(t)·KEP_007·CAN×KEPCO 교차검증) → [2·4~7 상권 단계: 기본 비활성] → 8(load_axis) → 8-C →
+0-E(공휴일·기온 점검) → 8-A(기준 모델 검증) → 8-A(AI 분위수 예측·급증 위험) → 8-B → 8-E → 8-G → 8-F → 9-H → 9`
 
 8-A는 8-C의 동네 특성(전기차·충전기 수)을 입력으로 쓰므로 8-C 뒤에 돈다. 8-C가 실패하면 8-A는 동네 특성 없이 학습한다.
 0·1만 필수이고 나머지는 모두 격리(실패해도 다음 단계와 9단계 반출은 계속)된다.
@@ -45,8 +65,9 @@
 | 8-A AI 예측 | `loadforecast.py` | `s8a_validation`(기준 모델) · `s8a_forecast_metrics` · `s8a_risk` · `s8a_risk_summary` | lightgbm → sklearn → 기준 모델 폴백 |
 | 8-B ESS | `essoptimizer.py` | `s8b_scenarios`(`forecast_input` 열) · `s8b_ai_effect` · `s8b_ai_effect_summary` · `s9_public_review` | AI 없으면 기준 모델 운전("baseline(AI 없음)") |
 | 8-E 결합 점수 | `priorityscore.py` | `s8e_priority` · `s8e_not_ranked` · `s8e_rank_risk` · `s8e_rank_equity` · `s8e_priority_summary` | 8-A·8-C 없으면 생략 |
-| 8-F 시나리오 | `loadscenario.py` | `s8f_scenario` · `s8f_scenario_region` · `s8f_beta` · `s8f_scenario_2030_mid`(PNG) | `paths.ev_history` 없으면 생략 |
-| 9-H 발표 숫자 | `headline.py` | `s9_headline` | 격리 |
+| 8-G 충전기 추가 실험 | `equityaccess.py` | `s8g_charger_sim` | 8-E·8-C 없으면 생략 |
+| 8-F 시나리오 | `loadscenario.py` | `s8f_scenario` · `s8f_scenario_region` · `s8f_beta` · `s8f_scenario_2030_mid`(PNG) | `paths.ev_history` 없거나 `stages.scenario=false`면 생략 |
+| 9-H 발표 숫자 | `headline.py` | `s9_story`(본문) · `s9_region_cards` · `s9_headline`(부록) | 격리 |
 
 ### 8-A — AI 분위수 예측과 급증 위험
 

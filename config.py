@@ -52,7 +52,8 @@ DEFAULT_PARAMS = {
     # 시군구 모드: 지역키가 시군구5자리+"00000". 8-C(2SFCA·중심점 근사)·8-E는 시군구 규모에서 의미가 없어 생략된다.
     "analysis_level": "emd",
     # v11: 상권 파급효과(T_r·Y_ddd·이벤트 스터디·위약·처치오염·CATE·4사분면)는 끈다. 코드는 지우지 않고 True면 V10처럼 돈다.
-    "stages": {"commerce": False},
+    # ess·scenario: 8-B(ESS)·8-F(2030 시나리오)는 발표 부록용. 계절 비교처럼 여러 번 돌릴 때 끄면 빨라진다.
+    "stages": {"commerce": False, "ess": True, "scenario": True},
     # v11.2: 분석 지역. KEPCO는 시도 텍스트(sido_name), 외부 자료는 법정동·행정동 코드 앞 2자리(sido_prefix)로 거른다.
     # kepco.sido 는 하위 호환 별칭 — region.sido_name 이 있으면 그쪽이 우선한다. None 이면 거르지 않는다.
     "region": {"sido_prefix": "11", "sido_name": "서울특별시"},
@@ -185,7 +186,10 @@ DEFAULT_PARAMS = {
                  "weight_delta": 0.15, "top_share": 0.20, "robust_share": 0.90,
                  # min_axes: 순위 대상(ranking_pool)에 필요한 최소 유효 축 수. 2=두 축 모두(v11 기본).
                  # redundant_corr: (레거시) 안전·경제성 축 상관이 이 값 이상이면 axes_redundant 경고.
-                 "min_axes": 2, "redundant_corr": 0.90},
+                 "min_axes": 2, "redundant_corr": 0.90,
+                 # 8-G 충전기 추가 시뮬레이션(순위 상위 sim_top_n 곳에 sim_chargers_each 기씩 가상 추가 후 2SFCA 재계산)
+                 # 과 9단계 동네 카드(card_top_n 곳). 실제 설치 계획이 아니라 순위의 쓸모를 보이는 가정 실험이다.
+                 "sim_top_n": 20, "sim_chargers_each": 2, "card_top_n": 10},
     "kill": {"sample_rows": 2_000_000, "compare_rows": 1_000_000, "kepco_max_chunks": None,
              "cf_min_regions": 30, "es_min_regions": 10, "min_tizo": 4, "mask_max_rate": 0.30,
              "access_match_min": 0.70, "robust_top_min_share": 0.05,
@@ -271,6 +275,23 @@ def resolve_region(params):
     if region.get("sido_prefix"):
         params["shc"]["sido"] = [str(region["sido_prefix"])]
     return params
+
+
+def select_kepco_source(paths, params):
+    """(원천, 잠정 여부). 상권 단계가 꺼져 있으면 부하 분석 주 입력은 001이다.
+
+    001이 없고 002만 있으면 현장 잠정 분석으로 002를 쓴다(001 확보 후 재실행). 둘을 합산하지 않는다.
+    """
+    requested = str(params["kepco"]["source"])
+    if requested not in ("001", "002"):
+        raise ValueError("params.kepco.source 는 '001' 또는 '002' — 둘을 합산하지 않는다")
+    if not params["stages"]["commerce"]:
+        requested = "001"
+    if paths.get(f"kepco_{requested}"):
+        return requested, False
+    if requested == "001" and paths.get("kepco_002"):
+        return "002", True
+    raise FileNotFoundError(f"KEPCO_{requested} 경로가 없음")
 
 
 def load_config(path, require_industry=True):

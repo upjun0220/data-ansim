@@ -10,7 +10,7 @@
   2. 1차 원문(공백만 제거) 일치 → 2차 정규화('제1동'→'1동', 가운뎃점·괄호 제거) 일치.
   3. 정규화로도 못 푼 건은 미매칭 목록으로 남겨 사람이 검토한다.
   4. 매칭률표와 미매칭 목록을 항상 반환한다. 실패율이 문턱(기본 30%) 이상이면 '행정동 기준일 수 있음' 경고.
-단독 실행하지 않는다.
+센터 첫 확인 때는 COPY_PATH 한 곳만 채운 뒤 직접 실행해 스키마와 건수를 점검할 수 있다.
 """
 from __future__ import annotations
 
@@ -18,7 +18,21 @@ import re
 
 import pandas as pd
 
-from common import clean_code, log, norm_text, nospace, read_columns
+from common import clean_code, detect_columns, log, norm_text, nospace, read_columns, resolve_csv_path
+
+# 안심데이터센터 Jupyter 첫 확인용. 직원에게 받은 Copy Path를 따옴표 안에 그대로 붙여 넣는다.
+# 예: r"Import_data/COMM_CODE/TB_COMM_UMD_CODE.csv"
+COPY_PATH = r""
+
+BJD_COLUMN_ALIASES = {
+    # 읍면동코드: 센터 TB_COMM_UMD_CODE 실제 헤더(2026-09-22 확인). 10자리가 아니면 load_bjd_master 가 멈춘다.
+    "code": ("법정동코드", "법정동 코드", "읍면동코드", "UMD_CD", "BJD_CD", "BJD_CODE", "LEGAL_DONG_CD"),
+    "name": ("법정동명", "법정동 명", "BJD_FULL_NM", "LEGAL_DONG_NM"),
+    "status": ("폐지여부", "폐지 여부"),
+    "sido": ("시도명", "시도 명", "WIAR_SIDO_NM", "SIDO_NM", "CTPV_NM"),
+    "sigungu": ("시군구명", "시군구 명", "SGNG_NM", "SIGUNGU_NM"),
+    "emd": ("읍면동명", "읍면동 명", "UMD_NM", "EMD_NM"),
+}
 
 # 분석 수준: "emd"(법정동, 기본) | "sigungu"(시군구로 묶음). 시군구 모드는 모든 지역키를 시군구5자리+"00000"으로 접어,
 # 한전 읍면동이 행정동이어서 법정동과 못 맞출 때 쓰는 폴백이다(P2-2 ①). 나머지 코드는 10자리 bjd_code 를 그대로 쓴다.
@@ -94,7 +108,13 @@ def load_bjd_master(path, columns):
         cols = {k: v for k, v in cols.items() if k not in ("sido", "sigungu", "emd")}
     required = ["code", "sido", "sigungu", "emd"] if text_mode else ["code", "name"]
     df = read_columns(path, cols, "법정동코드마스터", required=required)
-    df["code"] = clean_code(df["code"], 10)
+    df["code"] = clean_code(df["code"])
+    lengths = df["code"].dropna().str.len().value_counts().sort_index()
+    if not lengths.empty and any(length != 10 for length in lengths.index):
+        raise ValueError(
+            f"법정동코드는 10자리여야 함. 실제 길이별 건수: {lengths.to_dict()} "
+            "→ UMD_CD가 3자리 조각이면 시도·시군구 코드와 결합 규칙을 현장에서 확인할 것"
+        )
     df = df.dropna(subset=["code"])
     if "status" in df:
         status = norm_text(df["status"])
@@ -136,6 +156,28 @@ def load_bjd_master(path, columns):
                         key, len(dup), dup[[key, "bjd_code"]].head(5).to_dict("records"))
     log.info("법정동 마스터: 읍면동 %d개", len(emd))
     return emd
+
+
+def inspect_bjd_copy_path(path):
+    """센터 법정동 CSV를 읽고 원본 행 없이 스키마·집계만 반환한다."""
+    path = resolve_csv_path(path, "TB_COMM_UMD_CODE")
+    detected = detect_columns(path, BJD_COLUMN_ALIASES, "TB_COMM_UMD_CODE", required={"code"})
+    if "name" not in detected and not all(key in detected for key in ("sido", "sigungu", "emd")):
+        from common import read_header
+
+        header, _, _ = read_header(path)
+        raise KeyError(
+            "[TB_COMM_UMD_CODE] 법정동 전체 이름 1열 또는 시도명·시군구명·읍면동명 3열이 필요함. "
+            f"실제 컬럼: {header} → 헤더명과 코드 조합 규칙을 확인할 것"
+        )
+    master = load_bjd_master(path, detected)
+    return pd.DataFrame([
+        {"항목": "사용 파일", "값": path.name},
+        {"항목": "자동 판별 컬럼", "값": str(detected)},
+        {"항목": "법정동 수", "값": len(master)},
+        {"항목": "10자리 코드 수", "값": int(master["bjd_code"].nunique())},
+        {"항목": "서울 코드 수(앞 2자리 11)", "값": int(master["bjd_code"].str.startswith("11").sum())},
+    ])
 
 
 def _unique_lookup(master, key):
@@ -271,3 +313,9 @@ def load_emd_centroids(path, columns):
     out = out.dropna()
     log.info("법정동 중심점 %d개", len(out))
     return out
+
+
+if __name__ == "__main__":
+    if not COPY_PATH:
+        raise ValueError("bjdmapping.py 상단 COPY_PATH에 센터의 법정동 CSV Copy Path를 붙여 넣으세요")
+    print(inspect_bjd_copy_path(COPY_PATH).to_string(index=False))

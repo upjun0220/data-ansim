@@ -42,12 +42,16 @@ import essoptimizer
 import priorityscore
 import weatherloader
 from common import keep_region, log, mi_to_ym, setup_logging, ym_to_mi
-from config import deep_merge, load_config, resolve_region
+from config import deep_merge, load_config, resolve_region, select_kepco_source
 from outputs import (OutputWriter, plot_activation_examples, plot_bar, plot_event_study, plot_histogram,
                      plot_quadrants)
 
 CRITICAL = True
 ISOLATED = False
+
+
+class _StopAfterStage1(Exception):
+    """0·1단계 산출물을 정상 저장한 뒤 후속 단계를 건너뛰기 위한 내부 신호."""
 
 
 class StageRunner:
@@ -176,7 +180,7 @@ def channel_share_table(cells):
                         ).reset_index().rename(columns={"hour": "시각"})
 
 
-def run(config_path, params_override=None, paths_override=None):
+def run(config_path, params_override=None, paths_override=None, stop_after_stage1=False):
     cfg = load_config(config_path)
     if params_override:
         cfg["params"] = resolve_region(deep_merge(cfg["params"], params_override))
@@ -199,13 +203,10 @@ def run(config_path, params_override=None, paths_override=None):
             master = keep_region(bjdmapping.load_bjd_master(paths["bjd_master"], C["bjd"]), prefix)
             S["crosswalk"] = bjdmapping.load_crosswalk(paths["bjd_crosswalk"], C["crosswalk"]) \
                 if paths["bjd_crosswalk"] else None
-            src = str(P["kepco"]["source"])
-            if src not in ("001", "002"):
-                raise ValueError("params.kepco.source 는 '001' 또는 '002' — 둘을 합산하지 않는다")
-            if not commerce and src != "001":
-                # kepco.source 는 변화점(T_r) 원천 선택이다. 상권 단계를 끄면 부하 분석의 주 입력은 KEPCO_001이다.
-                log.info("상권 단계 비활성: kepco.source=%s 무시 — 부하 분석은 KEPCO_001", src)
-                src = "001"
+            # 상권 단계를 끄면 부하 분석의 주 입력은 KEPCO_001(kepco.source 무시). 001이 없을 때만 002 잠정.
+            src, preliminary = select_kepco_source(paths, P)
+            if preliminary:
+                log.warning("KEPCO_002 잠정 분석 — 정식 결과는 KEPCO_001 확보 후 다시 실행")
             raw = kepcoloader.load_kepco_monthly_hour(paths[f"kepco_{src}"], C["kepco" if src == "001" else "kepco_cpo"],
                                                        P["kepco"], f"KEPCO_{src}")
             if commerce:
@@ -219,8 +220,13 @@ def run(config_path, params_override=None, paths_override=None):
                     log.warning("activation.clip_to_data: 창 끝을 수록 마지막 달로 줄임 → %s", "~".join(act_p["window"]))
             mh, rate, unmatched, fail = kepcoloader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"], S["crosswalk"])
             writer.table(rate, "s0_bjd_match_rate", "0단계 법정동 매칭률 (시도+시군구+읍면동 3단 매칭)",
-                         note=f"실패율 {fail:.1%} — {P['bjd']['fail_warn_rate']:.0%} 이상이면 행정동 기준 의심")
-            writer.table(unmatched, "s0_bjd_unmatched", "0단계 미매칭 목록 (사람 검토 필요)")
+                         note=f"실패율 {fail:.1%} — {P['bjd']['fail_warn_rate']:.0%} 이상이면 행정동 기준 의심" +
+                              (" · KEPCO_002 잠정 결과" if preliminary else ""))
+            unmatched_png = pd.DataFrame([{"항목": "미매칭 지역 수", "값": len(unmatched),
+                                           "비고": "상세 목록은 센터 내부 CSV에서만 검토"}])
+            writer.table(unmatched, "s0_bjd_unmatched", "0단계 미매칭 목록 (사람 검토 필요)",
+                         png_df=unmatched_png,
+                         note="CSV는 센터 내부 검토용. PNG에는 원천 지역명을 싣지 않음")
             daily = kepcoloader.daily_series(mh)
             monthly = daily.groupby("mi").agg(법정동수=("bjd_code", "nunique"),
                                               일평균충전량_합_kWh=("kwh_per_day", "sum")).reset_index()
@@ -235,7 +241,8 @@ def run(config_path, params_override=None, paths_override=None):
                 .reindex(monthly["mi"]).fillna(0).reset_index())
             writer.table(_ym_col(monthly), "s1_kepco_monthly", f"1단계 KEPCO_{src} 월별 집계 (법정동 합)", digits=1,
                          png_df=_ym_col(monthly_png),
-                         note=f"PNG는 그 달 대표 고객호수(시간별 {basis}) < {min_count}인 법정동의 기여분 제외")
+                         note=f"PNG는 그 달 대표 고객호수(시간별 {basis}) < {min_count}인 법정동의 기여분 제외" +
+                              (" · KEPCO_002 잠정 결과, 001 확보 후 재실행" if preliminary else ""))
             if ind.get("tizo_bands"):
                 band = kepcoloader.band_series(mh, ind["tizo_bands"])
                 wide = band.groupby(["mi", "band"])["kwh_per_day"].sum().unstack(fill_value=0)
@@ -247,8 +254,12 @@ def run(config_path, params_override=None, paths_override=None):
                 writer.table(_ym_col(share), "s1_kepco_band_share", "1단계 시간대구간(TIZO)별 충전량 비중",
                              png_df=_ym_col(share_png),
                              note=f"PNG는 그 달 대표 고객호수(시간별 {basis}) < {min_count}인 법정동의 기여분 제외")
-            S.update(master=master, mh=mh, mh_source=src, daily=daily, fail_rate=fail, cell_rep=cell_rep)
+            S.update(master=master, mh=mh, mh_source=src, daily=daily, fail_rate=fail, cell_rep=cell_rep,
+                     preliminary_source=preliminary)
         runner.run("0·1", "지역키 정합 + KEPCO 시계열 집계", stage01, CRITICAL)
+        if stop_after_stage1:
+            log.info("현장 1차 실행: 0·1단계 완료 후 정상 종료")
+            raise _StopAfterStage1
 
         def load_mh(src):
             """정합이 끝난 KEPCO 월×시각 표. 0·1단계가 읽은 원천이면 다시 읽지 않는다."""
@@ -321,8 +332,12 @@ def run(config_path, params_override=None, paths_override=None):
         def stage3_can():
             if not P["can"]["enabled"] or not paths["can_m"]:
                 raise RuntimeError("CAN 비활성 또는 paths.can_m 없음")
+            # 교차검증용 KEPCO 는 s1 PNG 와 같은 기준으로 소표본 법정동×월을 뺀다.
+            kepco_visible = _exclude_small_cells(S["mh"], S["cell_rep"], P["can"]["min_cell_count"], "s3_can_kepco") \
+                if "mh" in S else None
             res = canloader.run_can_stage(paths["can_m"], C, P["can"], S.get("centroids"), S.get("stations"),
-                                           S.get("activation"), P["heterogeneity"]["can_feature_before"])
+                                           S.get("activation"), P["heterogeneity"]["can_feature_before"],
+                                           kepco_mh=kepco_visible)
             writer.table(res["evidence"], "s3_can_join_key", f"3단계 CAN 식별번호 검증 → {res['verdict']} · 경로 {res['path']}")
             writer.table(res["duration_summary"], "s3_can_session_summary", "3단계 충전 세션 길이 요약 (20~40분 체류 전제 검증)")
             writer.table(res["duration_table"], "s3_can_session_dist", "3단계 충전 세션 길이 분포")
@@ -337,13 +352,20 @@ def run(config_path, params_override=None, paths_override=None):
             writer.table(res["spatial"], "s3_can_spatial_agreement", "3단계 CAN 충전 위치 ↔ KEP_007 공간 일치율")
             if res["treated_excl_base"] is not None:
                 writer.table(res["treated_excl_base"], "s3_treated_excl_base", "3단계 거점성 제외 버전 처치 지역 목록")
+            if res.get("kepco_check") is not None:
+                writer.table(res["kepco_check"], "s3_can_kepco_check", "3단계 CAN × KEPCO_001 교차검증 (겹치는 기간)",
+                             note=f"KEPCO 소표본 법정동×월 제외 · 공간 비교는 CAN 세션 {P['can']['min_cell_count']}건 이상 법정동만")
+                if res["kepco_shape"] is not None:
+                    writer.table(res["kepco_shape"], "s3_can_kepco_shape",
+                                 "3단계 시간대별 비중 — CAN 충전 점유 vs KEPCO 사용량 (서울 전체)", digits=4)
             S["can"] = res
         can_name = "CAN 처치 정제" if commerce else "CAN 세션 모양·반복 위치"
         if runner.run("3", can_name, stage3_can, ISOLATED) is None and "can" not in S:
             reason = runner.rows[-1]["비고"]
             log.warning("CAN 처리 생략됨 — 3단계 CAN 리포트 섹션은 비워 둔다 (%s)", reason)
-            writer.table(pd.DataFrame([{"항목": "CAN 처리", "상태": "생략됨", "사유": reason}]), "s3_can_skipped",
-                         "3단계 CAN 처리 생략됨")
+            skipped = pd.DataFrame([{"항목": "CAN 처리", "상태": "생략됨", "사유": reason}])
+            writer.table(skipped, "s3_can_skipped", "3단계 CAN 처리 생략됨",
+                         png_df=skipped.assign(사유=str(reason).split(":")[0] + " — 상세는 내부 CSV"))
 
         # ------------------------------------------------ 4단계
         def stage4():
@@ -544,7 +566,8 @@ def run(config_path, params_override=None, paths_override=None):
                 access = equityaccess.add_access_indicators(access, stations, points)
                 writer.table(access, "s8c_accessibility", "8-C 법정동별 2SFCA 접근성과 형평성 부족도",
                              note="2SFCA가 낮을수록 equity_need_norm은 높음. 지표 1·2는 법정동 중심점 근사(격자점·폴리곤 아님). 실제 취약계층 규모가 아님")
-                S.update(access=access, access_match_rate=float(points["ev_count"].notna().mean()))
+                S.update(access=access, access_match_rate=float(points["ev_count"].notna().mean()),
+                         access_inputs=(stations, points))
             runner.run("8-C", "충전 접근성 2SFCA", stage8c, ISOLATED)
 
         if P["energy"]["enabled"]:
@@ -743,7 +766,8 @@ def run(config_path, params_override=None, paths_override=None):
                                  note="과잉 방전 kWh = 실측 기준으로 필요 없었던 방전. PNG는 소표본 법정동 제외")
                     S.update(ai_effect=effect, ai_effect_summary=effect_summary)
                 S.update(energy_results=results, energy_schedules=schedules, public_priority=priority)
-            runner.run("8-B", "ESS 시나리오 및 공공 검토", stage8b, ISOLATED)
+            if P["stages"].get("ess", True):
+                runner.run("8-B", "ESS 시나리오 및 공공 검토", stage8b, ISOLATED)
 
         # ------------------------------------------------ 8-E단계 (격리)
         if P["priority"]["enabled"]:
@@ -832,8 +856,28 @@ def run(config_path, params_override=None, paths_override=None):
             if runner.rows and runner.rows[-1]["단계"] == "8-E" and runner.rows[-1]["상태"] == "완료":
                 runner.rows[-1]["비고"] = S.get("priority_note", "")
 
+            # ------------------------------------------------ 8-G (격리): 충전기 추가 가정 실험
+            def stage8g():
+                if "priority_score" not in S or "access_inputs" not in S:
+                    raise RuntimeError("8-E 순위 또는 8-C 접근성 입력 없음")
+                pp = P["priority"]
+                n = int(pp["sim_top_n"])
+                stations, points = S["access_inputs"]
+                ranked = S["priority_score"]
+                ranked = ranked[ranked["rank_eligible"].astype(bool)].sort_values("rank")
+                by_ev = points.dropna(subset=["ev_count"]).sort_values(["ev_count", "bjd_code"], ascending=[False, True])
+                strategies = {f"우선순위 상위 {n}곳": ranked["bjd_code"].astype(str).head(n).tolist(),
+                              f"전기차 등록 상위 {n}곳(비교)": by_ev["bjd_code"].astype(str).head(n).tolist()}
+                sim = equityaccess.simulate_added_chargers(stations, points, strategies, int(pp["sim_chargers_each"]),
+                                                           pp["radii_m"], pp["default_radius_m"])
+                writer.table(sim, "s8g_charger_sim", "8-G 충전기 추가 가정 실험 — 같은 기수를 어디에 더하면 격차가 더 줄어드나",
+                             digits=3, note=f"대상 동네 중심점에 {pp['sim_chargers_each']}기씩 가상 추가 후 2SFCA({pp['default_radius_m']}m) 재계산. "
+                                            "입지 최적화·실제 설치 계획이 아닌 가정 실험")
+                S["charger_sim"] = sim
+            runner.run("8-G", "충전기 추가 가정 실험", stage8g, ISOLATED)
+
         # ------------------------------------------------ 8-F단계 (격리·선택): 2028·2030 충전 부하 시나리오
-        if paths["ev_history"] and P["energy"]["enabled"]:
+        if paths["ev_history"] and P["energy"]["enabled"] and P["stages"].get("scenario", True):
             def stage8f():
                 if not paths["hdong_bjd"]:
                     raise FileNotFoundError("paths.hdong_bjd 없음 — 행정동→법정동 대응표가 있어야 등록 이력을 법정동에 배분")
@@ -903,7 +947,21 @@ def run(config_path, params_override=None, paths_override=None):
                         png = table.iloc[0:0]
                 writer.table(table, "s9_headline", "9단계 발표 3숫자 (가정 병기)", digits=2, png_df=png,
                              note=note + ". PNG 는 소표본 법정동 기여분 제외")
+                if list(P["priority"]["axes"]) != priorityscore.LEGACY_AXES:
+                    sim = S.get("charger_sim")
+                    story = headline.story_table(table, sim)
+                    writer.table(story, "s9_story", "9단계 발표 본문 — 발견 문장(초안)과 새 3숫자 (ESS·2030은 s9_headline 부록)",
+                                 digits=3, png_df=headline.story_table(png, sim) if len(png) else story.iloc[0:0],
+                                 note="문구는 팀이 확정. PNG 는 소표본 법정동 기여분 제외")
+                    if "priority_score" in S:
+                        card_args = (S["priority_score"], S.get("risk"), access, S.get("master"), P["priority"])
+                        cards = headline.region_cards(*card_args)
+                        writer.table(cards, "s9_region_cards", f"9단계 동네 카드 — 우선순위 상위 {P['priority']['card_top_n']}곳",
+                                     digits=3, png_df=headline.region_cards(*card_args, codes=visible) if visible is not None else cards,
+                                     note="권고는 규칙 기반 초안(급증위험·형평성 정규화 0.5 기준). 실제 설치·점검 결정이 아님. PNG 는 소표본 법정동 제외")
             runner.run("9-H", "발표 3숫자", stage9h, ISOLATED)
+    except _StopAfterStage1:
+        pass
     finally:
         # ------------------------------------------------ 9단계: 요약·목록 (실패해도 남긴다)
         stages = runner.table()
@@ -914,12 +972,24 @@ def run(config_path, params_override=None, paths_override=None):
         stages["분석지역"] = f"{P['region']['sido_name'] or '전체'}({prefix or '-'})"
         stages["지역단위수"] = S["mh"]["bjd_code"].nunique() if "mh" in S else np.nan   # sigungu 모드면 자치구 수
         stages["상권단계"] = "활성" if commerce else "비활성(v11)"
-        writer.table(stages, "s0_run_summary", "실행 요약 — 단계별 상태", digits=1)
-        writer.table(writer.manifest_table(), "s9_manifest", "9단계 산출물 목록 (PNG = 반출용 · CSV = 현장 작업용)")
+        # PNG 에는 센터 경로·원본 값이 섞일 수 있는 오류 전문과 절대경로를 싣지 않는다(전문은 내부 CSV).
+        failed = stages["상태"].isin(["실패", "생략"]) & stages["비고"].notna()
+        stages_png = stages.assign(비고=stages["비고"].where(
+            ~failed, stages["비고"].astype(str).str.split(":").str[0] + " — 상세는 내부 CSV"))
+        writer.table(stages, "s0_run_summary", "실행 요약 — 단계별 상태", digits=1, png_df=stages_png)
+        manifest = writer.manifest_table()
+        manifest_png = manifest.assign(경로=[Path(p).name for p in manifest["경로"]])
+        writer.table(manifest, "s9_manifest", "9단계 산출물 목록 (PNG = 반출 후보 · CSV = 현장 작업용)",
+                     png_df=manifest_png)
         log.info("완료: %s", stages[["단계", "상태"]].to_dict("records"))
 
     status = "완료" if stages["상태"].isin(["완료", "비활성"]).all() else "부분완료(격리 단계 생략)"
     return {"status": status, "stages": stages, "out_dir": str(out_dir), "state": S}
+
+
+def run_day1(config_path, params_override=None, paths_override=None):
+    """현장 첫 방문용: 법정동 정합과 KEPCO 월별 집계까지만 저장하고 정상 종료한다."""
+    return run(config_path, params_override=params_override, paths_override=paths_override, stop_after_stage1=True)
 
 
 def _reserved(S):

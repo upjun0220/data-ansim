@@ -10,6 +10,7 @@ import codecs
 import importlib
 import logging
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -64,6 +65,58 @@ def optional_import(name):
 
 
 # ---------------------------------------------------------------- CSV 로딩
+
+def resolve_csv_path(path, source="CSV"):
+    """센터의 Copy Path를 실제 CSV 파일 하나로 확정한다.
+
+    파일 경로는 그대로 쓰고, 폴더 경로는 바로 아래 CSV가 정확히 하나일 때만 허용한다.
+    파일명을 추측하지 않도록 0개·2개 이상이면 후보를 보여주고 중단한다.
+    """
+    raw = str(path or "").strip().strip("\"'")
+    if not raw:
+        raise ValueError(f"[{source}] Copy Path가 비어 있음")
+    candidate = Path(raw).expanduser()
+    if candidate.is_file():
+        if candidate.suffix.lower() != ".csv":
+            raise ValueError(f"[{source}] CSV 파일이 아님: {candidate}")
+        return candidate.resolve()
+    if candidate.is_dir():
+        csv_files = sorted(p for p in candidate.iterdir() if p.is_file() and p.suffix.lower() == ".csv")
+        if len(csv_files) == 1:
+            return csv_files[0].resolve()
+        names = [p.name for p in csv_files]
+        raise ValueError(f"[{source}] 폴더 안 CSV가 {len(csv_files)}개라 자동 선택 불가: {names}")
+    raise FileNotFoundError(
+        f"[{source}] Copy Path를 찾지 못함: {raw!r} (현재 작업 폴더: {Path.cwd()})"
+    )
+
+
+def detect_columns(path, aliases, source, required):
+    """확실한 헤더 별칭만 사용해 내부 키→실제 CSV 열 이름을 찾는다."""
+    path = resolve_csv_path(path, source)
+    header, _, _ = read_header(path)
+
+    def token(value):
+        return re.sub(r"[\s_\-()\[\]]+", "", str(value)).casefold()
+
+    found, missing = {}, []
+    for key, names in aliases.items():
+        wanted = {token(name) for name in names}
+        exact = [column for column in header if token(column) in wanted]
+        candidates = exact or [column for column in header if any(token(column).startswith(name) for name in wanted)]
+        candidates = list(dict.fromkeys(candidates))
+        if len(candidates) == 1:
+            found[key] = candidates[0]
+        elif len(candidates) > 1:
+            raise KeyError(f"[{source}] {key!r} 후보가 여러 개라 자동 선택 불가: {candidates}")
+        elif key in required:
+            missing.append(f"{key}={list(names)}")
+    if missing:
+        raise KeyError(
+            f"[{source}] 필수 컬럼을 자동 판별하지 못함: {missing} / 실제 컬럼: {header} "
+            "→ 실제 헤더를 확인해 columns 매핑을 직접 지정할 것"
+        )
+    return found
 
 def detect_encoding(path, sample_bytes=4_000_000):
     """UTF-8(BOM 포함) → CP949 순으로 판별. 공공데이터 원본은 CP949 인 경우가 많다."""

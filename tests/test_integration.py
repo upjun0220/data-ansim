@@ -88,8 +88,10 @@ def test_all_stages_complete(pipeline_result):
 @pytest.mark.commerce
 def test_energy_environment_check_is_added_when_enabled(mock_env):
     table = run_checks(mock_env["config"], params_override={"energy": {"enabled": True}}, write=False)
-    assert table["번호"].tolist() == list(range(1, 12)) + [16, 17, 18, 19]   # v11: 17~19 AI·기온 항목
-    assert table.set_index("번호").at[9, "판정"] == "통과"
+    assert table["번호"].tolist() == list(range(1, 22))   # 꺼진 항목도 '해당 없음'으로 남아 항상 21개(현장 판정표)
+    verdict = table.set_index("번호")["판정"]
+    assert verdict.at[9] == "통과"
+    assert (verdict[[12, 13, 14, 15, 20, 21]] == "해당 없음").all()   # priority·ev_history 꺼짐
 
 
 @pytest.mark.commerce
@@ -176,8 +178,10 @@ def test_no_gps_in_exports(pipeline_result):
 @pytest.mark.commerce
 def test_kill_criteria(mock_env):
     table = run_checks(mock_env["config"])
-    assert list(table["번호"]) == list(range(1, 9)) + [10, 11, 16]
-    assert set(table["판정"]) <= {"통과", "경고", "실패", "오류"}
+    assert list(table["번호"]) == list(range(1, 22))   # 꺼진 항목도 '해당 없음'으로 남아 항상 21개
+    assert set(table["판정"]) <= {"통과", "경고", "실패", "오류", "해당 없음"}
+    off = table.set_index("번호")["판정"][[9, 12, 13, 14, 15, 17, 18, 19, 20, 21]]   # energy·priority·ev_history 꺼짐
+    assert (off == "해당 없음").all(), off.to_dict()
     assert not (table["판정"] == "오류").any(), table.to_string()
     v = table.set_index("번호")["판정"]
     assert v[2] == "경고"          # 후보 18곳: 10 이상 30 미만 → Causal Forest 포기 경고
