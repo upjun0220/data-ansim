@@ -6,8 +6,9 @@
 
 KEPCO 원천 형태가 현장 확인 전까지 불명이라 세 가지를 모두 받는다(params.kepco.layout).
   long  — 한 행 = 한 시각. 시각은 '조회기간'(YYYYMMDDHH…) 또는 columns.kepco.hour 열에서 읽는다.
-  wide  — 한 행 = 하루, '시간대별 사용량' 접두 열이 시각별로 여러 개(열 이름 끝 숫자가 시각).
-  auto  — 헤더에 '시간대별 사용량' 접두 열이 2개 이상이면 wide.
+  wide  — 한 행 = 하루, 시각별 열이 여러 개. '시간대별 사용량' 접두 열(끝 숫자가 시각)이 2개 미만이면
+          '01:00'~'24:00'·'1시' 같은 시각 이름 열을 쓴다(현장 KEPCO_001 실제 헤더, 2026-09-23 확인).
+  auto  — 위 규칙으로 시간대 열이 2개 이상 잡히면 wide.
 조회기간이 월(YYYYMM)뿐이면 관측 일수를 그 달의 일수로 잡는다(평균 kW 계산이 틀어지지 않게).
 
 ⚠ KEPCO_001 과 002 는 포함/배타 관계가 불명이다. 이 모듈은 둘을 절대 합산하지 않는다.
@@ -26,15 +27,31 @@ from bjdmapping import canonicalize, match_regions, sido_short
 from common import log, mi_to_ym, norm_text, optional_import, read_columns, read_header, to_num, ym_to_mi
 
 KEYS = ["sido", "sigungu", "emd"]
+TIME_NAME = re.compile(r"(\d{1,2})(?::\d{2}|시)")
 
 
 # ---------------------------------------------------------------- 1단계: 로드·집계
 
+def _hour_columns(header, prefix, regex):
+    """wide 형식의 시간대 열 → 시각. 접두 열이 2개 미만이면 '01:00'·'1시' 같은 시각 이름 열을 쓴다."""
+    hour_re = re.compile(regex)
+    cols = {}
+    for c in header:
+        name = str(c).strip()
+        m = hour_re.search(name[len(prefix):]) if name.startswith(prefix) else None
+        if m:
+            cols[c] = int(m.group(1))
+    if len(cols) < 2:
+        cols = {c: int(m.group(1)) for c in header if (m := TIME_NAME.fullmatch(str(c).strip()))}
+    return cols
+
+
 def _layout(header, cols, layout):
-    prefix = cols["kwh"]
-    matches = [c for c in header if str(c).strip().startswith(prefix)]
     if layout == "auto":
-        return "wide" if len(matches) >= 2 else "long"
+        names = [str(c).strip() for c in header]
+        prefixed = sum(n.startswith(cols["kwh"]) for n in names)
+        timed = sum(bool(TIME_NAME.fullmatch(n)) for n in names)
+        return "wide" if max(prefixed, timed) >= 2 else "long"
     return layout
 
 
@@ -48,23 +65,22 @@ def _iter_long(path, cols, params, source):
 
 def _iter_wide(path, cols, params, source, header, enc, sep):
     prefix = cols["kwh"]
-    hour_re = re.compile(params["wide_hour_regex"])
-    hour_cols = {}
-    for c in header:
-        name = str(c).strip()
-        if name.startswith(prefix):
-            m = hour_re.search(name[len(prefix):])
-            if m:
-                hour_cols[c] = int(m.group(1))
+    hour_cols = _hour_columns(header, prefix, params["wide_hour_regex"])
     if len(hour_cols) < 2:
-        raise KeyError(f"[{source}] wide 형식인데 시간대 열을 못 찾음(접두 {prefix!r}, 정규식 {params['wide_hour_regex']!r})")
+        raise KeyError(f"[{source}] wide 형식인데 시간대 열을 못 찾음(접두 {prefix!r}, 정규식 {params['wide_hour_regex']!r}, "
+                       f"또는 '01:00'·'1시' 형태) / 실제 컬럼: {list(header)}")
+    if len(set(hour_cols.values())) < len(hour_cols):
+        raise ValueError(f"[{source}] 서로 다른 시간대 열이 같은 시각으로 읽힘 {list(hour_cols.items())[:4]}… — "
+                         "합쳐서 틀린 값이 되므로 중단. columns.kepco.kwh·params.kepco.wide_hour_regex 확인")
     base = {k: cols[k] for k in ("period", "sido", "sigungu", "emd", "customers")}
     from common import resolve_columns
 
     colmap = resolve_columns(header, base, source)
     rename = {orig: key for key, orig in colmap.items()}
     log.info("[%s] wide 형식: 시간대 열 %d개", source, len(hour_cols))
-    reader = pd.read_csv(path, encoding=enc, sep=sep, dtype=str, chunksize=params["chunksize"],
+    # melt 하면 행이 시간대 열 수만큼 늘어나므로, 청크를 줄여 long 형식과 같은 행 수로 맞춘다(메모리).
+    chunksize = max(1, int(params["chunksize"]) // len(hour_cols))
+    reader = pd.read_csv(path, encoding=enc, sep=sep, dtype=str, chunksize=chunksize,
                          usecols=list(rename) + list(hour_cols))
     for chunk in reader:
         chunk = chunk.rename(columns=rename)

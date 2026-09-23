@@ -28,7 +28,7 @@
     "_ev_registration": "v11: null 이면 8-C 가 ev_history+hdong_bjd 의 기준월 값을 쓴다(반입 파일 1개 절약)"
   },
   "columns": {
-    "_kepco": "시각이 별도 열이면 \"hour\": \"시간대\" 처럼 지정. 시간대별 가로 열이면 params.kepco.layout=wide",
+    "_kepco": "시각이 별도 열이면 \"hour\": \"시간대\" 처럼 지정. 시간대별 가로 열(현장 KEPCO_001: 조회기간 YYYYMMDD + 01:00~24:00)은 layout=auto 가 그대로 인식 — kwh 는 기본값('시간대별 사용량') 유지. kwh 를 비우면 01:00 이 0시로 읽혀 오류로 멈춘다",
     "kepco": {},
     "kepco_cpo": {}
   },
