@@ -133,7 +133,7 @@
       <tr><td>1지도 3숫자</td><td>숫자 1 충전기당 전기차 배수 / 숫자 2 ESS 미적용 초과 kWh / 숫자 3 ESS 적용 후 잔여 초과·SMP 비용 차이</td><td>숫자 1 동일 / 숫자 2 <strong>AI 효과</strong>(초과 kWh 감소율, 경보 정밀도·재현율) / 숫자 3 현재 급증 위험 동네 수(증설 0대) → 2030 중 시나리오(괄호에 고 시나리오), 둘 다 충전기 추가 없음 기준</td><td>가정 의존 숫자 대신 AI 성과와 위험 규모를 전면에</td></tr>
       <tr><td>킬 크라이테리아</td><td>13~15번 추가, 코드 기준 16항목</td><td>11번(T_r 분포) 해당 없음, 14번 AHP 검사 제외, 15번 순위표 3장 → 2장, <strong>17~21번 신규</strong>(ML 라이브러리, AI 성능 미달, 기온 예보, 시나리오 매핑·β·k_goal, 급증위험 0 비율). 코드 기준 21항목, 판정에 “해당 없음” 추가</td><td>새 모듈의 실패 경로 명시</td></tr>
       <tr><td>심사위원 Q&amp;A</td><td>Q1~Q10(Q4: 상권 매출에 왜 공공 예산을)</td><td>Q2·Q10 수정, Q4 교체(상권·소비 데이터를 왜 안 썼나), <strong>Q11~Q13 신규</strong>(AI라 부를 수 있나, 2030은 예측인가, 왜 서울만인가)</td><td>바뀐 설계에 맞는 방어 논리</td></tr>
-      <tr><td>코드 구현 상태</td><td>v10 기준 구현 완료(테스트 73개 통과, 가상 데이터로 전 단계 실행)</td><td><strong>v11.4 구현 완료</strong>: 상권 단계 비활성(코드 보존)·SHC 선택화, 서울 필터, 8-A AI 분위수 예측·급증 위험, 8-B AI 효과, 8-E 두 축(<code>min_axes=2</code>), 8-F 시나리오, 9-H 새 숫자, 기온·공휴일 입력, 킬 17~21. 테스트 113개 통과·3개 생략(미설치 선택 패키지). GitHub <code>v11.3</code> 브랜치</td><td>문서와 코드가 같은 내용을 말하게 하기 위해(8절)</td></tr>
+      <tr><td>코드 구현 상태</td><td>v10 기준 구현 완료(테스트 73개 통과, 가상 데이터로 전 단계 실행)</td><td><strong>v11.4 구현 완료</strong>: 상권 단계 비활성(코드 보존)·SHC 선택화, 서울 필터, 8-A AI 분위수 예측·급증 위험, 8-B AI 효과, 8-E 두 축(<code>min_axes=2</code>), 8-F 시나리오, 9-H 새 숫자, 기온·공휴일 입력, 킬 17~21. 테스트 113개 통과·3개 생략(미설치 선택 패키지). GitHub <code>main</code> 브랜치(<code>v11.3</code> 브랜치는 9/21 시점에서 멈춤)</td><td>문서와 코드가 같은 내용을 말하게 하기 위해(8절)</td></tr>
     </tbody>
   </table>
   <p><strong>바뀌지 않은 것</strong>: ESS 피크쉐이빙 LP의 제약식과 후보 용량 검증, 정책적 목표 상한(관측 최대의 1.1~1.3배), 접근성 지표 1·2와 2SFCA(300/500/800m), 신뢰도 점수 레이어, 계절 강건성 검증, 소표본 억제·좌표 비반출 등 반출 보호 설계, 킬 1~10·12·13·16번, MCLP 선택 확장, 외부 SMP 사용.</p>
@@ -689,7 +689,7 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
   <hr>
 
   <h2 id="impl">8. 구현 결과(v11.4) — 코드·반입·mock 실행·팀 결정 사항<span class="badge new">v11.4 신규</span></h2>
-  <p>v11.3 설계를 GitHub <a href="https://github.com/upjun0220/data-ansim/tree/v11.3">data-ansim <code>v11.3</code> 브랜치</a>에 구현했다. 테스트 113개 통과·3개 생략(econml·ruptures·lightgbm 미설치 환경의 선택 경로). 코드 사용법은 로드맵북 v11(<code>0_로드맵북_센터가기전_필독_v11.html</code>)에 정리했다.</p>
+  <p>v11.3 설계를 GitHub <a href="https://github.com/upjun0220/data-ansim/tree/main">data-ansim <code>main</code> 브랜치</a>에 구현했다. 테스트 113개 통과·3개 생략(econml·ruptures·lightgbm 미설치 환경의 선택 경로). 이후 v11.5(현장 실행기 <code>fieldday1.py</code>·<code>run_full</code>·<code>run_seasons</code>, 테스트 124개 통과)도 <code>main</code>에 있다. <code>v11.3</code> 브랜치는 9/21 시점에서 멈춰 있으므로 보지 않는다. 코드 사용법은 로드맵북 v11(<code>0_로드맵북_센터가기전_필독_v11.html</code>)에 정리했다.</p>
   <h3>새·바뀐 모듈</h3>
   <table>
     <thead><tr><th>모듈</th><th>역할</th></tr></thead>
