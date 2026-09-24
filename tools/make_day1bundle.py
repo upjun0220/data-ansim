@@ -50,7 +50,7 @@ def build(out):
 def verify(out):
     """빈 폴더에서 실제로 %run 처럼 실행해 모듈이 풀리고 불러와지는지 확인한다."""
     with tempfile.TemporaryDirectory() as tmp:
-        code = f"import runpy; runpy.run_path({str(out)!r}, run_name='bundle')"
+        code = f"import runpy; runpy.run_path({str(Path(out).resolve())!r}, run_name='bundle')"
         subprocess.run([sys.executable, "-B", "-c", code], cwd=tmp, check=True)
 
 

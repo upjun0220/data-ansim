@@ -146,10 +146,11 @@ def _pick(head, contains):
     return (float(rows["값"].iloc[0]), float(rows["비교"].iloc[0])) if len(rows) else (np.nan, np.nan)
 
 
-def story_table(head, sim=None):
+def story_table(head, sim=None, can_check=None):
     """s9_story — 발표 본문의 '발견 한 문장'과 새 3숫자(격차·예측·개입). ESS·2030 은 s9_headline(부록)에 남긴다.
 
     head: headline_table_v11 결과. sim: 8-G 충전기 추가 실험 표(첫 행 = 우선순위 전략, 둘째 = 비교 전략).
+    can_check: 8-C CAN 원정 충전 검증 표(attrs low·high·rho) — 있으면 '고유 데이터 발견' 행을 더한다.
     문구는 초안이며 팀이 확정한다. 값이 없으면 '미산출'로 적고 지어내지 않는다.
     """
     gap = head.loc[head["번호"] == "숫자 1", "값"]
@@ -187,6 +188,16 @@ def story_table(head, sim=None):
                                                  f"(값) 대 비교 전략(비교)", "값": gain, "비교": gain_b})
     else:
         rows.append({"구분": "숫자 C 개입", "내용": "충전기 추가 가정 실험 미산출(8-G)", "값": np.nan, "비교": np.nan})
+    if can_check is not None and "low" in can_check.attrs:
+        k = can_check.attrs
+        rho = f"순위 상관 {k['rho']:.2f}" if np.isfinite(k["rho"]) else "순위 상관 계산 불가"
+        rows.append({"구분": "고유 데이터 발견(CAN)",
+                     "내용": f"접근성 하위 동네에 사는 차량의 원정 충전(거주지 밖) 비율(값) 대 나머지 동네(비교) · "
+                            f"{rho} · {k['n']}개 동네",
+                     "값": k["low"], "비교": k["high"]})
+    else:
+        rows.append({"구분": "고유 데이터 발견(CAN)", "내용": "원정 충전 검증 미산출 — CAN 개별 차량 판정·거주 차량 수 필요(8-C)",
+                     "값": np.nan, "비교": np.nan})
     return pd.DataFrame(rows)
 
 

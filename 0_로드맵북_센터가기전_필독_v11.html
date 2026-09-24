@@ -154,7 +154,7 @@ section[id]{scroll-margin-top:16px}
   <p class="eyebrow">2026 데이터안심구역 경진대회 · 팀 공부용 · 센터 가기 전 필독</p>
   <h1>충전 부하, 하루 먼저 본다<br>로드맵북 v11</h1>
   <p class="lede">센터에 가기 전에 이것 하나만 읽으면 된다. 무엇을 하려는지, 어떤 데이터를 들고 가는지, 코드 파일 하나하나가 무슨 일을 하고 어떻게 돌리는지, 센터에서 첫날 무엇을 누르고 무엇을 확인하는지를 순서대로 적었다.</p>
-  <div class="meta"><span>v11 · 기준일 2026-09-22</span><span>기준 문서: 전체설계 V11.4(<code>docs/1_팀공유_전체설계_V11.4_20260921.html</code>)</span><span>코드: GitHub <code>upjun0220/data-ansim</code> · 테스트 113개 통과·3개 생략</span></div>
+  <div class="meta"><span>v11 · 기준일 2026-09-22</span><span>기준 문서: 전체설계 V11.6(<code>docs/1_팀공유_전체설계_V11.6_20260925.html</code>)</span><span>코드: GitHub <code>upjun0220/data-ansim</code> · 테스트 113개 통과·3개 생략</span></div>
 </header>
 
 <!-- 00 -->
@@ -233,7 +233,7 @@ section[id]{scroll-margin-top:16px}
 <div class="tree">data-ansim/                        <span class="c">← GitHub upjun0220/data-ansim (main·v11.3 브랜치)</span>
 ├── <span class="h">0_로드맵북_센터가기전_필독_v11.html</span>   <span class="c">← 지금 이 책</span>
 ├── docs/
-│   ├── <span class="h">1_팀공유_전체설계_V11.4_20260921.html</span>  <span class="c">← 설계 원본(수식·근거·Q&amp;A)</span>
+│   ├── <span class="h">1_팀공유_전체설계_V11.6_20260925.html</span>  <span class="c">← 설계 원본(수식·근거·Q&amp;A)</span>
 │   └── claude-code-프롬프트-V11.3-구현-20260921.md  <span class="c">← 이번 구현 작업 명세</span>
 ├── 연구계획서_충전리플맵_20260921.docx / .pdf     <span class="c">← 센터 이용신청 참고자료(분석 지역 수정 필요)</span>
 ├── 현장준비_효과크기_문의문안_20260919.md       <span class="c">← 사무국 문의 질문</span>
@@ -255,7 +255,7 @@ section[id]{scroll-margin-top:16px}
 ├── README.md                   <span class="c">← 개발자용 설명서(설정 키 전체 표)</span>
 └── requirements.txt</div>
   <div class="easy"><b class="tag">어떤 문서를 누구에게</b>
-    <p>팀원 공부용 → 이 로드맵북 · 설계를 깊게 볼 때 → 전체설계 V11.4 · 센터에 낼 때 → 연구계획서 · 문의 담당 → 문의문안 · 코드 고칠 때 → README</p></div>
+    <p>팀원 공부용 → 이 로드맵북 · 설계를 깊게 볼 때 → 전체설계 V11.6 · 센터에 낼 때 → 연구계획서 · 문의 담당 → 문의문안 · 코드 고칠 때 → README</p></div>
 </section>
 
 <!-- 03 -->
@@ -485,7 +485,7 @@ cd data-ansim</code></pre></li>
 <section class="ch" id="s07">
   <p class="chno">07</p>
   <h2>첫날 점검 21항목</h2>
-  <p>킬 크라이테리아가 한 번에 판정한다. 번호는 코드가 실제로 내는 번호다(설계 문서 번호와 대응은 설계 V11.4 4절). 판정은 <span class="pill p-iso">통과</span> <span class="pill p-opt">경고</span> <span class="pill p-must">실패</span> <span class="pill p-info">오류</span>(파일·열 문제) <span class="pill p-off">해당 없음</span>.</p>
+  <p>킬 크라이테리아가 한 번에 판정한다. 번호는 코드가 실제로 내는 번호다(설계 문서 번호와 대응은 설계 V11.6 4절). 판정은 <span class="pill p-iso">통과</span> <span class="pill p-opt">경고</span> <span class="pill p-must">실패</span> <span class="pill p-info">오류</span>(파일·열 문제) <span class="pill p-off">해당 없음</span>.</p>
   <div class="tbl"><table>
     <thead><tr><th>#</th><th>무엇을 보나</th><th>기준</th><th>걸리면</th></tr></thead>
     <tbody>
@@ -652,7 +652,7 @@ summary["stages"]</code></pre>
 <section class="ch" id="s12">
   <p class="chno">12</p>
   <h2>심사 질문 대비</h2>
-  <p>설계 V11.4 7절 Q&amp;A 중 가장 자주 나올 것만 짧게. 원문은 설계 문서.</p>
+  <p>설계 V11.6 7절 Q&amp;A 중 가장 자주 나올 것만 짧게. 원문은 설계 문서.</p>
   <h3>“1.1~1.3배는 어디서 나온 숫자인가?”</h3>
   <p>변압기 용량 자료가 없어서 정한 정책 가정이다. 그 동네가 최근 겪은 최대 부하에 10~30%를 더한 값이고, 세 값으로 바꿔 가며 결과가 어떻게 달라지는지 비교한다.</p>
   <h3>“스스로 정한 상한을 넘는 게 위험인가? 순환 논리 아닌가?”</h3>
@@ -705,7 +705,7 @@ summary["stages"]</code></pre>
   </dl>
 </section>
 
-<footer>v11 · 작성 2026-09-21, 데이터 반입 현황 갱신 2026-09-22 · 근거: 코드(GitHub upjun0220/data-ansim, pytest 113 통과·3 생략), 전체설계 V11.4, 구현 명세(docs/claude-code-프롬프트-V11.3-구현-20260921.md). “가상 데이터 기준” 수치는 동작 확인용이며 실제 결과가 아니다.</footer>
+<footer>v11 · 작성 2026-09-21, 데이터 반입 현황 갱신 2026-09-22 · 근거: 코드(GitHub upjun0220/data-ansim, pytest 113 통과·3 생략), 전체설계 V11.6, 구현 명세(docs/claude-code-프롬프트-V11.3-구현-20260921.md). “가상 데이터 기준” 수치는 동작 확인용이며 실제 결과가 아니다.</footer>
 </main>
 </div>
 </body>

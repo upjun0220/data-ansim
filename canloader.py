@@ -235,6 +235,134 @@ def station_agreement(points, stations, radius_m):
     return float((d[:, 0] * EARTH_RADIUS_KM * 1000 <= radius_m).mean()), len(pts)
 
 
+# ---------------------------------------------------------------- 고유 데이터 활용: 원정 충전·시간 이동 여지
+
+def infer_home(can_df, params):
+    """차량별 '밤 주차 위치'로 거주지를 추정한다(개별 차량 판정일 때만 의미가 있다).
+
+    밤(home_hours, 기본 21~06시) 레코드로 밤마다 '가장 오래 머문 격자'(레코드가 가장 많은 geo_cell_m 격자)를 구하고,
+    그 격자들의 최빈값을 거주지로 본다. 마지막 위치를 쓰지 않는 것은 새벽 주행 기록이 마지막이 되기 때문이다.
+    최빈 격자에 home_min_nights 밤 이상, 전체 밤의 home_min_share 이상 머문 차량만 인정한다.
+    ⚠ 주차 중 기록을 남기지 않는 차량은 밤 기록이 없어 거주지를 못 잡는다 — 결과는 '거주지 추정 차량' 기준이다.
+    반환: vehicle_id, home_lat, home_lon, nights — 차량 단위라 센터 밖으로 내보내지 않는다(내부 계산 전용).
+    """
+    start_h, end_h = params["home_hours"]
+    d = can_df.dropna(subset=["lat", "lon"])
+    h = d["time"].dt.hour
+    d = d[(h >= start_h) | (h < end_h)].copy()
+    if d.empty:
+        return pd.DataFrame(columns=["vehicle_id", "home_lat", "home_lon", "nights"])
+    d["night"] = (d["time"] - pd.Timedelta(hours=end_h)).dt.normalize()
+    deg = params["geo_cell_m"] / 111_000.0
+    d["cell"] = np.floor(d["lat"] / deg).astype(int).astype(str) + "|" + \
+        np.floor(d["lon"] / (deg / 0.8)).astype(int).astype(str)
+    stay = d.groupby(["vehicle_id", "night", "cell"]).size().rename("n").reset_index()
+    nightly = stay.sort_values(["vehicle_id", "night", "n", "cell"], ascending=[True, True, False, True]) \
+        .drop_duplicates(["vehicle_id", "night"])
+    rows = []
+    for vid, g in nightly.groupby("vehicle_id"):
+        counts = g["cell"].value_counts()
+        top, n_top = counts.index[0], int(counts.iloc[0])
+        if n_top >= params["home_min_nights"] and n_top / len(g) >= params["home_min_share"]:
+            at = d[(d["vehicle_id"] == vid) & (d["cell"] == top)]
+            rows.append({"vehicle_id": vid, "home_lat": at["lat"].median(), "home_lon": at["lon"].median(), "nights": n_top})
+    return pd.DataFrame(rows, columns=["vehicle_id", "home_lat", "home_lon", "nights"])
+
+
+def away_charging(sessions, home, centroids, params, min_n):
+    """거주지에서 away_km 넘게 떨어진 곳의 충전 = 원정 충전. 거주 법정동별로 집계한다.
+
+    반환: (법정동 표[내부], 법정동 표[반출용: 거주 차량 min_n 미만 가림], 요약 표). 차량 단위 표는 돌려주지 않는다.
+    '거주지 충전 없음' = 기간 중 거주지 반경 안 충전이 한 번도 없는 차량 — 자가충전 사각지대의 행동 신호(대리지표 아님).
+    """
+    s = sessions.merge(home, on="vehicle_id", how="inner")
+    total_vehicles = sessions["vehicle_id"].nunique()
+    if s.empty:
+        summary = pd.DataFrame([{"항목": "거주지 추정 차량", "값": f"0 / {total_vehicles}대 — 원정 충전 분석 불가"}])
+        return None, None, summary
+    s["dist_km"] = haversine_km(s["lat"], s["lon"], s["home_lat"], s["home_lon"])
+    s["away"] = s["dist_km"] > params["away_km"]
+    per = s.groupby("vehicle_id").agg(n=("away", "size"), n_away=("away", "sum"),
+                                      away_km=("dist_km", lambda v: v[v > params["away_km"]].mean()),
+                                      home_lat=("home_lat", "first"), home_lon=("home_lon", "first")).reset_index()
+    per["no_home"] = per["n_away"] == per["n"]
+    per["bjd_code"], _ = nearest_region(per["home_lat"], per["home_lon"], centroids, params["centroid_max_km"])
+    reg = per.dropna(subset=["bjd_code"]).groupby("bjd_code").agg(
+        거주추정_차량수=("vehicle_id", "size"), 세션수=("n", "sum"), 원정세션수=("n_away", "sum"),
+        거주지충전없음_차량비율=("no_home", "mean"), 원정_평균거리_km=("away_km", "mean")).reset_index()
+    reg["원정충전_세션비율"] = reg["원정세션수"] / reg["세션수"]
+    reg = reg[["bjd_code", "거주추정_차량수", "원정충전_세션비율", "거주지충전없음_차량비율", "원정_평균거리_km"]]
+    summary = pd.DataFrame([
+        {"항목": "거주지 추정 차량", "값": f"{len(per)} / {total_vehicles}대 (밤 {params['home_hours'][0]}~{params['home_hours'][1]}시 "
+                                       f"주차 위치 최빈 격자, {params['home_min_nights']}밤 이상)"},
+        {"항목": "원정 충전 세션 비율", "값": f"{s['away'].mean():.1%} (거주지에서 {params['away_km']:g}km 초과)"},
+        {"항목": "거주지 충전이 없는 차량 비율", "값": f"{per['no_home'].mean():.1%}"},
+        {"항목": "원정 충전 평균 거리", "값": f"{per['away_km'].mean():.2f} km" if per["away_km"].notna().any() else "—"},
+        {"항목": "집계 법정동(거주 차량 {0}대 이상)".format(min_n), "값": f"{int((reg['거주추정_차량수'] >= min_n).sum())}곳"},
+        {"항목": "해석", "값": "CAN 은 일부 차량 표본(2022.11~2023.11 무렵) — 경향 확인용. 차량 단위 결과는 반출하지 않음"},
+    ])
+    return reg, _suppress(reg, "거주추정_차량수", min_n), summary
+
+
+def away_access_check(away_region, access, min_n, share=0.20):
+    """원정 충전(고유 데이터 행동 신호)으로 형평성 축(2SFCA)을 검증한다. 거주 차량 min_n 이상 법정동만."""
+    a = away_region[away_region["거주추정_차량수"] >= min_n].merge(
+        access[["bjd_code", "access_2sfca"]].assign(bjd_code=access["bjd_code"].astype(str)), on="bjd_code", how="inner")
+    if len(a) < 3:
+        return pd.DataFrame([{"항목": "비교 법정동 수", "값": f"{len(a)} — 3곳 미만이라 검증 불가"}])
+    low = a["access_2sfca"] <= a["access_2sfca"].quantile(share)
+    rows, stats = [{"항목": "비교 법정동 수", "값": f"{len(a)}"}], {}
+    # 주 지표 = 원정 충전 세션 비율(동네마다 값이 갈린다). 보조 = 거주지 충전 없는 차량 비율(0 에 몰리기 쉽다).
+    for col, label in (("원정충전_세션비율", "원정 충전 세션 비율"), ("거주지충전없음_차량비율", "거주지 충전 없는 차량 비율")):
+        v = a[col].astype(float)
+        rho = v.rank().corr(a["access_2sfca"].rank()) if v.nunique() > 1 else np.nan
+        lo, hi = v[low].mean(), v[~low].mean()
+        stats[col] = (rho, lo, hi)
+        rows += [{"항목": f"순위 상관({label} vs 2SFCA, 스피어만)",
+                  "값": f"{rho:.3f} (음수면 접근성 낮을수록 높음)" if np.isfinite(rho) else "— (동네 값이 모두 같아 계산 불가)"},
+                 {"항목": f"{label}: 접근성 하위 {share:.0%} 동네 / 나머지", "값": f"{lo:.1%} / {hi:.1%}"}]
+    rows.append({"항목": "해석", "값": "CAN(2022.11~2023.11 무렵)과 2SFCA(충전소·등록 기준 시점)의 기간이 다르다 — 방향 확인용"})
+    out = pd.DataFrame(rows)
+    rho, lo, hi = stats["원정충전_세션비율"]
+    out.attrs.update(rho=float(rho), low=float(lo), high=float(hi), n=len(a), no_home=stats["거주지충전없음_차량비율"])
+    return out
+
+
+def soc_flexibility(sessions, peak_hours, flex_soc, min_n):
+    """피크 시간대에 시작한 충전 중 시작 SOC 가 flex_soc 이상인 비율 — 충전 시간 이동(DR) 여지의 상한 신호.
+
+    출차 시각을 모르므로 '옮길 수 있다'가 아니라 '배터리가 급하지 않았다'는 뜻이다. 반환: (SOC 구간 표, 요약 표).
+    """
+    s = sessions.dropna(subset=["soc_start"])
+    soc = s["soc_start"].astype(float)
+    if len(soc) and soc.max() <= 1.0:   # 0~1 표기면 %로
+        soc = soc * 100
+    peak = s["start"].dt.hour.isin(peak_hours).to_numpy()
+    soc_p = soc[peak]
+    bands = pd.cut(soc_p, [0, 20, 40, 60, 80, 100.01], right=False,
+                   labels=["0~20%", "20~40%", "40~60%", "60~80%", "80~100%"]).value_counts(sort=False)
+    table = pd.DataFrame({"시작 SOC": bands.index.astype(str), "피크 세션 수": bands.to_numpy()})
+    table["비율"] = table["피크 세션 수"] / max(1, len(soc_p))
+    table.loc[table["피크 세션 수"] < min_n, ["피크 세션 수", "비율"]] = np.nan
+    share = float((soc_p >= flex_soc).mean()) if len(soc_p) >= min_n else np.nan
+    summary = pd.DataFrame([
+        {"항목": "피크 시간대(KEPCO 사용량 상위)", "값": ", ".join(f"{h}시" for h in sorted(peak_hours))},
+        {"항목": "피크 시간대 시작 세션 수", "값": f"{len(soc_p):,}"},
+        {"항목": f"시작 SOC {flex_soc:g}% 이상 비율", "값": f"{share:.1%}" if np.isfinite(share) else "— (세션 부족)"},
+        {"항목": "시작 SOC 중앙값", "값": f"{soc_p.median():.0f}%" if len(soc_p) >= min_n else "—"},
+        {"항목": "해석", "값": "출차 시각을 몰라 실제로 옮길 수 있는지는 모름 — DR 여지의 상한 신호"},
+    ])
+    summary.attrs["share"] = share
+    return table, summary
+
+
+def peak_hours_from(kepco_mh, n=4):
+    """KEPCO 서울 전체 시간대별 사용량 상위 n 시각. 없으면 저녁 18~21시."""
+    if kepco_mh is None or kepco_mh.empty:
+        return [18, 19, 20, 21]
+    return sorted(int(h) for h in kepco_mh.groupby("hour")["kwh"].sum().nlargest(n).index)
+
+
 def run_can_stage(path, columns, params, centroids, stations, activation, feature_before, kepco_mh=None):
     """3단계 전체. 반환 dict 의 표는 전부 법정동 집계(좌표 없음).
 
@@ -257,6 +385,14 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
            "duration_table": dist_table, "duration_summary": dist_summary}
     if kepco_mh is not None:
         out["kepco_shape"], out["kepco_check"] = kepco_cross_check(sessions, kepco_mh, min_n)
+    peak = params["peak_hours"] or peak_hours_from(kepco_mh)
+    out["flex_bands"], out["flex_summary"] = soc_flexibility(sessions, peak, params["flex_soc"], min_n)
+    if verdict == "individual":   # 거주지 추정은 식별번호가 개별 차량일 때만 의미가 있다
+        out["away_region"], out["away_region_export"], out["away_summary"] = \
+            away_charging(sessions, infer_home(can, params), centroids, params, min_n)
+    else:
+        out["away_region"], out["away_region_export"] = None, None
+        out["away_summary"] = pd.DataFrame([{"항목": "원정 충전 분석", "값": f"생략 — 식별번호 판정 {verdict}(개별 차량 아님)"}])
 
     if verdict == "individual":
         sessions = mark_base_sessions(sessions, params)

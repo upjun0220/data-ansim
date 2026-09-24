@@ -358,6 +358,15 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 if res["kepco_shape"] is not None:
                     writer.table(res["kepco_shape"], "s3_can_kepco_shape",
                                  "3단계 시간대별 비중 — CAN 충전 점유 vs KEPCO 사용량 (서울 전체)", digits=4)
+            min_n = P["can"]["min_cell_count"]
+            writer.table(res["away_summary"], "s3_can_away_summary", "3단계 CAN 원정 충전 요약 (거주지 밖 충전)",
+                         note="거주지는 밤 주차 위치로 추정(센터 내부 계산). 차량 단위 결과는 저장·반출하지 않음")
+            if res["away_region"] is not None:
+                writer.table(res["away_region"], "s3_can_away_region", "3단계 거주 법정동별 원정 충전",
+                             digits=3, png_df=res["away_region_export"], note=f"PNG 는 거주 추정 차량 {min_n}대 미만 법정동 '—'")
+            writer.table(res["flex_summary"], "s3_can_flex_summary", "3단계 피크 시간대 충전의 시작 SOC — 시간 이동 여지")
+            writer.table(res["flex_bands"], "s3_can_flex_bands", "3단계 피크 시간대 충전 시작 SOC 분포", digits=3,
+                         note=f"세션 {min_n}건 미만 구간 '—'")
             S["can"] = res
         can_name = "CAN 처치 정제" if commerce else "CAN 세션 모양·반복 위치"
         if runner.run("3", can_name, stage3_can, ISOLATED) is None and "can" not in S:
@@ -569,6 +578,16 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 S.update(access=access, access_match_rate=float(points["ev_count"].notna().mean()),
                          access_inputs=(stations, points))
             runner.run("8-C", "충전 접근성 2SFCA", stage8c, ISOLATED)
+
+            def stage8c_can():
+                """고유 데이터(CAN)의 원정 충전으로 형평성 축(2SFCA)을 검증한다."""
+                if "access" not in S or S.get("can", {}).get("away_region") is None:
+                    raise RuntimeError("8-C 접근성 또는 CAN 원정 충전(개별 차량 판정 필요) 없음")
+                check = canloader.away_access_check(S["can"]["away_region"], S["access"], P["can"]["min_cell_count"])
+                writer.table(check, "s8c_can_away_check", "8-C CAN 원정 충전 ↔ 2SFCA 접근성 검증",
+                             note=f"거주 추정 차량 {P['can']['min_cell_count']}대 이상 법정동만. 기간이 달라 방향 확인용")
+                S["can_away_check"] = check
+            runner.run("8-C", "CAN 원정 충전 ↔ 접근성 검증", stage8c_can, ISOLATED)
 
         if P["energy"]["enabled"]:
             def stage_external():
@@ -949,9 +968,10 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                              note=note + ". PNG 는 소표본 법정동 기여분 제외")
                 if list(P["priority"]["axes"]) != priorityscore.LEGACY_AXES:
                     sim = S.get("charger_sim")
-                    story = headline.story_table(table, sim)
+                    can_check = S.get("can_away_check")
+                    story = headline.story_table(table, sim, can_check)
                     writer.table(story, "s9_story", "9단계 발표 본문 — 발견 문장(초안)과 새 3숫자 (ESS·2030은 s9_headline 부록)",
-                                 digits=3, png_df=headline.story_table(png, sim) if len(png) else story.iloc[0:0],
+                                 digits=3, png_df=headline.story_table(png, sim, can_check) if len(png) else story.iloc[0:0],
                                  note="문구는 팀이 확정. PNG 는 소표본 법정동 기여분 제외")
                     if "priority_score" in S:
                         card_args = (S["priority_score"], S.get("risk"), access, S.get("master"), P["priority"])

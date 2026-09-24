@@ -136,7 +136,11 @@ DEFAULT_PARAMS = {
         # 세션
         "session_max_gap_min": 15.0,
         "session_min_min": 3.0, "session_max_min": 24 * 60.0,
-        "geo_cell_m": 200.0,               # 경로B 세션 근사: 식별번호 + 위치격자
+        "geo_cell_m": 200.0,               # 경로B 세션 근사: 식별번호 + 위치격자 (거주지 추정 격자로도 씀)
+        # 원정 충전(개별 차량 판정일 때만): 밤 주차 위치 최빈 격자 = 거주지, 거주지에서 away_km 초과 충전 = 원정
+        "home_hours": [21, 6], "home_min_nights": 3, "home_min_share": 0.5, "away_km": 1.0,
+        # 시간 이동 여지: 피크 시각(None = KEPCO 사용량 상위 4시각)에 시작 SOC flex_soc % 이상인 충전 비율
+        "flex_soc": 50.0, "peak_hours": None,
         # 거점성 클러스터링(경로A)
         "dbscan_eps_m": 150.0, "dbscan_min_samples": 3,
         "repeat_min_days": 3,
