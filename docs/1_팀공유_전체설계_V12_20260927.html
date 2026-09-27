@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>충전 부하, 하루 먼저 본다 — 전체설계 v11.8</title>
+<title>충전 부하, 하루 먼저 본다 — 전체설계 v12</title>
 <style>
   :root{
     --ink:#1b1f24; --sub:#5b6470; --line:#e3e6ea; --bg-soft:#f6f7f9;
@@ -121,7 +121,7 @@
   <h2 id="diff-v10">V10 대비 변경점<span class="badge new">v11.6</span></h2>
   <p>2026-09-19 V10(제출 검토안) 이후 v10.1~v11.6의 변경을 한 표로 모았다. 버전별 세부 내용은 아래 개정 이력에 있다. <strong>v11.5·v11.6에서 바뀐 칸은 ◆로 표시</strong>했다.</p>
   <table>
-    <thead><tr><th style="width:110px;">항목</th><th>V10</th><th>V11.8(현재)</th><th style="width:170px;">이유</th></tr></thead>
+    <thead><tr><th style="width:110px;">항목</th><th>V10</th><th>V12(현재)</th><th style="width:170px;">이유</th></tr></thead>
     <tbody>
       <tr><td>주제·제목</td><td>충전 리플맵 — 안전·형평성·경제성을 위한 공공 충전 인프라 투자 우선순위 지도</td><td>충전 부하, 하루 먼저 본다 — AI 확률 예측으로 정하는 서울 공공 충전 투자 우선순위</td><td>세 가치를 나열한 제목이라 문제·결정이 한 문장으로 잡히지 않음</td></tr>
       <tr><td>핵심 질문</td><td>어디에 투자해야 주민의 전력 이용과 공평한 충전 기회를 함께 보호할 수 있는가</td><td>충전 접근성이 부족한 동네 가운데, 내일 저녁 충전 부하가 평소 최대를 넘어 급증할 위험이 큰 곳은 어디인가</td><td>형평성(어디가 필요한가) + 급증 위험(그중 어디가 급한가)의 두 단계로 정리</td></tr>
@@ -142,7 +142,7 @@
       <tr><td>킬 크라이테리아</td><td>13~15번 추가, 코드 기준 16항목</td><td>11번(T_r 분포) 해당 없음, 14번 AHP 검사 제외, 15번 순위표 3장 → 2장, <strong>17~21번 신규</strong>(ML 라이브러리, AI 성능 미달, 기온 예보, 시나리오 매핑·β·k_goal, 급증위험 0 비율). 코드 기준 21항목, 판정에 “해당 없음” 추가. ◆ 꺼진 항목도 “해당 없음”으로 남겨 <strong>항상 21개</strong>(v11.5)</td><td>새 모듈의 실패 경로 명시, 현장 판정표 형식 고정</td></tr>
       <tr><td>심사위원 Q&amp;A</td><td>Q1~Q10(Q4: 상권 매출에 왜 공공 예산을)</td><td>Q2·Q10 수정, Q4 교체(상권·소비 데이터를 왜 안 썼나), <strong>Q11~Q19 신규</strong>. ◆ <strong>Q20~Q22 신규</strong>(고유 데이터로만 알 수 있었던 것, 거주지 추정과 개인정보, 충전기 실험에서 단순 기준이 더 좋으면), Q9 갱신</td><td>바뀐 설계에 맞는 방어 논리</td></tr>
       <tr><td>현장 실행</td><td>설정 JSON을 손으로 채워 실행</td><td>◆ <strong>현장 실행기</strong> <code>run_first_visit</code>(첫 방문 진단)·<code>run_full</code>(전체 분석, Copy Path 3개)·<code>run_seasons</code>(평가 창 4개 계절 강건성). 반출 PNG에 오류 전문·절대경로·미매칭 지역명이 실리지 않게 함</td><td>센터에서는 사진 촬영이 안 되어 코드를 손으로 입력해야 함</td></tr>
-      <tr><td>코드 구현 상태</td><td>v10 기준 구현 완료(테스트 73개 통과, 가상 데이터로 전 단계 실행)</td><td><strong>v11.4 구현 완료</strong>: 상권 단계 비활성(코드 보존)·SHC 선택화, 서울 필터, 8-A AI 분위수 예측·급증 위험, 8-B AI 효과, 8-E 두 축(<code>min_axes=2</code>), 8-F 시나리오, 9-H 새 숫자, 기온·공휴일 입력, 킬 17~21. ◆ <strong>v11.6 구현</strong>: 현장판 수정 통합, KEPCO 가로 열 인식, 현장 실행기, CAN 교차검증·원정 충전·시간 이동 여지, 8-G, 발견 문장·동네 카드. <strong>테스트 129개 통과·3개 생략</strong>. GitHub <code>main</code> 브랜치(<code>v11.3</code> 브랜치는 9/21 시점에서 멈춤). <strong>실데이터 결과는 아직 없음</strong></td><td>문서와 코드가 같은 내용을 말하게 하기 위해(8절)</td></tr>
+      <tr><td>코드 구현 상태</td><td>v10 기준 구현 완료(테스트 73개 통과, 가상 데이터로 전 단계 실행)</td><td><strong>v11.4 구현 완료</strong>: 상권 단계 비활성(코드 보존)·SHC 선택화, 서울 필터, 8-A AI 분위수 예측·급증 위험, 8-B AI 효과, 8-E 두 축(<code>min_axes=2</code>, 백분위 정규화), 8-F 시나리오, 9-H 새 숫자, 기온·공휴일 입력, 킬 17~21. ◆ <strong>v11.6 구현</strong>: 현장판 수정 통합, KEPCO 가로 열 인식, 현장 실행기, CAN 교차검증·원정 충전·시간 이동 여지, 8-G, 발견 문장·동네 카드. <strong>테스트 129개 통과·3개 생략</strong>. GitHub <code>main</code> 브랜치(<code>v11.3</code> 브랜치는 9/21 시점에서 멈춤). <strong>실데이터 결과는 아직 없음</strong></td><td>문서와 코드가 같은 내용을 말하게 하기 위해(8절)</td></tr>
     </tbody>
   </table>
   <p><strong>바뀌지 않은 것</strong>: ESS 피크쉐이빙 LP의 제약식과 후보 용량 검증, 정책적 목표 상한(관측 최대의 1.1~1.3배), 접근성 지표 1·2와 2SFCA(300/500/800m), 신뢰도 점수 레이어, 계절 강건성 검증, 소표본 억제·좌표 비반출 등 반출 보호 설계, 킬 1~10·12·13·16번, MCLP 선택 확장, 외부 SMP 사용.</p>
@@ -170,7 +170,9 @@
       <tr><td><strong>v11.4</strong></td><td><strong>v11.3 설계를 코드로 구현하고, 구현하면서 확정한 사항을 문서에 반영</strong>했다(8절). ① 평가기간을 7일에서 <strong>28일</strong>로 늘렸다 — 7일이면 급증위험이 1/7 단위로만 나오고 <code>risk_threshold</code> 0.1이 사실상 “7일 중 1회”가 되기 때문이다, ② AI의 동네 특성 “교정기간 평균 부하”는 교정기간이 검증기간과 겹쳐 정보 누설이 되므로 <strong>학습기간 평균 부하</strong>로 바꿨다, ③ 기준 모델이 휴일 표본 부족으로 실패한 날은 AI 대 기준 모델 비교에서 빼고(<strong>공통일 비교</strong>) 제외 일수를 표시한다, ④ 전기차 등록 이력을 법정동에 배분하는 <strong>행정동→법정동 대응표(가중치)</strong>를 반입하고, 8-C의 등록 단면도 이 이력에서 계산해 반입 파일을 하나 줄였다, ⑤ 반입 포털이 zip·json·md를 받지 않아 코드는 <strong>모듈 파일별로</strong>, 설정 원본·공휴일 달력·README는 내용 그대로 <code>.txt</code>로 반입하고 <code>checksums.txt</code>로 버전을 확인하며, <strong>데이터 파일명은 이전 반입과 겹치지 않게 숫자(<code>2.csv</code>~<code>10.ttf</code>)</strong>로 매겼다, ⑥ 공휴일 달력은 안심구역에 PyYAML이 없을 수 있어 JSON 문법(=유효한 YAML)으로 저장한다, ⑦ 3-2절의 “결합 기본 시나리오 증설 3대” 서술을 v11.3 정의(증설 0대)에 맞게 고쳤다, ⑧ 킬 21번과 판정 “해당 없음”을 코드에 넣고 설계↔코드 번호 대응표를 달았다(4절). 분석 방법은 바꾸지 않았다.</td></tr>
       <tr><td>v11.6(2026-09-25)</td><td><strong>CAN(티벨, 고유 미개방) 활용을 넓혔다.</strong> ① 개별 차량 판정일 때 밤 주차 위치로 거주 동네를 추정하고 거주지 밖(1km 초과) 충전 비율을 법정동별로 집계해, 형평성 축(2SFCA)을 <strong>대리지표가 아닌 실제 행동으로 검증</strong>한다(순위 상관·접근성 하위 20% 비교, 발견 문장 표의 “고유 데이터 발견” 행), ② KEPCO 피크 시간대 충전의 시작 SOC로 충전 시간 이동 여지를 본다, ③ 차량 단위 결과는 저장·반출하지 않고 거주 차량 3대 미만 동네는 가린다. 현장 번들은 <code>day1bundle7.py</code>. ④ (9/25 오후) <strong>실데이터 규모 대비</strong>: 서울 467동·2년 합성 자료로 전체 분석을 끝까지 돌려 동네 수에 비례하던 반복 스캔을 없앴고, KEPCO 결측·마스킹 시간은 0으로 채우지 않고 제외(20% 초과·음수면 중단), CAN은 서울 밖 좌표 제외·2천만 행 상한, Copy Path는 상위 폴더까지 찾는다.</td></tr>
       <tr><td>v11.7(2026-09-27)</td><td><strong>신청한 LX DEM 5M을 실제 분석에 넣었다.</strong> 정의서(한국국토정보공사 LX-003)상 DEM은 <code>.img</code> 래스터 2.2GB·GRS80이다. 법정동 중심점과 공용 충전소의 표고만 뽑아 직선 경사(높이차 ÷ 거리)를 구하고, Tobler 보행 함수로 걷는 시간 배율(왕복 평균)을 거리에 곱해 2SFCA를 다시 계산한다(8-C <code>s8c_dem_slope_check</code>, 발견 문장 표의 “지형 강건성” 행). 기본 2SFCA를 바꾸지 않는 <strong>민감도 분석</strong>이며, 충전기에 꽂아 두고 걸어서 오가는 완속 충전 상황에 한정한다. 센터에 rasterio·GDAL이 없으면 이 단계만 생략된다. 함께: ESS(부록)는 집중도 상위 30개 동네만(서울 전체면 LP 수십만 번), CAN 없는 킬 8번 “해당 없음”, Copy Path 절대경로 저장. 서울 규모 합성 자료(467동·2년·5m DEM)로 전 단계 실행 확인. 현장 번들 <code>day1bundle6.py</code>(v11.8에서 7로 교체).</td></tr>
-      <tr><td><strong>v11.8(현재, 2026-09-27)</strong></td><td><strong>“1지도”와 월별 자료 대비.</strong> ① <strong>우선순위 지도 PNG</strong>(<code>s9_priority_map</code>, 9-M): 법정동 중심점(공개 자료) 점 지도, 색 = 결합 점수, 상위 10곳 번호 = 동네 카드 순위. 좌표 눈금은 싣지 않고 소표본 동네는 회색 점(점수 없음). 경계선 없는 점 지도라 발표용 지도는 반출 뒤 이 순위를 공개 경계 위에 옮겨 그린다. ② KEPCO 조회기간이 월(YYYYMM)뿐이면 <code>run_full</code>이 멈추지 않고 <strong>플랜 B</strong>로 간다: 다음날 AI 예측(8-A)·ESS·2030은 생략하고, 급증 위험 축을 <strong>최근 6개월 월 피크가 직전 12개월 최대 × 배율을 넘은 달 비율</strong>(관측, 예측 아님)로 대신해 우선순위·충전기 추가 실험·동네 카드·지도까지 만든다. 소표본 억제 기준도 월별 집계의 대표 고객호수로 만든다. 발견 문장 표·발표 숫자 3(a)·동네 카드는 월별일 때 “월별 자료 — AI 경보 미산출”을 적고 지어내지 않는다. 심사 관점 점검에서 나온 가장 큰 단일 실패 지점(조회기간 자릿수 미확정)과 “지도가 센터에서 나오지 않음”을 막는 변경이다. 현장 번들 <code>day1bundle7.py</code>.</td></tr>
+      <tr><td>v11.8(2026-09-27)</td><td><strong>“1지도”와 월별 자료 대비.</strong> ① <strong>우선순위 지도 PNG</strong>(<code>s9_priority_map</code>, 9-M): 법정동 중심점(공개 자료) 점 지도, 색 = 결합 점수, 상위 10곳 번호 = 동네 카드 순위. 좌표 눈금은 싣지 않고 소표본 동네는 회색 점(점수 없음). 경계선 없는 점 지도라 발표용 지도는 반출 뒤 이 순위를 공개 경계 위에 옮겨 그린다. ② KEPCO 조회기간이 월(YYYYMM)뿐이면 <code>run_full</code>이 멈추지 않고 <strong>플랜 B</strong>로 간다: 다음날 AI 예측(8-A)·ESS·2030은 생략하고, 급증 위험 축을 <strong>최근 6개월 월 피크가 직전 12개월 최대 × 배율을 넘은 달 비율</strong>(관측, 예측 아님)로 대신해 우선순위·충전기 추가 실험·동네 카드·지도까지 만든다. 소표본 억제 기준도 월별 집계의 대표 고객호수로 만든다. 발견 문장 표·발표 숫자 3(a)·동네 카드는 월별일 때 “월별 자료 — AI 경보 미산출”을 적고 지어내지 않는다. 심사 관점 점검에서 나온 가장 큰 단일 실패 지점(조회기간 자릿수 미확정)과 “지도가 센터에서 나오지 않음”을 막는 변경이다. 현장 번들 <code>day1bundle7.py</code>(v11.9에서 8로 교체).</td></tr>
+      <tr><td>v11.9(2026-09-27)</td><td><strong>반출 규칙 반영과 전체 색칠 지도·웹 화면 준비.</strong> ① 센터 반출 규칙(“분석으로 만든 결과물 — 통계·시각화·모델링 결과 — 만 반출, 제공데이터의 일부라도 포함되면 불가”)에 맞춰, 원본 한 칸과 같거나 그 값으로 바로 되돌릴 수 있는 열(calib_peak_kw·target_kw·actual_grid_kw·actual_charge_kw·actual_discharge_kw·peak_avg_kw·daily_kwh·load_peak_now_kw·load_peak_Y_kw)을 모든 표 PNG에서 자동으로 뺀다(CSV는 센터 내부 검토용으로 그대로). ② <strong>동네 상세 PNG</strong>(9-D <code>s9_detail_pNN</code>, 서울 약 17쪽): 모든 법정동의 <em>분석 결과만</em>(순위·결합점수·급증위험·위험상태·강건상위·AI 적중/실제 급증 일수·원정충전비율·경사보정접근성), 소표본 동네는 가림(S), 쪽마다 검증 Σ행. ③ 공개자료로 만들 수 있는 값(2SFCA·충전기 1기당 EV·최근접 거리·동네 이름)은 반출하지 않고 센터 밖에서 같은 함수(<code>equityaccess.public_access</code>)로 다시 계산한다. ④ <code>tools/detail_from_export.py</code>: 옮겨 적은 쪽의 Σ행 대조 → 공개 값 재계산 → 결합점수 교차 검증(R²) → 웹 화면용 표(<code>app_data.csv</code>). ⑤ 센터 안내의 반출 가능 예시(태블로 시각화)에 맞춰, 센터 안 태블로로 배경지도 위 지도를 그릴 수 있게 <strong>가림 처리된 분석 결과 CSV</strong>(<code>s9_detail_tableau.csv</code>, 좌표 없음 — 공개 중심점 4.csv와 <code>bjd_code</code>로 연결)를 만든다. 이 파일로 그린 그림만 반출 후보다. 현장 번들 <code>day1bundle8.py</code>.</td></tr>
+      <tr><td><strong>v12(현재, 2026-09-27)</strong></td><td><strong>두 축 정규화를 백분위로 바꾸고 반입을 단순화.</strong> ① 실제 공개자료로 계산한 서울 2SFCA는 중앙값 0.28·최대 17이라, 최소-최대로 정규화하면 법정동의 93%가 형평성 0.9 이상에 몰려 형평성 축이 사실상 사라졌다(결합점수와 형평성의 순위 상관 0.10, 권고의 96%가 ‘충전기 부족’). 두 축을 모두 <strong>서울 안 백분위</strong>(가장 낮은 곳 0 · 가장 높은 곳 1, 동률은 평균 순위)로 바꿔 가중치대로 1:1이 실제로 작동하게 했다. 권고 기준 0.5는 ‘서울 중앙값’이 된다. 최소-최대 순위와의 상위 20곳 겹침·순위 상관은 8-E 요약표에 민감도로 함께 보고한다(<code>priority.scale</code>). 차이의 크기를 잃는 대신 이상값 하나에 축이 무너지지 않는다. ② 센터 밖 교차 검증은 백분위가 원값과 일차식이 아니므로 순위 상관(스피어만 &gt; 0.99)으로 바꿨다. ③ 반입은 짧은 파일 하나 — <code>ansim9.py</code>(센터에서 <code>%run ansim9.py</code>), 반입 폴더에는 그 파일 하나만 두고 해시는 문서에 적는다.</td></tr>
       <tr><td><strong>v11.5(2026-09-24)</strong></td><td><strong>현장 1·2일차 결과와 심사 관점 점검을 반영</strong>했다(문서 본문 개정은 실데이터 결과 후). ① KEPCO_001 실제 형식(<code>조회기간</code> YYYYMMDD + <code>01:00</code>~<code>24:00</code> 가로 열)을 설정 없이 읽고, KEPCO_002는 사용량 열이 없어 전력 분석에서 뺀다, ② 현장 실행기 <code>run_full</code>(전체 분석)·<code>run_seasons</code>(평가 창 4개 계절 강건성)와 번들 생성 도구를 두어 센터에서는 Copy Path만 붙여 넣는다, ③ <strong>CAN×KEPCO_001 같은 기간 교차검증</strong>(시간대 모양·법정동 순위 상관)으로 안심구역 데이터 두 개를 맞댄다, ④ <strong>8-G 충전기 추가 가정 실험</strong>(우선순위 상위 20곳 대 전기차 등록 상위 20곳, 같은 기수)으로 순위의 쓸모를 보인다, ⑤ 발표 본문은 <strong>발견 문장·새 3숫자(격차·예측·개입)·동네 카드</strong>로 재구성하고 ESS(07-2 피크쉐이빙)·2030 시나리오(07-4)는 부록으로 내린다, ⑥ 반출 PNG에 오류 전문·절대경로·미매칭 지역명이 실리지 않게 했다. 분석 방법(예측·급증 위험·2SFCA·결합 점수)은 바꾸지 않았다.</td></tr>
     </tbody>
   </table>
@@ -526,15 +528,16 @@ E_ref = max_d Σ_h [L_calibration(r,d,h) + ΔL(r,h) − P_target(r)]⁺ · Δt
   <p>v8까지의 "판단 순서"(공공 필요 확인 → 상한 초과 비교 → 비용 검토 → 상권효과 참고)는 사람이 표를 눈으로 훑으며 우선순위를 정하는 방식이었다. 지역이 몇 개일 때는 괜찮지만, 안전·형평성·경제성 지표가 서로 다른 순서로 지역을 매길 때(예: 안전은 A동이 1위지만 형평성은 A동이 하위권) <strong>어느 쪽을 따를지 규칙이 없어 자의적 판단이 개입한다.</strong> v9은 이 판단을 재현 가능한 결합 점수로 명시하되, 결합 방식 자체의 한계(가중치·임계값 선택)를 숨기지 않고 함께 보고한다. <strong>v11은 축을 초과위험·형평성 두 개로 줄였다</strong> — 형평성이 “어디가 필요한가”, 초과위험이 “그중 어디가 급한가”를 맡는다.</p>
 
   <h3 id="pm-2">3-2. 결합 점수 — 정규화·가중합·결측 처리</h3>
-  <p>v11은 두 축의 원지표를 0~1로 정규화한 뒤 가중합한다. 경제성(SMP 기준 비용 차이)은 점수에 넣지 않고 표시용 참고값으로 둔다.</p>
+  <p><strong>(v12)</strong> 두 축을 <strong>백분위</strong>로 0~1 정규화한 뒤 가중합한다. 실제 공개자료로 계산한 서울 2SFCA는 중앙값 0.28·최대 17이라, 최소-최대로 정규화하면 법정동의 93%가 형평성 0.9 이상에 몰려 형평성 축이 사실상 사라졌다(결합점수와 형평성의 순위 상관 0.10, 권고의 96%가 ‘충전기 부족’). v11의 최소-최대 식(아래)은 민감도 비교로만 남긴다. v11은 두 축의 원지표를 0~1로 정규화한 뒤 가중합했다. 경제성(SMP 기준 비용 차이)은 점수에 넣지 않고 표시용 참고값으로 둔다.</p>
   <pre><code>위험_norm(r)   = clip( (급증위험(r) − min) / (max − min), 0, 1 )      # 8-A: 증설 0대 P90 급증 경보일 비율(킬 21번 시 피크비율)
 형평성_norm(r) = clip( (max − 2SFCA_score(r)) / (max − min), 0, 1 )   # 접근성이 낮을수록 우선순위 ↑
+  (v12 기본) 위험_norm(r) = (순위(급증위험(r)) − 1) / (n − 1),  형평성_norm(r) = 1 − (순위(2SFCA(r)) − 1) / (n − 1)   # 백분위, 동률 평균 순위
 
 PriorityScore(r) = w_risk · 위험_norm(r) + w_equity · 형평성_norm(r)
 w_risk + w_equity = 1
 참고(점수 제외): SMP 기준 비용 차이(r), ESS 미적용 초과 kWh(r), 증설급증위험(r)</code></pre>
   <ul>
-    <li><strong>min-max는 전국이 아니라 분석 대상 지역 집합 내부</strong>에서 계산한다. 전국 분포를 함께 보고하되, 우선순위는 상대 순위이지 절대 위험도가 아니라는 점을 명시한다.</li>
+    <li><strong>정규화(v12 백분위, v11 min-max 모두)는 전국이 아니라 분석 대상 지역 집합 내부</strong>에서 계산한다. 전국 분포를 함께 보고하되, 우선순위는 상대 순위이지 절대 위험도가 아니라는 점을 명시한다.</li>
     <li><strong>(v11.4 정정)</strong> 위험 축은 v11.3 정의대로 <strong>증설 0대(관측 기반) 급증위험</strong>이다. 이 절의 이전 판에 있던 “기본 결합 시나리오는 증설 3대” 서술은 v11 초안의 잔재였다. <code>scenario_new_chargers</code>(기본 3)는 점수가 아니라 표시 열(ESS 미적용 초과 kWh·SMP 비용 차이)과 AI 효과 비교에만 쓴다. 0대 기준 급증위험이 순위 대상의 절반 이상에서 0이면 <code>priority.risk_metric="auto"</code>가 피크비율로 바꾸고 알린다(킬 21번). 증설 가정(ΔL)을 바꿔도 위험 축 값이 그대로인지 시험한다.</li>
     <li><strong>결측 처리 원칙(v8 원칙의 코드화)</strong>: 형평성 입력(2SFCA·접근성 지표)이 결측인 법정동은 0점으로 채우지 않는다. 대신 <code>PriorityScore(r) = (Σ 가중치×정규화값) / (Σ 결측이 아닌 축의 가중치)</code>로 재정규화해, "정보가 없어서 낮은 점수"와 "실제로 필요도가 낮아서 낮은 점수"를 구분한다. 재정규화된 지역은 지도에 별도 마커(예: 사선 해칭)로 표시한다. <strong>v10 정정</strong>: 재정규화 점수는 <em>참고값</em>이다. 축 하나만 있는 동네가 재정규화로 1.0을 받아 순위 최상위를 차지하는 문제가 가상 데이터에서 확인되어(강건 상위 6곳이 모두 축 1개), <strong>세 축이 모두 있는 동네만 순위 대상(ranking pool)</strong>으로 삼는다(<code>priority.min_axes</code>, 기본 3). <strong>v11</strong>: 축이 둘이 되어 기본값은 2이며, 초과위험은 8-A가 모든 법정동에 계산하므로 “부하 미평가” 동네가 크게 줄어든다(<strong>v11.4 구현: mock에서 순위 대상 30/30곳</strong>). 결측 사유는 <code>not_assessed_low_load</code>(교정기간 최대 부하가 너무 작아 급증위험을 재지 않음 — v11.4에서 V10의 <code>not_assessed_low_concentration</code>을 대신함)과 <code>data_missing</code>(대상인데 값 없음)으로 나누고, 순위 밖 동네는 0점으로 채우지 않은 채 “부하 미평가 — 접근성 부족만 확인” 별도 목록으로 낸다. 강건 상위군·경계선·민감도 순위와 킬 15번의 분모도 순위 대상 안에서만 계산한다. 신뢰도는 점수를 깎는 데 쓰지 않고 표시용이다(3-7절).</li>
     <li><strong>축 독립성 점검(v10 → v11 해소)</strong>: v11에서 경제성을 점수에서 빼 이 중복은 해소했다. 대신 초과위험과 형평성의 상관을 실행마다 보고한다(두 축이 강하게 겹치면 한 축으로 순위를 매기는 것과 같다). 아래는 v10 기록이다. 안전축과 경제성축은 둘 다 8-B의 같은 ESS 시뮬레이션에서 나와 사실상 한 축일 수 있다. 실행마다 두 축 원값의 피어슨·스피어만 상관을 계산해 0.9 이상이면 <code>axes_redundant</code> 경고(“세 축이 아니라 사실상 두 축”)를 실행 요약에 남긴다. 가상 데이터에서는 피어슨 0.50·스피어만 0.63이라 경고가 뜨지 않았고, 실데이터에서 확인한다. 축 정의를 바꿀지는 팀이 결정하며 코드는 임의로 바꾸지 않는다.</li>
@@ -791,7 +794,7 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
   <table>
     <thead><tr><th>이름</th><th>내용</th></tr></thead>
     <tbody>
-      <tr><td><strong><code>day1bundle7.py</code> · <code>checksums.txt</code></strong>(반입 신청 대상)</td><td>코드 번들 하나. 센터에서 <code>%run day1bundle7.py</code> 하면 <code>day1code/</code>에 모듈이 풀리고 <code>run_first_visit</code>·<code>run_full</code>이 준비된다. 이전 반입 <code>day1bundle.py</code>(1일차), <code>2</code>~<code>6</code>은 폐기. 파일명은 이전 반입과 겹치지 않게 번호를 올린다</td></tr>
+      <tr><td><strong><code>ansim9.py</code></strong>(반입 신청 대상)</td><td>코드 번들 하나. 센터에서 <code>%run ansim9.py</code> 하면 <code>day1code/</code>에 모듈이 풀리고 <code>run_first_visit</code>·<code>run_full</code>이 준비된다. 이전 반입 <code>day1bundle.py</code>(1일차), <code>day1bundle2</code>~<code>8</code>은 폐기(v12부터 짧은 이름 <code>ansimN.py</code>). 파일명은 이전 반입과 겹치지 않게 번호를 올린다</td></tr>
       <tr><td>(v11.4 방식, 이력) 모듈 20개 <code>*.py</code> · <code>fieldtemplate.txt</code> · <code>holidays.txt</code> · <code>requirements.txt</code> · <code>README.txt</code> · <code>checksums.txt</code></td><td>코드를 파일마다 따로 반입하는 방식. 현장에서는 1일차부터 번들 방식을 썼다</td></tr>
       <tr><td><code>2.csv</code> · <code>3.csv</code> · <code>4.csv</code></td><td>법정동코드 마스터 · 코드대응 · 법정동 중심점</td></tr>
       <tr><td><code>5.csv</code> · <code>6.csv</code></td><td>SMP · 공용 충전소 위치</td></tr>
@@ -819,20 +822,20 @@ subject to y_r ≤ Σ_{j ∈ 반경 d0(r)} x_j          # r이 커버되려면 �
   </table>
   <h3>팀이 결정·확인할 것</h3>
   <ol>
-    <li><strong>(v11.8) 다음 방문 최우선</strong>: KEPCO_001 조회기간 자릿수(8자리면 전체 분석, 6자리면 자동으로 플랜 B), CAN 식별번호 판정(individual이어야 원정 충전 가능), DEM을 읽을 도구(rasterio·GDAL) 유무와 DEM 파일 위치, <code>day1bundle7.py</code> 반입 상태.</li>
+    <li><strong>(v12) 다음 방문 최우선</strong>: KEPCO_001 조회기간 자릿수(8자리면 전체 분석, 6자리면 자동으로 플랜 B), CAN 식별번호 판정(individual이어야 원정 충전 가능), DEM을 읽을 도구(rasterio·GDAL) 유무와 DEM 파일 위치, <code>ansim9.py</code> 반입 상태.</li>
     <li>발견 문장 최종 문구(실데이터 후)와 <code>headline.risk_threshold</code>(0.1).</li>
     <li><s>KEPCO_002 유지 여부</s> → (v11.5) 사용량 열이 없어 전력 분석 제외 확정. 신청 목록 제외는 사무국 답변 대기.</li>
     <li>(v11.6) CAN 거주지 추정 집계의 반출 가능 여부와 위치 기반 결과의 소표본 기준(센터 직원).</li>
     <li><code>scenario.national_base</code>·<code>seoul_base</code>를 통계누리 원자료로 대조하고, 기준월을 2026-08로 옮길지(옮기면 세 값과 EV_now 월을 함께 바꾼다).</li>
     <li>반입 자료 범위: 경계 도형·공동주택 자료를 추가로 가져갈지(개수 제한 없음, 총 50MB).</li>
     <li>반입 전 준비: 공휴일 달력(<code>tools/fetch_holidays.py</code> 실행 후 번들 재생성), 과거 기온 예보, 행정동→법정동 대응표.</li>
-    <li>실제 GIS 지도: 안심구역 안의 태블로로 CSV(<code>bjd_code</code> 키)와 경계를 결합하는 경로 검토. 반출 그림에도 소표본 억제·좌표 비반출 규칙을 적용한다.</li>
+    <li>실제 GIS 지도(v11.9): 경계 도형은 센터에 반입하지 않는다. 반출한 동네 상세 PNG(<code>s9_detail_pNN</code>)를 옮겨 적어 센터 밖에서 공개 경계와 결합한다(<code>tools/detail_from_export.py</code>). 반출 그림에도 소표본 억제·좌표 비반출 규칙을 적용한다.</li>
   </ol>
 
   <footer class="doc-foot">
     <p>신청서에는 상단 선언문과 6절 공공성 서사를 사용한다. v11 수식과 범위는 함께 제공한 구현 명세 및 GitHub <a href="https://github.com/upjun0220/data-ansim">data-ansim</a>의 예측·ESS·접근성·GIS·결합점수 모듈에 반영한다. 모의실험 검증을 실제 지역의 효과로 쓰지 않는다.</p>
     <ol>
-      <li>현재 구현(v11.8): 8-A AI 분위수 예측·급증 위험·AI 효과 비교, 8-E 두 축(<code>min_axes=2</code>), 8-F 시나리오, 9-H 발견 문장·새 3숫자·동네 카드, 8-G 충전기 추가 실험, CAN 교차검증·원정 충전·시간 이동 여지, DEM 경사 보정 2SFCA, 우선순위 지도 PNG, 월별 자료 플랜 B, 현장 실행기(<code>run_full</code>·<code>run_seasons</code>), 기온·공휴일 입력, 서울 필터, 상권 단계 비활성까지 구현했다(8절). 실데이터 결과는 아직 없다. <strong>미구현</strong>: 지표 3(자가충전 제약 주거 비율), MCLP, 300/500m 커버리지(8-D), 경계선 위에 그린 발표용 GIS 지도(센터 PNG는 중심점 점 지도, 태블로 경로 검토). lightgbm 경로는 설치 환경에서만 검증된다.</li>
+      <li>현재 구현(v12): 8-A AI 분위수 예측·급증 위험·AI 효과 비교, 8-E 두 축(<code>min_axes=2</code>, 백분위 정규화), 8-F 시나리오, 9-H 발견 문장·새 3숫자·동네 카드, 8-G 충전기 추가 실험, CAN 교차검증·원정 충전·시간 이동 여지, DEM 경사 보정 2SFCA, 우선순위 지도 PNG, 월별 자료 플랜 B, 동네 상세 반출(전체 지도·웹 화면용)·반출 규칙 열 자동 제외, 현장 실행기(<code>run_full</code>·<code>run_seasons</code>), 기온·공휴일 입력, 서울 필터, 상권 단계 비활성까지 구현했다(8절). 실데이터 결과는 아직 없다. <strong>미구현</strong>: 지표 3(자가충전 제약 주거 비율), MCLP, 300/500m 커버리지(8-D), 경계선 위에 그린 발표용 GIS 지도·웹 화면(반출한 동네 상세 + 공개 경계로 센터 밖에서 작성 — v11.9에 재료 준비). lightgbm 경로는 설치 환경에서만 검증된다.</li>
       <li>원자료 확보 후 확인: KEPCO 일자·시각·단위·포괄 범위, CAN 식별자와 세션 신뢰도(관측 종료 시점 포함), 공휴일·SMP 정보시점, 경계 기준일과 결합키, 공동주택 주차대수 컬럼 존재 여부, 경계 도형(SHP/GeoPackage)의 안심구역 반입 가능 여부, 표준데이터 "이용자 제한 여부" 필드의 실제 값 분포, 공공성 증빙, <strong>DSZ 신청서의 분석 지역 기재(수도권 → 서울), 안심구역의 lightgbm·scikit-learn 설치 여부, 과거 기온 예보의 제공 기간·격자·발표 시각, 특일 정보 API의 분석기간 연도 조회 결과(대체·임시공휴일 포함 여부), 설정·달력 <code>.txt</code> 파일이 반입 심사를 통과하는지, 기준월 전국·서울 전기차 등록대수, 2SFCA 반경(300/500/800m) 중 현장 채택값, KEPCO_001의 계절 커버리지 실제 기간</strong>. 실제 신청 제출과 안심구역 반출 심의는 이 문서 수정과 별개다.</li>
     </ol>
   </footer>

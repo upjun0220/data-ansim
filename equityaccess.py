@@ -31,6 +31,28 @@ def load_access_inputs(station_path, ev_path, columns, centroids, crosswalk=None
     return stations, points
 
 
+def public_access(paths, columns, params, centroids, crosswalk=None):
+    """8-C 접근성 전체(2SFCA + 지표 1·2) — 공개자료만 쓴다(충전소·전기차 등록 이력·행정동→법정동 대응표·중심점).
+
+    센터(8-C)와 센터 밖(반출 PNG 로 웹 지도를 만들 때 공개 값 재계산, tools/detail_from_export.py)이 같은 함수를 써서
+    같은 입력이면 같은 값이 나오게 한다. 반환: (access, stations, points).
+    """
+    import loadscenario
+
+    ev_counts = None
+    if not paths["ev_registration"]:
+        sp, prefix = params["scenario"], params["region"]["sido_prefix"]
+        hist = loadscenario.load_ev_history(paths["ev_history"], columns["ev_history"], sp["fuel_value"], prefix)
+        ev, _ = loadscenario.map_to_bjd(hist, loadscenario.load_hdong_bjd(paths["hdong_bjd"], columns["hdong_bjd"]),
+                                        crosswalk, sp["base_month"])
+        ev_counts = ev.loc[ev["ym"] == sp["base_month"], ["bjd_code", "ev_count"]]
+    stations, points = load_access_inputs(paths["access_stations"], paths["ev_registration"], columns, centroids,
+                                          crosswalk, ev_counts)
+    pr = params["priority"]
+    access = add_access_indicators(compute_2sfca(stations, points, pr["radii_m"], pr["default_radius_m"]), stations, points)
+    return access, stations, points
+
+
 def _distance_km(lat1, lon1, lat2, lon2):
     """브로드캐스팅 가능한 haversine 거리."""
     a1, a2 = np.radians(lat1), np.radians(lat2)

@@ -154,19 +154,22 @@ section[id]{scroll-margin-top:16px}
   <p class="eyebrow">2026 데이터안심구역 경진대회 · 팀 공부용 · 센터 가기 전 필독</p>
   <h1>충전 부하, 하루 먼저 본다<br>로드맵북 v11</h1>
   <p class="lede">센터에 가기 전에 이것 하나만 읽으면 된다. 무엇을 하려는지, 어떤 데이터를 들고 가는지, 코드 파일 하나하나가 무슨 일을 하고 어떻게 돌리는지, 센터에서 첫날 무엇을 누르고 무엇을 확인하는지를 순서대로 적었다.</p>
-  <div class="meta"><span>v11 · 기준일 2026-09-22 · <b>v11.8 갱신 2026-09-27</b></span><span>기준 문서: 전체설계 V11.8(<code>docs/1_팀공유_전체설계_V11.8_20260927.html</code>)</span><span>코드: GitHub <code>upjun0220/data-ansim</code> · 테스트 113개 통과·3개 생략</span></div>
+  <div class="meta"><span>v11 · 기준일 2026-09-22 · <b>v12 갱신 2026-09-27</b></span><span>기준 문서: 전체설계 V12(<code>docs/1_팀공유_전체설계_V12_20260927.html</code>)</span><span>코드: GitHub <code>upjun0220/data-ansim</code> · 테스트 113개 통과·3개 생략</span></div>
 </header>
 
 <!-- 00 -->
 <section class="ch" id="s00">
   <p class="chno">00</p>
   <h2>5분 요약</h2>
-  <div class="warn"><b class="tag">v11.8 갱신(9/27) — 먼저 읽을 것</b>
+  <div class="warn"><b class="tag">v12 갱신(9/27) — 먼저 읽을 것</b>
     <ul>
-      <li><strong>센터 절차가 바뀌었다.</strong> 코드는 번들 파일 하나(<code>day1bundle7.py</code>)로 반입하고, 센터에서는 <code>%run day1bundle7.py</code> 후 Copy Path만 붙여 넣어 <code>run_full(...)</code>을 부른다. 설정 파일(<code>field.txt</code>)을 손으로 채우지 않는다. 손으로 칠 셀과 기대 출력은 <strong>후속 문서 v6</strong>(<code>docs/안심데이터센터_후속할일_유의사항_v6_20260927.html</code>, 팀 공유용·저장소 비공개)에 있다. 08장은 그 요약이다.</li>
+      <li><strong>결합점수 정규화를 백분위로 바꿨다(v12).</strong> 실제 공개자료로 계산한 서울 2SFCA는 중앙값 0.28·최대 17이라, 최소-최대로 정규화하면 법정동의 93%가 형평성 0.9 이상에 몰려 형평성 축이 사실상 사라졌다(결합점수와 형평성의 순위 상관 0.10, 권고의 96%가 ‘충전기 부족’). 이제 급증위험·형평성이 1:1로 섞이고 권고 유형이 고르게 나뉜다. 최소-최대 결과는 8-E 요약에 민감도로 남는다.</li>
+      <li><strong>센터 절차가 바뀌었다.</strong> 코드는 번들 파일 하나(<code>ansim9.py</code>)로 반입하고, 센터에서는 <code>%run ansim9.py</code> 후 Copy Path만 붙여 넣어 <code>run_full(...)</code>을 부른다. 설정 파일(<code>field.txt</code>)을 손으로 채우지 않는다. 손으로 칠 셀과 기대 출력은 <strong>후속 문서 v8</strong>(<code>docs/안심데이터센터_후속할일_유의사항_v8_20260927.html</code>, 팀 공유용·저장소 비공개)에 있다. 08장은 그 요약이다.</li>
       <li><strong>현장 확인</strong>: KEPCO_001은 <code>조회기간</code> + <code>01:00</code>~<code>24:00</code> 가로 열(코드가 그대로 읽음). <strong>KEPCO_002는 사용량 열이 없어 전력 분석에서 뺐다.</strong> 다음 방문 최우선은 조회기간 자릿수(8자리면 다음날 예측까지, <strong>6자리(월별)면 코드가 자동으로 플랜 B</strong> — 월 피크 증가로 위험 축을 대신해 순위·지도·카드는 나온다)와 CAN 식별번호 판정.</li>
-      <li><strong>“1지도”는 센터에서 PNG로 나온다</strong>(<code>s9_priority_map</code>): 법정동 중심점 점 지도, 색 = 결합 점수, 상위 10곳 번호 = 동네 카드 순위. 발표용은 반출 뒤 공개 경계 위에 옮겨 그린다.</li>
-      <li><strong>발표 본문</strong>: 발견 한 문장(AI 경보 재현율 대 기준 모델) + 숫자 3개(격차·예측·개입) + 동네 카드. ESS·2030은 부록. CAN으로 “원정 충전”을 봐서 형평성 축을 실제 행동으로 검증한다(설계 V11.8 07-5절). <strong>v11.7: 신청한 LX DEM으로 도보 경사를 반영해도 접근성 하위 동네가 유지되는지 본다</strong>(설계 3-5절) — 이제 신청한 안심구역 자료가 모두 분석에 들어간다.</li>
+      <li><strong>“1지도”는 센터에서 PNG로 나온다</strong>(<code>s9_priority_map</code>): 법정동 중심점 점 지도, 색 = 결합 점수, 상위 10곳 번호 = 동네 카드 순위. 발표용 <strong>전체 색칠 지도와 웹 화면</strong>은 반출한 <strong>동네 상세 PNG</strong>(<code>s9_detail_pNN</code>, 모든 법정동의 분석 결과만, 쪽마다 검증 Σ행)를 옮겨 적어 센터 밖에서 만든다(<code>tools/detail_from_export.py</code>).</li>
+      <li><strong>센터 안 태블로</strong>(센터 안내의 반출 가능 예시): <code>s9_detail_tableau.csv</code>(가림 처리된 분석 결과) + 공개 <code>4.csv</code>(중심점)를 법정동 코드로 연결해 배경지도 위 점 지도를 그리고 그림을 반출한다.</li>
+      <li><strong>반출 규칙</strong>: 분석 결과물(통계·시각화·모델링 결과)만 반출, <strong>제공데이터의 일부라도 들어 있으면 불가</strong>. 코드가 원본 값과 같은 열(기간 최대 kW·시간별 실측 등)을 PNG에서 자동으로 뺀다. CSV·로그·노트북은 여전히 반출하지 않는다.</li>
+      <li><strong>발표 본문</strong>: 발견 한 문장(AI 경보 재현율 대 기준 모델) + 숫자 3개(격차·예측·개입) + 동네 카드. ESS·2030은 부록. CAN으로 “원정 충전”을 봐서 형평성 축을 실제 행동으로 검증한다(설계 V12 07-5절). <strong>v11.7: 신청한 LX DEM으로 도보 경사를 반영해도 접근성 하위 동네가 유지되는지 본다</strong>(설계 3-5절) — 이제 신청한 안심구역 자료가 모두 분석에 들어간다.</li>
       <li><strong>방문 일수 = 기술평가 점수</strong>(1일 2점, 3일 6점, 5일 이상 10점). 9/22·23 두 번 갔으니 <strong>세 번 더 가서 5일을 채운다</strong>.</li>
     </ul></div>
   <div class="easy"><b class="tag">한 줄로</b>
@@ -241,7 +244,7 @@ section[id]{scroll-margin-top:16px}
 <div class="tree">data-ansim/                        <span class="c">← GitHub upjun0220/data-ansim (main·v11.3 브랜치)</span>
 ├── <span class="h">0_로드맵북_센터가기전_필독_v11.html</span>   <span class="c">← 지금 이 책</span>
 ├── docs/
-│   ├── <span class="h">1_팀공유_전체설계_V11.8_20260927.html</span>  <span class="c">← 설계 원본(수식·근거·Q&amp;A)</span>
+│   ├── <span class="h">1_팀공유_전체설계_V12_20260927.html</span>  <span class="c">← 설계 원본(수식·근거·Q&amp;A)</span>
 │   └── claude-code-프롬프트-V11.3-구현-20260921.md  <span class="c">← 이번 구현 작업 명세</span>
 ├── 연구계획서_충전리플맵_20260921.docx / .pdf     <span class="c">← 센터 이용신청 참고자료(분석 지역 수정 필요)</span>
 ├── 현장준비_효과크기_문의문안_20260919.md       <span class="c">← 사무국 문의 질문</span>
@@ -263,7 +266,7 @@ section[id]{scroll-margin-top:16px}
 ├── README.md                   <span class="c">← 개발자용 설명서(설정 키 전체 표)</span>
 └── requirements.txt</div>
   <div class="easy"><b class="tag">어떤 문서를 누구에게</b>
-    <p>팀원 공부용 → 이 로드맵북 · 설계를 깊게 볼 때 → 전체설계 V11.8 · 센터에 낼 때 → 연구계획서 · 문의 담당 → 문의문안 · 코드 고칠 때 → README</p></div>
+    <p>팀원 공부용 → 이 로드맵북 · 설계를 깊게 볼 때 → 전체설계 V12 · 센터에 낼 때 → 연구계획서 · 문의 담당 → 문의문안 · 코드 고칠 때 → README</p></div>
 </section>
 
 <!-- 03 -->
@@ -493,7 +496,7 @@ cd data-ansim</code></pre></li>
 <section class="ch" id="s07">
   <p class="chno">07</p>
   <h2>첫날 점검 21항목</h2>
-  <p>킬 크라이테리아가 한 번에 판정한다. 번호는 코드가 실제로 내는 번호다(설계 문서 번호와 대응은 설계 V11.8 4절). 판정은 <span class="pill p-iso">통과</span> <span class="pill p-opt">경고</span> <span class="pill p-must">실패</span> <span class="pill p-info">오류</span>(파일·열 문제) <span class="pill p-off">해당 없음</span>.</p>
+  <p>킬 크라이테리아가 한 번에 판정한다. 번호는 코드가 실제로 내는 번호다(설계 문서 번호와 대응은 설계 V12 4절). 판정은 <span class="pill p-iso">통과</span> <span class="pill p-opt">경고</span> <span class="pill p-must">실패</span> <span class="pill p-info">오류</span>(파일·열 문제) <span class="pill p-off">해당 없음</span>.</p>
   <div class="tbl"><table>
     <thead><tr><th>#</th><th>무엇을 보나</th><th>기준</th><th>걸리면</th></tr></thead>
     <tbody>
@@ -524,11 +527,11 @@ cd data-ansim</code></pre></li>
 <section class="ch" id="s08">
   <p class="chno">08</p>
   <h2>센터에서 할 일</h2>
-  <div class="warn"><b class="tag">v11.8 — 지금 절차(이 장의 아래 내용보다 우선)</b>
+  <div class="warn"><b class="tag">v12 — 지금 절차(이 장의 아래 내용보다 우선)</b>
     <ol>
-      <li><strong>가기 전</strong>: <code>day1bundle7.py</code> 반입 상태 확인(2~6을 신청했다면 7로 교체 요청). 후속 문서 v6를 출력해 간다(손 입력 셀·기대 출력).</li>
-      <li><strong>센터에서</strong>(<code>team_share</code> 폴더, 데이터는 형제 폴더 <code>import_data</code>): Kernel → Restart → <code>%run day1bundle7.py</code> → 확인 셀(조회기간 8자리, <code>24 0 23</code>) → <code>run_full(kepco_001_path=p, import_dir=r"5.csv의 Copy Path", can_path=r"CAN Copy Path", dem_path=r"DEM Copy Path")</code> → 결과 보기 → 시간이 남으면 <code>run_seasons(...)</code>.</li>
-      <li><strong>번들7이 아직 안 들어왔으면</strong> 기존 <code>day1bundle.py</code> + 설정 셀 4줄(후속 문서 v6 3절)로 <code>run_first_visit</code>까지만 한다.</li>
+      <li><strong>가기 전</strong>: <code>ansim9.py</code> 반입 상태 확인(day1bundle2~8을 신청했다면 ansim9.py로 교체 요청 — 반입 폴더에는 이 파일 하나뿐). 후속 문서 v8를 출력해 간다(손 입력 셀·기대 출력).</li>
+      <li><strong>센터에서</strong>(<code>team_share</code> 폴더, 데이터는 형제 폴더 <code>import_data</code>): Kernel → Restart → <code>%run ansim9.py</code> → 확인 셀(조회기간 8자리, <code>24 0 23</code>) → <code>run_full(kepco_001_path=p, import_dir=r"5.csv의 Copy Path", can_path=r"CAN Copy Path", dem_path=r"DEM Copy Path")</code> → 결과 보기 → 시간이 남으면 <code>run_seasons(...)</code>.</li>
+      <li><strong>ansim9.py가 아직 안 들어왔으면</strong> 기존 <code>day1bundle.py</code> + 설정 셀 4줄(후속 문서 v8 3절)로 <code>run_first_visit</code>까지만 한다.</li>
       <li><strong>기록</strong>: 조회기간 자릿수·수록 기간·단위, 킬 21개 판정, 매칭률, CAN 판정과 “거주지 추정 차량 ○/○대”, DEM 도구(<code>demloader.backend()</code>)와 <code>.img</code> 파일 수, 생략된 단계, <code>run_full</code> 걸린 시간. 값은 적지 않는다.</li>
       <li><strong>반출</strong>: <code>r["반출후보"]</code>의 PNG만, 직원 심의. 노트북(.ipynb)·CSV·로그·설정 JSON은 반출하지 않는다.</li>
     </ol>
@@ -573,7 +576,7 @@ summary["stages"]</code></pre>
     <li><code>out/csv/s0_run_summary.csv</code>에서 단계별 완료·생략·실패와 비고(사용 모델·기온 모드·AI 판정)를 먼저 본다.</li>
     <li>분석 뒤 <code>run_checks</code>를 한 번 더 돌려 18·21번 판정을 받는다.</li>
     <li>반출 신청은 <code>out/png/</code>의 그림과 <code>s9_manifest</code>(파일 목록)로 한다.</li>
-    <li>지도가 필요하면 센터 안 태블로에서 CSV(<code>bjd_code</code> 키)를 경계와 결합한다. 반출 그림에도 소표본 억제·좌표 비반출 규칙을 똑같이 적용한다.</li>
+    <li>지도는 센터 밖에서 만든다: 반출한 동네 상세 PNG를 옮겨 적고 공개 경계와 결합(<code>tools/detail_from_export.py</code>). 센터 안에는 경계를 반입하지 않는다. 반출 그림에도 소표본 억제·좌표 비반출 규칙을 똑같이 적용한다.</li>
     <li>메모리가 부족하면 <code>params.kepco.chunksize</code>를 줄인다(시도 필터는 이미 서울로 걸려 있다).</li>
   </ul>
   <div class="easy"><b class="tag">방문 일수</b><p>기술평가에서 방문 1일 2점, 3일 6점, 5일 이상 10점. <strong>9/22·23 두 번 방문 → 세 번 더 가서 5일을 채운다(v11.6).</strong> 방문마다 할 일: ③ 번들4 실행·조회기간 확인·킬 판정 ④ <code>run_full</code> 결과 확인·반출 신청 ⑤ <code>run_seasons</code>·보완 실행.</p></div>
@@ -661,7 +664,7 @@ summary["stages"]</code></pre>
       <tr><td class="num">9</td><td>숫자 3 헤드라인 문구, <code>risk_threshold</code> 0.1</td><td>발표 문장</td><td><span class="pill p-opt">결정 필요</span></td></tr>
       <tr><td class="num">10</td><td>전국·서울 전기차 기준값을 통계누리 원자료와 대조하지 않음</td><td>고 시나리오 배율(전국 값만 계산에 씀)</td><td><span class="pill p-opt">확인 필요</span></td></tr>
       <tr><td class="num">11</td><td>가상 데이터 결과 ≠ 실제</td><td>모든 수치는 동작 확인용</td><td>현장 실측</td></tr>
-      <tr><td class="num">12</td><td>지표 3·300/500m 커버리지·MCLP·DEM 경사 보정·실제 GIS 지도 미구현</td><td>설계의 후속 범위</td><td>지도는 태블로 경로 검토</td></tr>
+      <tr><td class="num">12</td><td>지표 3·300/500m 커버리지·MCLP 미구현(DEM 경사 보정은 v11.7 구현, 지도는 센터 밖에서 작성)</td><td>설계의 후속 범위</td><td>지도는 태블로 경로 검토</td></tr>
     </tbody></table></div>
 </section>
 
@@ -669,7 +672,7 @@ summary["stages"]</code></pre>
 <section class="ch" id="s12">
   <p class="chno">12</p>
   <h2>심사 질문 대비</h2>
-  <p>설계 V11.8 7절 Q&amp;A 중 가장 자주 나올 것만 짧게. 원문은 설계 문서.</p>
+  <p>설계 V12 7절 Q&amp;A 중 가장 자주 나올 것만 짧게. 원문은 설계 문서.</p>
   <h3>“1.1~1.3배는 어디서 나온 숫자인가?”</h3>
   <p>변압기 용량 자료가 없어서 정한 정책 가정이다. 그 동네가 최근 겪은 최대 부하에 10~30%를 더한 값이고, 세 값으로 바꿔 가며 결과가 어떻게 달라지는지 비교한다.</p>
   <h3>“스스로 정한 상한을 넘는 게 위험인가? 순환 논리 아닌가?”</h3>
@@ -722,7 +725,7 @@ summary["stages"]</code></pre>
   </dl>
 </section>
 
-<footer>v11 · 작성 2026-09-21, 데이터 반입 현황 갱신 2026-09-22 · 근거: 코드(GitHub upjun0220/data-ansim, pytest 113 통과·3 생략), 전체설계 V11.8, 구현 명세(docs/claude-code-프롬프트-V11.3-구현-20260921.md). “가상 데이터 기준” 수치는 동작 확인용이며 실제 결과가 아니다.</footer>
+<footer>v11 · 작성 2026-09-21, 데이터 반입 현황 갱신 2026-09-22 · 근거: 코드(GitHub upjun0220/data-ansim, pytest 113 통과·3 생략), 전체설계 V12, 구현 명세(docs/claude-code-프롬프트-V11.3-구현-20260921.md). “가상 데이터 기준” 수치는 동작 확인용이며 실제 결과가 아니다.</footer>
 </main>
 </div>
 </body>

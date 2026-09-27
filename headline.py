@@ -216,6 +216,67 @@ def story_table(head, sim=None, can_check=None, dem_check=None):
     return pd.DataFrame(rows)
 
 
+# ================================================================ 동네 상세(전체 색칠 지도·웹 화면용 반출)
+
+DETAIL_KEPCO_COLS = ["순위", "결합점수", "급증위험", "강건상위", "AI적중일", "실제급증일"]   # 소표본이면 가리는 열
+DETAIL_FLOAT_COLS = ["결합점수", "급증위험", "원정충전비율", "경사보정접근성"]
+DETAIL_INT_COLS = ["순위", "강건상위", "AI적중일", "실제급증일"]
+
+
+def detail_table(priority, risk=None, base_multiplier=1.2, away=None, slope=None):
+    """모든 법정동의 안심구역 유래 값만 한 줄씩(법정동 코드 순). 공개자료로 다시 만들 수 있는 값(2SFCA·충전기 1기당 EV·
+    최근접 거리·동네 이름)은 싣지 않는다 — 밖에서 equityaccess.public_access 로 같은 값을 다시 계산한다.
+
+    위험상태: A 평가 · L 저부하 미평가 · M 결측. 강건상위 1/0. AI적중일/실제급증일은 일별 자료(8-A)일 때만.
+    원정충전비율은 CAN 개별 차량 판정일 때(거주 차량 3대 미만은 이미 빈 값), 경사보정접근성은 DEM 이 있을 때만.
+    """
+    p = priority.assign(bjd_code=priority["bjd_code"].astype(str))
+    out = pd.DataFrame({"bjd_code": p["bjd_code"],
+                        "순위": pd.to_numeric(p["rank"], errors="coerce").round().astype("Int64"),
+                        "결합점수": p["PriorityScore"], "급증위험": p["risk_raw"],
+                        "위험상태": p["risk_status"].map({"assessed": "A", "not_assessed_low_load": "L"}).fillna("M"),
+                        "강건상위": p["robust_top"].astype(int).astype("Int64") if "robust_top" in p else pd.NA})
+    if risk is not None and "tp_ai" in risk:
+        r = risk[np.isclose(risk["multiplier"].astype(float), float(base_multiplier))]
+        r = r.assign(bjd_code=r["bjd_code"].astype(str)).set_index("bjd_code")
+        out["AI적중일"] = out["bjd_code"].map(r["tp_ai"]).round().astype("Int64")
+        out["실제급증일"] = out["bjd_code"].map(r["actual_ai"]).round().astype("Int64")
+    if away is not None and len(away):
+        out["원정충전비율"] = out["bjd_code"].map(away.assign(bjd_code=away["bjd_code"].astype(str))
+                                             .set_index("bjd_code")["원정충전_세션비율"])
+    if slope is not None and len(slope):
+        out["경사보정접근성"] = out["bjd_code"].map(slope.assign(bjd_code=slope["bjd_code"].astype(str))
+                                              .set_index("bjd_code")["access_2sfca"])
+    return out.sort_values("bjd_code").reset_index(drop=True)
+
+
+def _checksum_row(page, digits):
+    """쪽 끝 검증 행: 코드 합(정수)·숫자 열 합(화면에 보이는 반올림 값으로). 밖에서 옮겨 적은 값이 맞는지 쪽마다 대조한다."""
+    row = {"bjd_code": f"Σ{sum(int(c) for c in page['bjd_code'])}", "위험상태": f"{len(page)}행"}
+    for c in page.columns:
+        if c in DETAIL_FLOAT_COLS:
+            row[c] = float(pd.to_numeric(page[c], errors="coerce").round(digits).sum())
+        elif c in DETAIL_INT_COLS:
+            row[c] = int(pd.to_numeric(page[c], errors="coerce").fillna(0).sum())
+    return row
+
+
+def detail_pages(detail, customer_min, min_count, rows=29, digits=3):
+    """(내부 CSV 쪽, 반출 PNG 쪽) 목록. PNG 쪽은 소표본 법정동의 KEPCO 유래 열을 비우고(위험상태 S), 쪽마다 검증 행을 붙인다."""
+    small = detail["bjd_code"].map(customer_min).fillna(0) < int(min_count)
+    png = detail.copy()
+    for c in DETAIL_KEPCO_COLS:
+        if c in png:
+            png[c] = png[c].astype("Float64" if c in DETAIL_FLOAT_COLS else "Int64").mask(small)
+    png["위험상태"] = png["위험상태"].mask(small, "S")
+    pages = []
+    for i in range(0, len(detail), rows):
+        csv_page, png_page = detail.iloc[i:i + rows], png.iloc[i:i + rows]
+        pages.append((csv_page.reset_index(drop=True),
+                      pd.concat([png_page, pd.DataFrame([_checksum_row(png_page, digits)])], ignore_index=True)))
+    return pages
+
+
 def recommend(risk_norm, equity_norm, cut=0.5):
     """규칙 기반 권고 초안. 실제 설치·점검 결정이 아니다."""
     high_r, high_e = bool(risk_norm >= cut), bool(equity_norm >= cut)

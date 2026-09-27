@@ -20,6 +20,26 @@ def normalize(values, reverse=False):
     return 1 - out if reverse else out
 
 
+def percentile(values, reverse=False):
+    """백분위(순위) 정규화 0~1 — 가장 낮은 값 0, 가장 높은 값 1, 동률은 평균 순위. 결측은 결측.
+
+    v12 기본(두 축 결합): 최소-최대는 이상값 하나가 나머지를 한쪽으로 몰아 축이 사실상 사라진다
+    (실제 공개자료 2SFCA: 중앙값 0.28·최대 17 → 형평성 0.9 이상이 93%). 백분위는 '서울 안에서 상위 몇 %'라서
+    두 축이 가중치대로 1:1 로 섞인다. 대신 차이의 크기는 잃는다(최소-최대 결과는 민감도로 함께 보고).
+    """
+    s = pd.to_numeric(values, errors="coerce").astype(float)
+    out = pd.Series(np.nan, index=s.index, dtype=float)
+    ok = np.isfinite(s)
+    n = int(ok.sum())
+    if n == 0:
+        return out
+    out.loc[ok] = 0.5 if n == 1 else (s[ok].rank(method="average") - 1) / (n - 1)
+    return 1 - out if reverse else out
+
+
+SCALERS = {"percentile": percentile, "minmax": normalize}
+
+
 def validate_weights(weights):
     w = np.asarray(weights, dtype=float)
     if w.shape != (3,) or not np.isfinite(w).all() or (w < 0).any() or w.sum() <= 0:
@@ -243,8 +263,10 @@ def choose_risk_metric(axis, metric="auto", pool=None, zero_share=0.5):
     return ("peak_ratio" if np.isfinite(share) and share >= zero_share else "surge_risk"), share
 
 
-def combine_two_axes(axis, access, weights, metric, min_axes=2, forecast_metrics=None):
+def combine_two_axes(axis, access, weights, metric, min_axes=2, forecast_metrics=None, scale="percentile"):
     """두 축 정규화·가중합. 결측 축은 0점이 아니라 남은 가중치로 재정규화하고, 순위 대상은 유효 축 min_axes 개 이상.
+
+    scale: percentile(v12 기본, 백분위) | minmax(v11, 민감도 비교용). 권고 기준 0.5 는 백분위에서 '서울 중앙값'이다.
 
     결측 사유: not_assessed_low_load(교정기간 최대 부하가 너무 작아 배율 상한이 무의미 — 값이 없는 것이 아니라
     재지 않은 것), data_missing(대상인데 값 없음). 신뢰도는 표시용이며 점수를 깎지 않는다(3-7절).
@@ -253,8 +275,9 @@ def combine_two_axes(axis, access, weights, metric, min_axes=2, forecast_metrics
     acc = access[["bjd_code", "access_2sfca", "access_data_present"]].assign(bjd_code=lambda d: d["bjd_code"].astype(str))
     df = axis.merge(acc, on="bjd_code", how="outer")
     df["risk_raw"] = pd.to_numeric(df[metric], errors="coerce").where(df["risk_status"] == "assessed")
-    df["risk_norm"] = normalize(df["risk_raw"])
-    df["equity_norm"] = normalize(df["access_2sfca"], reverse=True)
+    scaler = SCALERS[scale]
+    df["risk_norm"] = scaler(df["risk_raw"])
+    df["equity_norm"] = scaler(df["access_2sfca"], reverse=True)
     values = df[["risk_norm", "equity_norm"]].to_numpy(float)
     valid = np.isfinite(values)
     denom = (valid * w).sum(axis=1)
@@ -290,7 +313,8 @@ def run_sensitivity_v11(risk, access, params, metric):
         except ValueError:
             continue
         for wr in grid:
-            score = combine_two_axes(axis, access, [wr, 1 - wr], metric, int(params["min_axes"]))
+            score = combine_two_axes(axis, access, [wr, 1 - wr], metric, int(params["min_axes"]),
+                                     scale=params.get("scale", "percentile"))
             score = score.loc[score["rank_eligible"], ["bjd_code", "PriorityScore"]]
             if score.empty:
                 continue
@@ -327,7 +351,18 @@ def build_priority_v11(risk, access, params, energy_results=None, forecast_metri
     pool = set(base_axis.loc[base_axis["risk_status"] == "assessed", "bjd_code"]) & \
         set(access.loc[access["access_2sfca"].notna(), "bjd_code"].astype(str))
     metric, share = choose_risk_metric(base_axis, params["risk_metric"], pool)
-    out = combine_two_axes(base_axis, access, params["weights"], metric, min_axes, forecast_metrics)
+    scale = params.get("scale", "percentile")
+    out = combine_two_axes(base_axis, access, params["weights"], metric, min_axes, forecast_metrics, scale)
+    # 정규화 민감도: 다른 방식(백분위 ↔ 최소-최대)으로 매긴 순위와 상위 20곳 겹침·순위 상관(점수에는 쓰지 않음)
+    other = combine_two_axes(base_axis, access, params["weights"], metric, min_axes,
+                             scale="minmax" if scale == "percentile" else "percentile")
+    both = out.loc[out["rank_eligible"], ["bjd_code", "PriorityScore"]].merge(
+        other.loc[other["rank_eligible"], ["bjd_code", "PriorityScore"]], on="bjd_code", suffixes=("", "_alt"))
+    top = lambda col: set(both.nlargest(20, col)["bjd_code"])   # noqa: E731
+    scale_check = {"alt_scale": "minmax" if scale == "percentile" else "percentile",
+                   "top20_overlap": len(top("PriorityScore") & top("PriorityScore_alt")) if len(both) else np.nan,
+                   "spearman": float(both["PriorityScore"].corr(both["PriorityScore_alt"], method="spearman"))
+                   if len(both) > 2 else np.nan}
     out = out.merge(run_sensitivity_v11(risk, access, params, metric), on="bjd_code", how="left")
     for col in ("robust_top", "boundary"):
         out[col] = out[col].astype("boolean").fillna(False).astype(bool)
@@ -341,5 +376,6 @@ def build_priority_v11(risk, access, params, energy_results=None, forecast_metri
     if len(pair) >= 3 and pair.nunique().min() >= 2:
         corr.update(pearson=float(pair["risk_norm"].corr(pair["equity_norm"])),
                     spearman=float(pair["risk_norm"].corr(pair["equity_norm"], method="spearman")))
-    out.attrs.update(axes_correlation=corr, risk_metric_used=metric, share_zero_surge_risk=share)
+    out.attrs.update(axes_correlation=corr, risk_metric_used=metric, share_zero_surge_risk=share,
+                     scale=scale, scale_check=scale_check)
     return out

@@ -99,3 +99,20 @@ def test_headline_v11_rows_and_assumptions():
     assert bad.loc[two, "가정"].str.contains("AI 개선 없음").all()
     none = headline_table_v11(None, risk, None, None, None, params)
     assert none.loc[none["번호"] == "숫자 2", "가정"].str.contains("미실행").all()
+
+
+def test_percentile_scale_keeps_equity_axis_alive_under_outlier():
+    """실제 공개자료처럼 2SFCA 이상값 하나가 있으면 최소-최대는 형평성 축을 한쪽으로 몰아 없앤다 — 백분위는 고르게 편다."""
+    assert ps.percentile(pd.Series([3.0, 1.0, 2.0, np.nan])).tolist()[:3] == [1.0, 0.0, 0.5]
+    assert ps.percentile(pd.Series([5.0, 5.0, 1.0])).tolist() == [0.75, 0.75, 0.0]              # 동률은 평균 순위
+    codes = [f"R{i}" for i in range(20)]
+    acc = [0.1 + 0.02 * i for i in range(19)] + [17.0]                                        # 이상값 하나
+    risk = _risk(list(np.linspace(0.05, 0.6, 20)), codes=codes)
+    mm = ps.combine_two_axes(ps.risk_axis(risk, 1.2), _access(codes, acc), [0.5, 0.5], "surge_risk", scale="minmax")
+    pc = ps.combine_two_axes(ps.risk_axis(risk, 1.2), _access(codes, acc), [0.5, 0.5], "surge_risk", scale="percentile")
+    rest = lambda df: df.loc[df["bjd_code"] != "R19", "equity_norm"]            # noqa: E731 — 이상값을 뺀 19곳
+    assert rest(mm).max() - rest(mm).min() < 0.05                              # 최소-최대: 19곳이 0.95~1 에 뭉침
+    assert rest(pc).max() - rest(pc).min() > 0.9 and (pc["equity_norm"] >= 0.5).mean() == 0.5
+    out = ps.build_priority_v11(risk, _access(codes, acc), _params())
+    assert out.attrs["scale"] == "percentile" and out.attrs["scale_check"]["alt_scale"] == "minmax"
+    assert 0 <= out.attrs["scale_check"]["top20_overlap"] <= 20

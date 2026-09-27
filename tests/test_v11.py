@@ -181,3 +181,45 @@ def test_kill_criteria_without_can_is_not_an_error(v11_env, tmp_path):
     path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
     table = run_checks(path, write=False).set_index("번호")
     assert table.at[8, "판정"] == "해당 없음" and not (table["판정"] == "오류").any(), table.to_string()
+
+
+def test_detail_pages_survive_transcription_and_rebuild_public_values(v11_env, v11_result, tmp_path):
+    """센터 밖 흐름: PNG 에 보이는 그대로 옮겨 적은 쪽 → Σ행 대조 → 공개자료 재계산 → 결합점수 교차 검증."""
+    import shutil
+    import headline
+    from outputs import _fmt
+    sys.path.insert(0, str(ROOT / "tools"))
+    import detail_from_export as dfe
+
+    stages = v11_result["stages"].set_index("이름")
+    assert stages.at["동네 상세(전체 지도·웹 화면용)", "상태"] == "완료"
+    st, out = v11_result["state"], Path(v11_result["out_dir"])
+    assert (out / "png" / "s9_detail_p01.png").exists()
+    tab = pd.read_csv(out / "csv" / "s9_detail_tableau.csv", dtype={"bjd_code": str}, encoding="utf-8-sig")
+    small = tab["위험상태"].eq("S")                                          # 태블로용도 반출 PNG 와 같은 가림
+    assert small.any() and tab.loc[small, ["순위", "결합점수", "급증위험"]].isna().all().all()
+    assert not any(c in tab for c in ("lat", "lon", "위도", "경도"))
+    detail = headline.detail_table(st["priority_score"], st["risk"], 1.2, st["can"].get("away_region_export"))
+    pages = headline.detail_pages(detail, st["energy_customer_min"], 3, rows=12)
+    shown = tmp_path / "pages"
+    shown.mkdir()
+    for k, (_, png) in enumerate(pages, 1):                                  # PNG 칸에 찍히는 글자 그대로
+        png.apply(lambda col: col.map(lambda v: _fmt(v, 3))).to_csv(shown / f"p{k:02d}.csv", index=False, encoding="utf-8-sig")
+    got, report = dfe.read_pages(shown)
+    assert (report["문제"] == "없음").all(), report.to_string()
+    assert len(got) == len(detail) and got["위험상태"].eq("S").any()           # 소표본은 가려져 나옴
+    bad = pd.read_csv(shown / "p01.csv", dtype=str, encoding="utf-8-sig")
+    bad.loc[0, "결합점수"] = "0.999" if bad.loc[0, "결합점수"] != "0.999" else "0.111"   # 옮겨 적기 오타 하나
+    bad.to_csv(shown / "p01.csv", index=False, encoding="utf-8-sig")
+    assert "결합점수 합" in dfe.read_pages(shown)[1].iloc[0]["문제"]
+    imp = tmp_path / "import"
+    imp.mkdir()
+    for src, dst in (("bjd_master.txt", "2.csv"), ("bjd_centroids.csv", "4.csv"), ("access_stations.csv", "6.csv")):
+        shutil.copy(v11_env["data"] / src, imp / dst)
+    access, master, cent = dfe.public_values(imp, ev_registration=str(v11_env["data"] / "ev_registration.csv"))
+    center = st["access"].assign(bjd_code=st["access"]["bjd_code"].astype(str)).set_index("bjd_code")["access_2sfca"]
+    assert np.allclose(access.set_index("bjd_code")["access_2sfca"].reindex(center.index), center, equal_nan=True)
+    r2, n = dfe.cross_check(got, access)
+    assert n >= 5 and r2 > 0.99                                              # 반출 점수 = 밖에서 다시 만든 형평성과 같은 순서
+    app = dfe.app_table(got, access, master, cent)
+    assert app["법정동"].notna().all() and app[["lat", "lon"]].notna().all().all()

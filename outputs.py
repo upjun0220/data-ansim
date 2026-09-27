@@ -130,6 +130,13 @@ def suppress_small(df, count_col, min_count, cols=None):
     return out
 
 
+# 반출 규칙: 분석으로 만든 결과(통계·시각화·모델링)만 반출할 수 있고, 제공데이터의 일부라도 들어 있으면 반출이 막힌다.
+# 아래 열은 KEPCO 원본의 한 칸 그대로이거나(기간 최대 = 원본 한 칸, 시간별 실측) 그 값으로 바로 되돌릴 수 있다
+# (상한 = 최대 × 배율, 시나리오 피크 = 현재 피크 × 증가율) — CSV(센터 내부)에는 남기고 PNG(반출 후보)에서만 뺀다.
+RAW_EQUIV_COLS = {"calib_peak_kw", "target_kw", "actual_grid_kw", "actual_charge_kw", "actual_discharge_kw",
+                  "peak_avg_kw", "daily_kwh", "load_peak_now_kw", "load_peak_Y_kw"}
+
+
 class OutputWriter:
     def __init__(self, out_dir, dpi=150, png_max_rows=30, font_path=None, font_fallback="ascii"):
         self.out_dir = Path(out_dir)
@@ -158,10 +165,14 @@ class OutputWriter:
         self.manifest.append((name, "csv", str(csv_path)))
 
         shown = (df if png_df is None else png_df).reset_index(drop=True).head(self.png_max_rows)
+        raw = [c for c in shown.columns if c in RAW_EQUIV_COLS]
+        shown = shown.drop(columns=raw)
         nrows = len(shown)
         header = title if len(df) <= self.png_max_rows else f"{title}  (상위 {nrows}행 / 전체 {len(df)}행)"
         if note:
             header += f"\n{note}"
+        if raw:
+            header += "\n원자료 값과 같은 열 제외(반출 규칙): " + ", ".join(raw)
         labels = [png_text(c) for c in shown.columns]
         cells = [[png_text(_fmt(v, digits)) for v in row] for row in shown.itertuples(index=False, name=None)]
         units = [max([_text_units(labels[j])] + [_text_units(r[j]) for r in cells]) + 2 for j in range(len(labels))] or [10]

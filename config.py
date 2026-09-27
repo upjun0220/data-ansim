@@ -197,6 +197,8 @@ DEFAULT_PARAMS = {
                  # min_axes: 순위 대상(ranking_pool)에 필요한 최소 유효 축 수. 2=두 축 모두(v11 기본).
                  # redundant_corr: (레거시) 안전·경제성 축 상관이 이 값 이상이면 axes_redundant 경고.
                  "min_axes": 2, "redundant_corr": 0.90,
+                 # v12: 두 축 정규화 percentile(백분위, 기본) | minmax(v11). 다른 쪽 결과는 8-E 요약에 민감도로 보고.
+                 "scale": "percentile",
                  # 8-G 충전기 추가 시뮬레이션(순위 상위 sim_top_n 곳에 sim_chargers_each 기씩 가상 추가 후 2SFCA 재계산)
                  # 과 9단계 동네 카드(card_top_n 곳). 실제 설치 계획이 아니라 순위의 쓸모를 보이는 가정 실험이다.
                  "sim_top_n": 20, "sim_chargers_each": 2, "card_top_n": 10},

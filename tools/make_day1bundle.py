@@ -1,9 +1,10 @@
 """현장 실행용 단일 코드 묶음(dayNbundle.py) 만들기 — 저장소 모듈 + fieldday1 + 공휴일 달력을 파일 하나에 담는다.
 
 센터에서 `%run 파일이름.py` 하면 모듈을 day1code/ 에 풀고 run_first_visit·run_full 을 불러온다.
-원본 데이터는 들어가지 않는다. 반입 파일명은 이전 반입과 겹치지 않게 번호를 올린다(day1bundle.py → 2 → 3 …).
+v12부터 반입 이름은 짧게 ansimN.py(N = 이전 반입 번호 다음, day1bundle.py~day1bundle8.py 다음이 ansim9.py).
+원본 데이터는 들어가지 않는다. 반입 파일명은 이전 반입과 겹치지 않게 번호를 올린다.
 
-사용: python tools/make_day1bundle.py [출력 .py]        (기본 dist/day1/day1bundle3.py)
+사용: python tools/make_day1bundle.py dist/ansimN.py
 """
 from __future__ import annotations
 

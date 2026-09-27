@@ -80,3 +80,16 @@ def test_monthly_kepco_still_gives_priority_map_and_cards(monthly_result):
     assert "소표본억제" in pr and pr["rank"].notna().all()                           # 월별에서도 소표본 표시가 붙는다
     kill = run_checks(path, write=False)
     assert not (kill["판정"] == "오류").any(), kill.to_string()
+
+
+def test_png_drops_columns_equal_to_raw_provided_values(tmp_path, monkeypatch):
+    """반출 규칙: 제공데이터 값(기간 최대 kW·시간별 실측 등)이 그대로 든 열은 PNG 에서 빠지고 CSV(내부)에는 남는다."""
+    import outputs
+    seen, real = {}, outputs.new_figure
+    monkeypatch.setattr(outputs, "new_figure", lambda *a, **k: seen.setdefault("fig", real(*a, **k)))
+    df = pd.DataFrame({"bjd_code": ["1111010100"], "calib_peak_kw": [12.3], "target_kw": [14.8],
+                       "surge_risk": [0.25], "actual_grid_kw": [9.9]})
+    outputs.OutputWriter(tmp_path).table(df, "t", "제목")
+    texts = " ".join(c.get_text().get_text() for c in seen["fig"].axes[0].tables[0].get_celld().values())
+    assert "surge_risk" in texts and "12.3" not in texts and "14.8" not in texts and "9.9" not in texts
+    assert "calib_peak_kw" in pd.read_csv(tmp_path / "csv" / "t.csv").columns       # 내부 CSV 는 그대로

@@ -560,20 +560,9 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     raise FileNotFoundError("paths.access_stations 또는 전기차 등록(ev_registration, 또는 ev_history+hdong_bjd) 없음")
                 if "centroids" not in S:
                     raise RuntimeError("법정동 중심점 없음 — 2SFCA 계산 불가")
-                ev_counts = None
-                if from_history:
-                    # v11: 반입 파일을 줄이려고 8-F 등록 이력의 기준월 값을 행정동→법정동 대응표로 배분해 쓴다.
-                    sp = P["scenario"]
-                    hist = loadscenario.load_ev_history(paths["ev_history"], C["ev_history"], sp["fuel_value"], prefix)
-                    ev, _ = loadscenario.map_to_bjd(hist, loadscenario.load_hdong_bjd(paths["hdong_bjd"], C["hdong_bjd"]),
-                                                    S.get("crosswalk"), sp["base_month"])
-                    ev_counts = ev.loc[ev["ym"] == sp["base_month"], ["bjd_code", "ev_count"]]
-                    log.info("8-C 전기차 대수: 등록 이력 %s 값(행정동→법정동 배분) %d곳", sp["base_month"], len(ev_counts))
-                stations, points = equityaccess.load_access_inputs(
-                    paths["access_stations"], paths["ev_registration"], C, S["centroids"], S.get("crosswalk"), ev_counts)
-                access = equityaccess.compute_2sfca(
-                    stations, points, P["priority"]["radii_m"], P["priority"]["default_radius_m"])
-                access = equityaccess.add_access_indicators(access, stations, points)
+                # v11: 전기차 대수는 8-F 등록 이력의 기준월 값을 행정동→법정동 대응표로 배분해 쓴다(ev_registration 이 없을 때).
+                # 공개자료만 쓰는 계산이라 센터 밖에서도 같은 함수로 다시 계산한다(웹 지도용).
+                access, stations, points = equityaccess.public_access(paths, C, P, S["centroids"], S.get("crosswalk"))
                 writer.table(access, "s8c_accessibility", "8-C 법정동별 2SFCA 접근성과 형평성 부족도",
                              note="2SFCA가 낮을수록 equity_need_norm은 높음. 지표 1·2는 법정동 중심점 근사(격자점·폴리곤 아님). 실제 취약계층 규모가 아님")
                 S.update(access=access, access_match_rate=float(points["ev_count"].notna().mean()),
@@ -921,6 +910,10 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 ] + ([{"항목": "axes_redundant", "값": bool(corr.get("axes_redundant", False))}] if legacy else [
                     {"항목": "위험 축 지표", "값": attrs.get("risk_metric_used")},
                     {"항목": "순위 대상 중 급증위험 0 비율", "값": attrs.get("share_zero_surge_risk")},
+                    {"항목": "정규화", "값": attrs.get("scale")},
+                    {"항목": f"정규화 민감도 — {attrs.get('scale_check', {}).get('alt_scale')} 순위와 상위 20곳 겹침",
+                     "값": attrs.get("scale_check", {}).get("top20_overlap")},
+                    {"항목": "정규화 민감도 — 결합점수 순위 상관(스피어만)", "값": attrs.get("scale_check", {}).get("spearman")},
                 ]))
                 writer.table(summary, "s8e_priority_summary", "8-E 순위 풀·축 상관 요약")
                 S.update(priority_score=result, season_coverage=coverage, priority_note=note, priority_attrs=attrs)
@@ -1046,6 +1039,26 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 writer.figure(plot_priority_map(S["priority_score"], S["centroids"], visible,
                                                 P["priority"]["card_top_n"], sub), "s9_priority_map")
             runner.run("9-M", "우선순위 지도", stage9m, ISOLATED)
+
+            def stage9d():
+                """전체 색칠 지도·웹 화면용 동네 상세 — 안심구역 유래 값만 법정동별로, 쪽마다 검증 행(옮겨 적기 대조용)."""
+                if "priority_score" not in S or "energy_customer_min" not in S:
+                    raise RuntimeError("8-E 순위 또는 소표본 기준 없음")
+                detail = headline.detail_table(S["priority_score"], S.get("risk"), P["priority"]["base_multiplier"],
+                                               S.get("can", {}).get("away_region_export"), S.get("access_slope"))
+                pages = headline.detail_pages(detail, S["energy_customer_min"], P["can"]["min_cell_count"],
+                                              rows=int(P["outputs"]["png_max_rows"]) - 1)
+                for k, (page_csv, page_png) in enumerate(pages, 1):
+                    writer.table(page_csv, f"s9_detail_p{k:02d}", f"9단계 동네 상세 {k}/{len(pages)} — 법정동 코드 순",
+                                 digits=3, png_df=page_png,
+                                 note="마지막 Σ행 = 이 쪽 검증 합(옮겨 적은 뒤 대조). 위험상태 A 평가·L 저부하·M 결측·S 소표본(값 가림). "
+                                      "공개자료 값(접근성·충전기·이름)은 밖에서 다시 계산")
+                # 센터 안 태블로 지도용 — 반출 PNG 와 같은 값(소표본 가림, 원본 값 열 없음)만. 좌표는 싣지 않는다:
+                # 태블로에서 공개 중심점(반입 4.csv)과 bjd_code 로 연결한다. 이 파일로 그린 그림만 반출 후보가 된다.
+                tableau = pd.concat([png.iloc[:-1] for _, png in pages], ignore_index=True)
+                tableau.to_csv(writer.csv_dir / "s9_detail_tableau.csv", index=False, encoding="utf-8-sig")
+                S["detail_pages"] = len(pages)
+            runner.run("9-D", "동네 상세(전체 지도·웹 화면용)", stage9d, ISOLATED)
     except _StopAfterStage1:
         pass
     finally:
