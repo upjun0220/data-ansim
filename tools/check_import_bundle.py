@@ -3,7 +3,7 @@
 
 사용: python tools/check_import_bundle.py <폴더 또는 파일> [...]   (위반이 있으면 종료코드 1)
 
-v11 구성: 코드 모듈 20개(.py) + fieldtemplate.txt·holidays.txt·requirements.txt·README.txt·checksums.txt
+v11 구성: 코드 모듈 21개(.py) + fieldtemplate.txt·holidays.txt·requirements.txt·README.txt·checksums.txt
 + 데이터 2.csv~9.csv + (선택) 10.ttf. 데이터 이름은 tools/make_import_bundle.py 의 IMPORT_NAMES, 이전 반입 이름과 겹치면 위반.
 """
 from __future__ import annotations

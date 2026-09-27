@@ -215,6 +215,9 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
 
     # 8. CAN 식별번호
     def check8():
+        if not paths["can_m"]:   # CAN 은 선택 입력(run_full 에서 빼거나 헤더 판별 실패로 제외) — 오류가 아님
+            not_applicable(8, "CAN verify_join_key", "CAN 경로 없음 — CAN 단계 생략")
+            return
         can = canloader.load_can_m(paths["can_m"], C, P["can"], nrows=K["sample_rows"])
         verdict, evidence = canloader.verify_join_key(can, P["can"])
         ev = " · ".join(f"{r['항목']}={r['값']}" for _, r in evidence.iterrows() if r["항목"] != "판정")
@@ -451,11 +454,9 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
             if not paths["kepco_hourly"]:
                 add(13, "계절 커버리지", "경고", "paths.kepco_hourly 없음", "계절 검증 보류")
                 return
-            if "master" not in kepco_state:
-                load_kepco()
-            hourly = kepcoloader.load_kepco_hourly(paths["kepco_hourly"], C["kepco"], P["kepco"],
-                                                    kepco_state["master"])
-            coverage = priorityscore.seasonal_coverage(hourly)
+            # 관측 날짜만 필요하다 — 시간별 원자료 전체(서울 3년이면 약 1,200만 행)를 올리지 않고 조회기간 열만 훑는다(8-E 와 같은 방식).
+            dates = kepcoloader.scan_observed_dates(paths["kepco_hourly"], C["kepco"], P["kepco"], "KEPCO_seasonal")
+            coverage = priorityscore.seasonal_coverage(dates)
             verdict = "통과" if coverage["season_status"] == "검증 가능" else "경고"
             add(13, "계절 커버리지", verdict,
                 f"{coverage['season_count']}/4계절 · 누락 {coverage['missing_seasons'] or '없음'}",

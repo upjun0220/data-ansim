@@ -39,25 +39,51 @@ CAN_COLUMN_ALIASES = {
 
 
 def load_can_m(path, columns, params, nrows=None):
+    """CAN 을 청크로 읽는다. 대용량(센터에서 통째로 열면 커널 종료)이라 메모리를 줄인다.
+
+    - keep_bbox(기본 서울+여유) 밖 좌표 행은 읽으면서 버린다(좌표 없는 행은 남긴다 — SOC 연속성 판정에 쓰임).
+    - 식별번호는 정수 코드(int32, 파일 안에서만 의미), SOC·위경도는 float32 로 둔다.
+    - max_rows 를 넘으면 그 자리에서 멈춘다(앞부분 표본). 읽은 범위는 df.attrs["read_note"] 로 결과표에 남긴다.
+    """
     path = resolve_csv_path(path, "CAN_M")
     true_values = {str(v).upper() for v in params["charging_true_values"]}
-    parts = []
+    box, max_rows = params.get("keep_bbox"), params.get("max_rows")
+    parts, codes, n_read, n_outside, n_kept, truncated = [], {}, 0, 0, 0, False
     for chunk in read_columns(path, columns["can_m"], "CAN_M", chunksize=params["chunksize"], nrows=nrows):
+        n_read += len(chunk)
         lat, lon = to_num(chunk["lat"]), to_num(chunk["lon"])
         bad = ~(lat.between(*params["lat_range"]) & lon.between(*params["lon_range"]))
+        lat, lon = lat.where(~bad), lon.where(~bad)
+        if box:
+            outside = lat.notna() & ~(lat.between(box[0], box[1]) & lon.between(box[2], box[3]))
+            n_outside += int(outside.sum())
+            chunk, lat, lon = chunk[~outside], lat[~outside], lon[~outside]
+        if max_rows and n_kept + len(chunk) > max_rows:
+            keep = max_rows - n_kept
+            chunk, lat, lon, truncated = chunk.iloc[:keep], lat.iloc[:keep], lon.iloc[:keep], True
+        vid = chunk["vehicle_id"].fillna("").astype(str).str.strip()
+        for v in pd.unique(vid):
+            if v and v not in codes:
+                codes[v] = len(codes)
         parts.append(pd.DataFrame({
-            "vehicle_id": chunk["vehicle_id"].fillna("").astype(str).str.strip(),
+            "vehicle_id": vid.map(codes).fillna(-1).astype("int32"),
             "time": pd.to_datetime(chunk["time"], errors="coerce"),
             "charging": chunk["charging"].fillna("").astype(str).str.strip().str.upper().isin(true_values),
-            "soc": to_num(chunk["soc"]),
-            "lat": lat.where(~bad), "lon": lon.where(~bad),
+            "soc": to_num(chunk["soc"]).astype("float32"),
+            "lat": lat.astype("float32"), "lon": lon.astype("float32"),
         }))
+        n_kept += len(chunk)
+        if truncated:
+            log.warning("CAN: max_rows=%s 에서 읽기 중단 — 앞부분 표본으로 분석", f"{max_rows:,}")
+            break
     df = pd.concat(parts, ignore_index=True)
-    bad_time = df["time"].isna() | (df["vehicle_id"] == "")
+    bad_time = df["time"].isna() | (df["vehicle_id"] < 0)
     if bad_time.any():
         log.warning("CAN: 시간/식별번호 결측 %d행 제외", int(bad_time.sum()))
     df = df[~bad_time].sort_values(["vehicle_id", "time"], kind="mergesort").reset_index(drop=True)
-    log.info("CAN M-Type: %s행 · 식별번호 %d · %s ~ %s · 충전중 %.1f%%", f"{len(df):,}", df["vehicle_id"].nunique(),
+    df.attrs["read_note"] = (f"읽은 {n_read:,}행 · 분석 범위 밖 좌표 {n_outside:,}행 제외 · 사용 {len(df):,}행"
+                             + (f" · max_rows {max_rows:,} 에서 중단(앞부분 표본)" if truncated else ""))
+    log.info("CAN M-Type: %s · 식별번호 %d · %s ~ %s · 충전중 %.1f%%", df.attrs["read_note"], df["vehicle_id"].nunique(),
              df["time"].min(), df["time"].max(), 100 * df["charging"].mean())
     return df
 
@@ -168,7 +194,7 @@ def build_sessions(can_df, params, mode):
     else:
         chg = df[df["charging"] & df["lat"].notna()].copy()
         deg = params["geo_cell_m"] / 111_000.0
-        chg["key"] = chg["vehicle_id"] + "|" + np.floor(chg["lat"] / deg).astype(int).astype(str) + "|" + \
+        chg["key"] = chg["vehicle_id"].astype(str) + "|" + np.floor(chg["lat"] / deg).astype(int).astype(str) + "|" + \
             np.floor(chg["lon"] / (deg / 0.8)).astype(int).astype(str)
         chg = chg.sort_values(["key", "time"], kind="mergesort")
         dt = chg.groupby("key")["time"].diff().dt.total_seconds() / 60.0
@@ -256,17 +282,18 @@ def infer_home(can_df, params):
     deg = params["geo_cell_m"] / 111_000.0
     d["cell"] = np.floor(d["lat"] / deg).astype(int).astype(str) + "|" + \
         np.floor(d["lon"] / (deg / 0.8)).astype(int).astype(str)
+    # 차량 수천 대 × 기록 수천만 행에서도 돌도록 전부 그룹 연산으로 푼다(차량별 루프에서 전체 표를 다시 훑지 않는다).
     stay = d.groupby(["vehicle_id", "night", "cell"]).size().rename("n").reset_index()
     nightly = stay.sort_values(["vehicle_id", "night", "n", "cell"], ascending=[True, True, False, True]) \
         .drop_duplicates(["vehicle_id", "night"])
-    rows = []
-    for vid, g in nightly.groupby("vehicle_id"):
-        counts = g["cell"].value_counts()
-        top, n_top = counts.index[0], int(counts.iloc[0])
-        if n_top >= params["home_min_nights"] and n_top / len(g) >= params["home_min_share"]:
-            at = d[(d["vehicle_id"] == vid) & (d["cell"] == top)]
-            rows.append({"vehicle_id": vid, "home_lat": at["lat"].median(), "home_lon": at["lon"].median(), "nights": n_top})
-    return pd.DataFrame(rows, columns=["vehicle_id", "home_lat", "home_lon", "nights"])
+    total = nightly.groupby("vehicle_id").size().rename("nights_total")
+    top = nightly.groupby(["vehicle_id", "cell"]).size().rename("nights").reset_index() \
+        .sort_values(["vehicle_id", "nights", "cell"], ascending=[True, False, True]).drop_duplicates("vehicle_id") \
+        .join(total, on="vehicle_id")
+    top = top[(top["nights"] >= params["home_min_nights"]) & (top["nights"] / top["nights_total"] >= params["home_min_share"])]
+    med = d.merge(top[["vehicle_id", "cell"]], on=["vehicle_id", "cell"]).groupby("vehicle_id")[["lat", "lon"]].median()
+    out = top.join(med.rename(columns={"lat": "home_lat", "lon": "home_lon"}), on="vehicle_id")
+    return out[["vehicle_id", "home_lat", "home_lon", "nights"]].reset_index(drop=True)
 
 
 def away_charging(sessions, home, centroids, params, min_n):
@@ -371,6 +398,8 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
     """
     can = load_can_m(path, columns, params)
     verdict, evidence = verify_join_key(can, params)
+    evidence = pd.concat([evidence, pd.DataFrame([{"항목": "읽기 범위", "값": can.attrs.get("read_note", "")}])],
+                         ignore_index=True)
     path_label = "A(개별 차량)" if verdict == "individual" else "B(법정동 밀집도, 정황상 보조 근거)"
     sessions = build_sessions(can, params, "vehicle" if verdict == "individual" else "geo_cell")
     if centroids is None:
@@ -443,16 +472,21 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
 
 
 def _occupancy(sessions):
-    """세션이 시각(0~23)별로 충전 중이던 시간(h)의 합."""
-    occupancy = np.zeros(24)
-    for row in sessions.itertuples():
-        start, end = pd.Timestamp(row.start), pd.Timestamp(row.end)
-        if end <= start:
-            continue
-        for hour in pd.date_range(start.floor("h"), end.floor("h"), freq="h"):
-            overlap = (min(end, hour + pd.Timedelta(hours=1)) - max(start, hour)).total_seconds()
-            occupancy[hour.hour] += max(0, overlap) / 3600
-    return occupancy
+    """세션이 시각(0~23)별로 충전 중이던 시간(h)의 합. 세션 수가 많아도 되도록 벡터 연산으로 푼다."""
+    s = sessions[["start", "end"]].dropna()
+    s = s[s["end"] > s["start"]]
+    if s.empty:
+        return np.zeros(24)
+    start = s["start"].to_numpy("datetime64[ns]")
+    end = s["end"].to_numpy("datetime64[ns]")
+    first = start.astype("datetime64[h]").astype("datetime64[ns]")
+    n = ((end - first) // np.timedelta64(1, "h")).astype(np.int64) + 1          # 걸친 1시간 칸 수
+    idx = np.repeat(np.arange(len(s)), n)
+    offset = np.arange(int(n.sum())) - np.repeat(np.cumsum(n) - n, n)
+    bin_start = first[idx] + offset * np.timedelta64(1, "h")
+    overlap = (np.minimum(end[idx], bin_start + np.timedelta64(1, "h")) - np.maximum(start[idx], bin_start))
+    hours = bin_start.astype("datetime64[h]").astype(np.int64) % 24
+    return np.bincount(hours, weights=np.clip(overlap / np.timedelta64(1, "s"), 0, None) / 3600, minlength=24)[:24]
 
 
 def charging_shape(sessions):

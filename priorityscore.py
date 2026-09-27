@@ -187,6 +187,37 @@ def validate_weights_v11(weights, axes=AXES_V11):
     return w
 
 
+def monthly_risk(mh, multipliers, min_calib_peak_kw=1.0, eval_months=6, calib_months=12):
+    """플랜 B — KEPCO 조회기간이 월(YYYYMM)뿐이라 다음날 예측(8-A)을 못 할 때의 급증 위험(8-A s8a_risk 와 같은 열).
+
+    월 피크 = 그 달 시간대별 하루 평균 kWh(= 1시간 구간 평균 kW) 중 최대. 최근 eval_months 달을 평가, 그 앞
+    calib_months 달을 교정으로 둔다. surge_risk = 평가 달 중 월 피크가 교정 최대 × 배율을 넘은 달의 비율,
+    peak_ratio = 평가 최대 ÷ 교정 최대. 예측이 아니라 관측된 증가다(AI 경보 열은 없다).
+    status: 교정 달이 3/4 미만이거나 평가 달이 없으면 data_missing, 교정 최대가 min_calib_peak_kw 미만이면
+    not_assessed_low_load(8-A 와 같은 규칙).
+    """
+    d = mh.assign(bjd_code=mh["bjd_code"].astype(str), kw=mh["kwh"] / mh["n_days"].where(mh["n_days"] > 0))
+    peak = d.groupby(["bjd_code", "mi"])["kw"].max().unstack("mi")
+    last = int(max(peak.columns))
+    ev = list(range(last - eval_months + 1, last + 1))
+    cal = list(range(last - eval_months - calib_months + 1, last - eval_months + 1))
+    if int(min(peak.columns)) > cal[0]:
+        raise ValueError(f"월별 급증 위험에 {eval_months + calib_months}개월 이상 필요(교정 {calib_months} + 평가 {eval_months})")
+    e, c = peak.reindex(columns=ev), peak.reindex(columns=cal)
+    cmax, emax = c.max(axis=1), e.max(axis=1)
+    status = np.where((c.notna().sum(axis=1) < 0.75 * calib_months) | e.notna().sum(axis=1).eq(0), "data_missing",
+                      np.where(cmax < float(min_calib_peak_kw), "not_assessed_low_load", "assessed"))
+    rows = []
+    for m in multipliers:
+        over = e.gt(cmax * float(m), axis=0).where(e.notna())
+        rows.append(pd.DataFrame({"bjd_code": peak.index, "multiplier": float(m), "status": status,
+                                  "surge_risk": over.mean(axis=1).to_numpy(), "peak_ratio": (emax / cmax).to_numpy(),
+                                  "calib_peak_kw": cmax.to_numpy()}))
+    out = pd.concat(rows, ignore_index=True)
+    out.loc[out["status"] != "assessed", ["surge_risk", "peak_ratio"]] = np.nan
+    return out
+
+
 def risk_axis(risk, multiplier):
     """8-A s8a_risk 에서 기준 상한 배율의 위험 원값(증설 0대 — 증설 가정 ΔL 은 들어가지 않는다)."""
     r = risk[np.isclose(risk["multiplier"].astype(float), float(multiplier))].copy()

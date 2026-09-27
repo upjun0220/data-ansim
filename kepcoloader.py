@@ -24,7 +24,7 @@ import pandas as pd
 
 import bjdmapping
 from bjdmapping import canonicalize, match_regions, sido_short
-from common import log, mi_to_ym, norm_text, optional_import, read_columns, read_header, to_num, ym_to_mi
+from common import locate, log, mi_to_ym, norm_text, optional_import, read_columns, read_header, to_num, ym_to_mi
 
 KEYS = ["sido", "sigungu", "emd"]
 TIME_NAME = re.compile(r"(\d{1,2})(?::\d{2}|시)")
@@ -59,7 +59,12 @@ def _iter_long(path, cols, params, source):
     mapping = {k: cols[k] for k in ("period", "sido", "sigungu", "emd", "customers", "kwh")}
     if cols.get("hour"):
         mapping["hour"] = cols["hour"]
+    keep_sido = set(sido_short(pd.Series(params["sido"]))) if params.get("sido") else None
     for chunk in read_columns(path, mapping, source, chunksize=params["chunksize"]):
+        if keep_sido is not None:   # 분석 지역 행이 없는 청크는 건너뛴다(킬 표본 청크가 비지 않게)
+            chunk = chunk[sido_short(chunk["sido"]).isin(keep_sido)]
+            if chunk.empty:
+                continue
         yield chunk
 
 
@@ -82,8 +87,15 @@ def _iter_wide(path, cols, params, source, header, enc, sep):
     chunksize = max(1, int(params["chunksize"]) // len(hour_cols))
     reader = pd.read_csv(path, encoding=enc, sep=sep, dtype=str, chunksize=chunksize,
                          usecols=list(rename) + list(hour_cols))
+    keep_sido = set(sido_short(pd.Series(params["sido"]))) if params.get("sido") else None
     for chunk in reader:
         chunk = chunk.rename(columns=rename)
+        if keep_sido is not None:
+            # 펼치기 전에 분석 지역만 남긴다(전국 파일에서 서울은 약 1/17). 서울 행이 없는 청크는 건너뛴다 —
+            # 킬 크라이테리아의 앞 몇 청크 표본이 서울 없는 청크로 채워지지 않게.
+            chunk = chunk[sido_short(chunk["sido"]).isin(keep_sido)]
+            if chunk.empty:
+                continue
         long = chunk.melt(id_vars=list(base), value_vars=list(hour_cols), var_name="_col", value_name="kwh")
         long["hour"] = long["_col"].map(hour_cols).astype(str)
         yield long.drop(columns="_col")
@@ -194,19 +206,32 @@ def daily_series(mh):
     return tmp.groupby(["bjd_code", "mi"])["kwh_per_day"].sum(min_count=1).reset_index()
 
 
+_DATES_CACHE = {}
+
+
 def scan_observed_dates(path, columns, params, source="KEPCO_seasonal"):
     """8-E 계절 커버리지 전용 — period 열만 청크로 가볍게 스캔해 관측 일자를 모은다.
 
     8-A 평가창 날짜 필터(date_start/date_end)와 무관하게 원천의 전체 기간을 본다(R3, 2026-09-19).
     시간별 원자료 전체를 메모리에 올리지 않도록 열 1개만 읽는다.
+    한 번 실행에서 같은 파일을 여러 곳(평가 시작일·킬 13·16·8-E)이 훑으므로, 경로·크기·수정 시각이 같으면 결과를 재사용한다.
     """
+    import os
+
+    path = locate(path)
+    stat = os.stat(path)
+    key = (os.path.abspath(str(path)), columns["period"], stat.st_size, stat.st_mtime_ns)
+    if key in _DATES_CACHE:
+        return _DATES_CACHE[key].copy()
     chunks = read_columns(path, {"period": columns["period"]}, source,
                           chunksize=params.get("chunksize", 2_000_000))
     dates = set()
     for chunk in chunks:
         digits = chunk["period"].fillna("").astype(str).str.replace(r"\D", "", regex=True)
         dates.update(digits[digits.str.len() >= 8].str[:8].unique())
-    return pd.DataFrame({"date": sorted(dates)})
+    out = pd.DataFrame({"date": sorted(dates)})
+    _DATES_CACHE[key] = out
+    return out.copy()
 
 
 def last_month(agg):
@@ -231,7 +256,7 @@ def activation_label(source, override=None):
 
 
 def load_kepco_hourly(path, columns, params, master, crosswalk=None):
-    """8-A 전용: 날짜를 보존한 1시간 평균 kW. 월 집계·중복·마스킹은 거부한다.
+    """8-A 전용: 날짜를 보존한 1시간 평균 kW. 월 집계·중복·음수는 거부하고, 결측·마스킹 시간은 빼고 기록한다.
 
     기존 월별 로더의 형식 해석을 재사용한다. 결측을 0으로 채우거나 월값을 일별로 복제하지 않는다.
     """
@@ -241,7 +266,7 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     hourly_params = dict(params, chunksize=min(int(params["chunksize"]), 25_000))
     chunks = _iter_wide(path, columns, hourly_params, "KEPCO_hourly", header, enc, sep) if layout == "wide" \
         else _iter_long(path, columns, hourly_params, "KEPCO_hourly")
-    parts = []
+    parts, n_seen, n_missing = [], 0, 0
     for chunk in chunks:
         digits = chunk["period"].astype(str).str.replace(r"\D", "", regex=True)
         if (digits.str.len() < 8).any():
@@ -253,11 +278,22 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
         elif not digits.str.len().eq(10).all():
             raise ValueError("별도 시각 열이 없으면 조회기간은 YYYYMMDDHH여야 함")
         value = to_num(chunk["kwh"])
-        if not np.isfinite(value).all() or (value < 0).any():
-            raise ValueError("시간별 충전량에 마스킹·결측·음수 있음 — 원자료 품질 확인 필요")
-        parts.append(_prepare_chunk(chunk, hourly_params, "KEPCO_hourly"))
+        if (value < 0).any():
+            raise ValueError("시간별 충전량에 음수 있음 — 원자료 품질 확인 필요")
+        # 빈 칸·마스킹 값은 0 으로 채우지 않고 그 시간 행만 뺀다. 그날은 24시간이 안 차서 하류(기준 모델·AI·급증 판정)가
+        # '완전한 날'에서 스스로 제외한다. 현장에서는 원자료를 고칠 수 없으므로 전체를 멈추지 않는다(비율이 크면 아래서 멈춤).
+        n_seen += len(value)
+        n_missing += int((~np.isfinite(value)).sum())
+        parts.append(_prepare_chunk(chunk, hourly_params, "KEPCO_hourly"))   # _prepare_chunk 가 kwh 결측 행을 뺀다
     if not parts:
         raise ValueError("시간별 충전 원자료 없음")
+    share = n_missing / n_seen if n_seen else 0.0
+    if share > float(params.get("max_missing_share", 0.2)):
+        raise ValueError(f"시간별 충전량 결측·마스킹 {share:.1%} — 기준 {float(params.get('max_missing_share', 0.2)):.0%} 초과, "
+                         "원자료 품질 확인 필요")
+    if n_missing:
+        log.warning("[KEPCO_hourly] 결측·마스킹 %s시간(%.2f%%) 제외 — 0으로 채우지 않음, 그날은 불완전한 날로 빠짐",
+                    f"{n_missing:,}", 100 * share)
     raw = pd.concat(parts, ignore_index=True)
     if raw.empty:
         raise ValueError("설정 기간에 시간별 충전 원자료 없음")
@@ -281,7 +317,9 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     if out.duplicated(["bjd_code", "date", "hour"]).any():
         raise ValueError("기준코드 보정 후 시간별 셀 중복 — 합산 전 원천 범위 확인 필요")
     out["kw"] = out.pop("kwh") / 1.0  # 1시간 구간 에너지 / 1h. 순간 최대전력 아님.
-    return out.sort_values(["bjd_code", "date", "hour"]).reset_index(drop=True)
+    out = out.sort_values(["bjd_code", "date", "hour"]).reset_index(drop=True)
+    out.attrs["missing_hours"], out.attrs["missing_share"] = n_missing, share
+    return out
 
 
 def band_series(mh, bands):

@@ -28,6 +28,7 @@ import pandas as pd
 
 import bjdmapping
 import canloader
+import demloader
 import diagnostics
 import equityaccess
 import headline
@@ -44,7 +45,7 @@ import weatherloader
 from common import keep_region, log, mi_to_ym, setup_logging, ym_to_mi
 from config import deep_merge, load_config, resolve_region, select_kepco_source
 from outputs import (OutputWriter, plot_activation_examples, plot_bar, plot_event_study, plot_histogram,
-                     plot_quadrants)
+                     plot_priority_map, plot_quadrants)
 
 CRITICAL = True
 ISOLATED = False
@@ -579,6 +580,32 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                          access_inputs=(stations, points))
             runner.run("8-C", "충전 접근성 2SFCA", stage8c, ISOLATED)
 
+            def stage8c_dem():
+                """LX DEM(안심구역) 표고로 도보 경사를 반영해도 접근성 하위 동네가 유지되는지 본다(민감도)."""
+                if "access_inputs" not in S:
+                    raise RuntimeError("8-C 접근성 입력 없음")
+                stations, points = S["access_inputs"]
+                pts = points.reset_index(drop=True)
+                st = stations.reset_index(drop=True)
+                zp = demloader.sample_elevation(paths["dem"], pts["lat"], pts["lon"])
+                zs = demloader.sample_elevation(paths["dem"], st["lat"], st["lon"])
+                dp, pr = P["dem"], P["priority"]
+                slope, grades = equityaccess.slope_adjusted_2sfca(st, pts, zp, zs, pr["radii_m"], pr["default_radius_m"],
+                                                                  dp["max_grade"], dp["min_dist_m"])
+                base = equityaccess.compute_2sfca(st, pts, pr["radii_m"], pr["default_radius_m"])
+                table = equityaccess.compare_slope(base, slope, grades, (int(np.isfinite(zp).sum()), len(zp)),
+                                                   (int(np.isfinite(zs).sum()), len(zs)))
+                writer.table(table, "s8c_dem_slope_check", "8-C 지형(DEM) 경사 반영 접근성 — 기본 2SFCA 대비",
+                             digits=3, note="Tobler 보행 함수, 중심점-충전소 직선 경사 근사. 걸어서 오가는 완속 충전 상황 가정. "
+                                            "표고 값·동네 목록은 싣지 않음")
+                S["access_slope"] = slope
+                S["dem_check"] = table
+            if paths["dem"]:
+                runner.run("8-C", "지형(DEM) 경사 반영 접근성", stage8c_dem, ISOLATED)
+            else:   # 선택 입력 — 경로가 없으면 실패·생략이 아니라 비활성(전체 상태를 '부분완료'로 만들지 않음)
+                runner.rows.append({"단계": "8-C", "이름": "지형(DEM) 경사 반영 접근성", "상태": "비활성",
+                                    "소요초": 0.0, "비고": "DEM 경로 없음(run_full 의 dem_path)"})
+
             def stage8c_can():
                 """고유 데이터(CAN)의 원정 충전으로 형평성 축(2SFCA)을 검증한다."""
                 if "access" not in S or S.get("can", {}).get("away_region") is None:
@@ -636,8 +663,8 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 prior = hourly[hourly["date"].between(start - pd.Timedelta(days=ep["calibration_days"]),
                                                     start - pd.Timedelta(days=1))]
                 complete = []
-                for code in prior["bjd_code"].unique():
-                    matrix = loadforecast.daily_matrix(prior, code)
+                for code, part in loadforecast.split_by_code(prior).items():
+                    matrix = loadforecast.daily_matrix(part, code)
                     if len(matrix) == ep["calibration_days"] and not matrix.isna().any().any():
                         profile = matrix.mean(axis=0)
                         complete.append({"bjd_code": code, "concentration": profile.max() / profile.sum()
@@ -646,14 +673,16 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                         log.warning("8-A %s: 교정기간 결측 — 대상선정 보류", code)
                 conc = pd.DataFrame(complete, columns=["bjd_code", "concentration"])
                 cutoff = loadaxis._cut(conc["concentration"], P["load_axis"]["conc_cut"]) if len(conc) else np.nan
-                regions = conc.loc[conc["concentration"] > cutoff, "bjd_code"].tolist()
+                # 집중도 높은 순(8-B ESS 상한이 앞에서부터 자른다)
+                regions = conc.loc[conc["concentration"] > cutoff].sort_values(
+                    ["concentration", "bjd_code"], ascending=[False, True])["bjd_code"].tolist()
                 if not regions:
                     raise ValueError("고집중도 지역 없음 — 대상 기준 확인 필요")
-                rows = []
+                rows, parts = [], loadforecast.split_by_code(hourly)
                 for code in regions:
                     try:
                         rows.append(loadforecast.backtest_forecast(
-                            hourly, code, ep["holdout_weeks"], ep["weeks"], ep["holidays"],
+                            parts[str(code)], code, ep["holdout_weeks"], ep["weeks"], ep["holidays"],
                             end_date=pd.Timestamp(ep["evaluation_start"]) - pd.Timedelta(days=1)))
                     except ValueError as exc:
                         log.warning("8-A %s 검증 실패: %s", code, exc)
@@ -670,6 +699,10 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 S["energy_input"] = (hourly, regions, validation)
                 S["energy_customer_min"] = customer_min
             runner.run("8-A", "기준 모델(4주 중앙값) 검증", stage8a, ISOLATED)
+            if "energy_input" in S and S["energy_input"][0].attrs.get("missing_hours"):
+                h = S["energy_input"][0].attrs
+                runner.rows[-1]["비고"] = (f"시간별 결측·마스킹 {h['missing_hours']:,}시간({h['missing_share']:.2%}) 제외 — "
+                                          "0으로 채우지 않음, 그날은 불완전한 날로 빠짐")
 
             def stage8a_ai():
                 """v11 AI 분위수 예측(모든 서울 법정동) + 증설 0대 급증 위험. 8-C 동네 특성이 없으면 빼고 학습한다."""
@@ -740,6 +773,12 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     log.warning("SMP 로드 실패 — 피크 목적함수: %s", exc)
                     smp = None
                 hourly, regions, validation = S["energy_input"]
+                # ESS 는 부록용이고 동네마다 LP 를 수천 번 푼다(서울 고집중 230여 동이면 수십 분) → 집중도 상위만.
+                cap = P["ess"].get("max_regions")
+                if cap and len(regions) > int(cap):
+                    log.info("8-B ESS: 고집중 %d동 중 집중도 상위 %d동만", len(regions), int(cap))
+                    S["ess_cap_note"] = f"고집중 {len(regions)}동 중 집중도 상위 {int(cap)}동만(ess.max_regions)"
+                    regions = regions[:int(cap)]
                 shape = S.get("can", {}).get("charging_shape")
                 ai_pred = S["ai"]["eval"] if "ai" in S and S["ai"]["model_used"] in ("lightgbm", "sklearn") else None
                 results, schedules = essoptimizer.run_scenarios(hourly, regions, dict(P["energy"], ess=P["ess"]),
@@ -787,6 +826,8 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 S.update(energy_results=results, energy_schedules=schedules, public_priority=priority)
             if P["stages"].get("ess", True):
                 runner.run("8-B", "ESS 시나리오 및 공공 검토", stage8b, ISOLATED)
+                if "ess_cap_note" in S and "energy_results" in S:
+                    runner.rows[-1]["비고"] = S["ess_cap_note"]
 
         # ------------------------------------------------ 8-E단계 (격리)
         if P["priority"]["enabled"]:
@@ -802,7 +843,14 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     result = priorityscore.build_priority(S["energy_results"], S["access"], lp)
                 else:
                     if "risk" not in S:
-                        raise RuntimeError("8-A 급증 위험 없음 — 위험 축을 만들 수 없음")
+                        # 플랜 B: 일자 자료가 없거나(월별 KEPCO) 8-A 가 실패하면 월 피크 증가로 위험 축을 만든다.
+                        if "mh" not in S or S.get("mh_source") != "001":
+                            raise RuntimeError("8-A 급증 위험 없음 — KEPCO_001 월별 집계도 없어 위험 축을 만들 수 없음")
+                        S["risk"] = priorityscore.monthly_risk(S["mh"], pp["multipliers"], P["risk"]["min_calib_peak_kw"])
+                        S["risk_source"] = "monthly"
+                        # 소표본 억제 기준도 8-A 대신 월별 집계의 대표 고객호수로(없으면 PNG 에서 동네를 못 가림)
+                        S.setdefault("energy_customer_min", _period_customer_count(
+                            S["mh"], "cust_min", P["kepco"].get("suppress_basis", "max")).rename(index=str))
                     if list(pp["axes"]) != list(priorityscore.AXES_V11):
                         raise ValueError(f"priority.axes 는 {list(priorityscore.AXES_V11)} 또는 레거시 {priorityscore.LEGACY_AXES}")
                     result = priorityscore.build_priority_v11(S["risk"], S["access"], pp, S.get("energy_results"),
@@ -831,6 +879,11 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     log.warning("8-E %s (피어슨 %.4f, 스피어만 %.4f)", note, corr["pearson"], corr["spearman"])
                 if not legacy and attrs.get("risk_metric_used") == "peak_ratio" and pp["risk_metric"] == "auto":
                     note = (f"순위 대상 {attrs['share_zero_surge_risk']:.0%}에서 급증위험 0 → 위험 축을 피크비율로 대체(킬 21번)")
+                    log.warning("8-E %s", note)
+                if S.get("risk_source") == "monthly":
+                    why = "월별 자료(일자 없음)" if not P["energy"]["enabled"] else "8-A 결과 없음"
+                    note = (f"플랜 B — {why}: 위험 축 = 최근 6개월 월 피크가 직전 12개월 최대 × 배율을 넘은 달 비율"
+                            " (AI 다음날 예측 아님)") + (f" · {note}" if note else "")
                     log.warning("8-E %s", note)
                 cm, min_count = S.get("energy_customer_min", pd.Series(dtype=float)), P["can"]["min_cell_count"]
                 score_values = [c for c in result if c != "bjd_code" and pd.api.types.is_numeric_dtype(result[c])
@@ -968,10 +1021,10 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                              note=note + ". PNG 는 소표본 법정동 기여분 제외")
                 if list(P["priority"]["axes"]) != priorityscore.LEGACY_AXES:
                     sim = S.get("charger_sim")
-                    can_check = S.get("can_away_check")
-                    story = headline.story_table(table, sim, can_check)
+                    can_check, dem_check = S.get("can_away_check"), S.get("dem_check")
+                    story = headline.story_table(table, sim, can_check, dem_check)
                     writer.table(story, "s9_story", "9단계 발표 본문 — 발견 문장(초안)과 새 3숫자 (ESS·2030은 s9_headline 부록)",
-                                 digits=3, png_df=headline.story_table(png, sim, can_check) if len(png) else story.iloc[0:0],
+                                 digits=3, png_df=headline.story_table(png, sim, can_check, dem_check) if len(png) else story.iloc[0:0],
                                  note="문구는 팀이 확정. PNG 는 소표본 법정동 기여분 제외")
                     if "priority_score" in S:
                         card_args = (S["priority_score"], S.get("risk"), access, S.get("master"), P["priority"])
@@ -980,6 +1033,19 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                                      digits=3, png_df=headline.region_cards(*card_args, codes=visible) if visible is not None else cards,
                                      note="권고는 규칙 기반 초안(급증위험·형평성 정규화 0.5 기준). 실제 설치·점검 결정이 아님. PNG 는 소표본 법정동 제외")
             runner.run("9-H", "발표 3숫자", stage9h, ISOLATED)
+
+        # ------------------------------------------------ 9-M단계 (격리): 우선순위 지도 PNG(“1지도”)
+        if P["priority"]["enabled"]:
+            def stage9m():
+                if "priority_score" not in S or "centroids" not in S:
+                    raise RuntimeError("8-E 순위 또는 법정동 중심점 없음")
+                cm = S.get("energy_customer_min")
+                visible = set(cm[cm >= int(P["can"]["min_cell_count"])].index.astype(str)) if cm is not None else None
+                sub = ("플랜 B: 월별 자료 — 위험 축 = 월 피크 증가" if S.get("risk_source") == "monthly"
+                       else f"급증위험(상한 {P['priority']['base_multiplier']}배)·형평성(2SFCA) 결합")
+                writer.figure(plot_priority_map(S["priority_score"], S["centroids"], visible,
+                                                P["priority"]["card_top_n"], sub), "s9_priority_map")
+            runner.run("9-M", "우선순위 지도", stage9m, ISOLATED)
     except _StopAfterStage1:
         pass
     finally:

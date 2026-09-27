@@ -27,6 +27,12 @@ def daily_matrix(load_df, region):
     return g.pivot(index="date", columns="hour", values="kw").reindex(columns=range(24)).sort_index()
 
 
+def split_by_code(load_df):
+    """법정동 → 그 동네 행만 담은 부분표. 동네마다 daily_matrix 를 부를 때 전체 표를 매번 훑지 않게 한다
+    (서울 467동 × 450일이면 한 번 훑는 데 0.4초 — 동네 수만큼 반복하면 단계당 3분)."""
+    return {str(code): part for code, part in load_df.groupby(load_df["bjd_code"].astype(str), sort=True)}
+
+
 def forecast_baseline(matrix, target_date, W=4, holidays=None):
     """날짜에서 7·w일을 뺀 뒤 동일 시간 열을 선택한다. 대상일 이후 값은 접근하지 않는다.
 
@@ -100,7 +106,7 @@ REGION_FEATURES = ["ev_count", "chargers_assigned", "train_mean_kw"]
 
 def _matrices(hourly):
     """법정동 → 날짜×0~23시 행렬(daily_matrix 규칙으로 중복·음수 거부)."""
-    return {code: daily_matrix(hourly, code) for code in sorted(hourly["bjd_code"].astype(str).unique())}
+    return {code: daily_matrix(part, code) for code, part in split_by_code(hourly).items()}
 
 
 def build_features(matrices, dates, holidays=None, W=4):
@@ -133,7 +139,7 @@ def build_features(matrices, dates, holidays=None, W=4):
     out = pd.concat(frames, ignore_index=True)
     out["hour"] = out["hour"].astype(int)
     out["dow"] = out["date"].dt.dayofweek
-    out["holiday_type"] = out["date"].map(lambda d: HOLIDAY_CODE.get(hmap.get(d), 0)).astype(int)
+    out["holiday_type"] = out["date"].map({d: HOLIDAY_CODE.get(k, 0) for d, k in hmap.items()}).fillna(0).astype(int)
     out["src_max_date"] = out["date"] - pd.Timedelta(days=1)
     return out
 

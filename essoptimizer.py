@@ -266,7 +266,7 @@ def run_scenarios(hourly, regions, params, validation, smp=None, utilization_sha
         mode="compare" 행으로 남긴다(AI 효과 계산용). ai_pred(bjd_code,date,hour,q50,q90)가 없으면 AI 입력은
         쓸 수 없어 기준 모델로 운전하고 forecast_input 에 "baseline(AI 없음)"을 적는다.
     """
-    from loadforecast import daily_matrix, forecast_day
+    from loadforecast import daily_matrix, forecast_day, split_by_code
 
     start = pd.Timestamp(params["evaluation_start"]).normalize()
     days = pd.date_range(start, periods=int(params["evaluation_days"]), freq="D")
@@ -287,8 +287,9 @@ def run_scenarios(hourly, regions, params, validation, smp=None, utilization_sha
         chosen, label = "baseline", "baseline(AI 없음)"
     u, shape_source = utilization_profile(params, utilization_shape)
     rows, schedules = [], []
+    parts = split_by_code(hourly)
     for region in regions:
-        matrix = daily_matrix(hourly, region)
+        matrix = daily_matrix(parts.get(str(region), hourly.iloc[0:0]), region)
         calibration = matrix.reindex(pd.date_range(start - pd.Timedelta(days=int(params["calibration_days"])),
                                                    start - pd.Timedelta(days=1), freq="D"))
         if calibration.isna().any().any():

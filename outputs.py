@@ -269,6 +269,42 @@ def plot_histogram(counts, title, xlabel):
     return fig
 
 
+def plot_priority_map(priority, centroids, visible=None, top_n=10, subtitle=""):
+    """우선순위 지도 — 법정동 중심점 점 지도(경계선 없음). 색 = 결합점수, 상위 top_n 은 순위 번호(동네 카드와 같은 번호).
+
+    반출용이라 축 눈금(좌표)을 싣지 않는다. visible 밖(소표본) 동네는 회색 점으로만 두고 점수를 칠하지 않으며,
+    순위 밖(축 결측) 동네는 빈 원이다. 중심점은 공개 자료다.
+    """
+    p = priority.assign(bjd_code=priority["bjd_code"].astype(str)).merge(
+        centroids.assign(bjd_code=centroids["bjd_code"].astype(str))[["bjd_code", "lat", "lon"]], on="bjd_code")
+    shown = p["bjd_code"].isin(set(map(str, visible))) if visible is not None else pd.Series(True, index=p.index)
+    ranked = p["rank_eligible"].astype(bool) & shown
+    fig = new_figure(7.5, 7)
+    ax = fig.add_subplot(111)
+    ax.scatter(p.loc[~shown, "lon"], p.loc[~shown, "lat"], s=10, color="#C8C8C8", label=png_text("소표본 가림"))
+    off = ~p["rank_eligible"].astype(bool) & shown
+    ax.scatter(p.loc[off, "lon"], p.loc[off, "lat"], s=18, facecolors="none", edgecolors="#9A9A9A", linewidths=0.8,
+               label=png_text("순위 밖(축 결측)"))
+    r = p[ranked].sort_values("PriorityScore")
+    sc = ax.scatter(r["lon"], r["lat"], c=r["PriorityScore"], cmap="YlOrRd", vmin=0, vmax=1, s=34,
+                    edgecolors="white", linewidths=0.4)
+    top = p[ranked].sort_values("rank").head(int(top_n))
+    ax.scatter(top["lon"], top["lat"], s=80, facecolors="none", edgecolors="black", linewidths=1.2,
+               label=png_text(f"상위 {len(top)}곳(번호 = 순위)"))
+    for _, row in top.iterrows():
+        ax.annotate(str(int(row["rank"])), (row["lon"], row["lat"]), xytext=(4, 4), textcoords="offset points",
+                    fontsize=8, fontweight="bold")
+    cb = fig.colorbar(sc, ax=ax, shrink=0.7)
+    cb.set_label(png_text("결합 점수(급증위험·형평성, 높을수록 먼저 검토)"))
+    lat0 = float(p["lat"].mean()) if len(p) else 37.55
+    ax.set_aspect(1 / np.cos(np.radians(lat0)))
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.margins(0.06)
+    ax.set_title(png_text("우선순위 지도 — 법정동 중심점" + (f"\n{subtitle}" if subtitle else "")), fontsize=10, loc="left")
+    ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.01), ncol=3, frameon=False)   # 점을 가리지 않게 밖으로
+    return fig
+
+
 def plot_bar(df, x, y, title, ylabel):
     fig = new_figure(9, 4)
     ax = fig.add_subplot(111)

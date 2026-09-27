@@ -91,7 +91,8 @@ def headline_table_v11(access, risk=None, effect=None, scenario_region=None, ai=
                      "비교": np.nan, "범위": "", "가정": f"법정동 중심점 최근접 배정(폴리곤 공간조인 아님) · 대상 {n}곳"})
     ok, why = ai_improvement(ai["metrics"] if ai else None, float(p.get("min_p90_coverage", 0.8)))
     status = "" if ok else (" · 미실행" if not ai or model.startswith("baseline") else " · AI 개선 없음(킬 18)")
-    if risk is not None:
+    monthly = risk is not None and "tp_ai" not in risk   # 플랜 B(월별 자료) — AI 경보 열이 없다
+    if risk is not None and not monthly:
         r = keep(risk)
         r = r[np.isclose(r["multiplier"].astype(float), base_m) & (r["status"] == "assessed")]
         for label, key in (("정밀도", "precision"), ("재현율", "recall")):
@@ -119,9 +120,11 @@ def headline_table_v11(access, risk=None, effect=None, scenario_region=None, ai=
         r = keep(risk)
         r = r[np.isclose(r["multiplier"].astype(float), base_m) & (r["status"] == "assessed")]
         th = float(p["risk_threshold"])
-        rows.append({"번호": "숫자 3(a)", "내용": f"현재 급증위험 ≥ {th:g}인 동네 수(평가일 중 경보일 비율)",
+        unit = "월별 자료: 최근 6개월 중 월 피크가 직전 12개월 최대 × 배율을 넘은 달 비율" if monthly else "평가일 중 경보일 비율"
+        rows.append({"번호": "숫자 3(a)", "내용": f"현재 급증위험 ≥ {th:g}인 동네 수({unit})",
                      "값": int((r["surge_risk"] >= th).sum()), "비교": np.nan, "범위": f"평가 {len(r)}곳 중",
-                     "가정": f"충전기 추가 없음(증설 0대) · 상한 {base_m}배 · 평가기간 예측·관측 기준 · {common}"})
+                     "가정": f"충전기 추가 없음(증설 0대) · 상한 {base_m}배 · "
+                             + ("월별 관측(예측 아님)" if monthly else f"평가기간 예측·관측 기준 · {common}")})
     if scenario_region is not None and len(scenario_region):
         s = keep(scenario_region)
         s = s[(s["year"] == 2030) & (s["beta_case"] == "main")]
@@ -146,11 +149,12 @@ def _pick(head, contains):
     return (float(rows["값"].iloc[0]), float(rows["비교"].iloc[0])) if len(rows) else (np.nan, np.nan)
 
 
-def story_table(head, sim=None, can_check=None):
+def story_table(head, sim=None, can_check=None, dem_check=None):
     """s9_story — 발표 본문의 '발견 한 문장'과 새 3숫자(격차·예측·개입). ESS·2030 은 s9_headline(부록)에 남긴다.
 
     head: headline_table_v11 결과. sim: 8-G 충전기 추가 실험 표(첫 행 = 우선순위 전략, 둘째 = 비교 전략).
     can_check: 8-C CAN 원정 충전 검증 표(attrs low·high·rho) — 있으면 '고유 데이터 발견' 행을 더한다.
+    dem_check: 8-C DEM 경사 보정 비교 표(attrs keep·n_low·rho) — '지형 강건성' 행.
     문구는 초안이며 팀이 확정한다. 값이 없으면 '미산출'로 적고 지어내지 않는다.
     """
     gap = head.loc[head["번호"] == "숫자 1", "값"]
@@ -164,6 +168,9 @@ def story_table(head, sim=None, can_check=None):
                         f"{(r_ai - r_b) * 100:.0f}%p 높았다")
         else:
             sentence = f"AI 경보 재현율 {r_ai:.0%}로 기준 모델({r_b:.0%})을 넘지 못했다 — 그대로 보고"
+    elif head["내용"].astype(str).str.contains("월별 자료", regex=False).any():
+        sentence = ("KEPCO 자료가 월별이라 다음날 AI 경보는 산출하지 않았다 — 최근 6개월 월 피크 증가로 급증 위험을 대신했다"
+                    "(플랜 B)")
     else:
         sentence = "AI 경보 재현율 미산출 — 평가기간에 실제 급증일이 없거나 8-A 미실행(s8a_risk 확인)"
     col = [c for c in (sim.columns if sim is not None else []) if c.endswith("개선율") and c.startswith("하위")]
@@ -198,6 +205,14 @@ def story_table(head, sim=None, can_check=None):
     else:
         rows.append({"구분": "고유 데이터 발견(CAN)", "내용": "원정 충전 검증 미산출 — CAN 개별 차량 판정·거주 차량 수 필요(8-C)",
                      "값": np.nan, "비교": np.nan})
+    if dem_check is not None and "keep" in dem_check.attrs:
+        k = dem_check.attrs
+        rows.append({"구분": "지형 강건성(DEM)",
+                     "내용": f"도보 경사를 반영해도 접근성 하위 {k['n_low']}곳 중 남은 비율(값) · 기본 대비 순위 상관(비교)",
+                     "값": k["keep"] / k["n_low"] if k["n_low"] else np.nan, "비교": k["rho"]})
+    else:
+        rows.append({"구분": "지형 강건성(DEM)", "내용": "경사 보정 미산출 — DEM 경로·rasterio/GDAL 필요(8-C)",
+                     "값": np.nan, "비교": np.nan})
     return pd.DataFrame(rows)
 
 
@@ -227,7 +242,7 @@ def region_cards(priority, risk, access, master, params, codes=None):
     out["법정동"] = p["bjd_code"].map(names)
     out["결합점수"] = p["PriorityScore"].to_numpy()
     out["급증위험"] = p["risk_raw"].to_numpy()
-    if risk is not None:
+    if risk is not None and "tp_ai" in risk:   # 월별 플랜 B 에는 AI 경보 열이 없다
         r = risk[np.isclose(risk["multiplier"].astype(float), base_m)].copy()
         r["bjd_code"] = r["bjd_code"].astype(str)
         r = r.set_index("bjd_code")

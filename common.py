@@ -66,6 +66,24 @@ def optional_import(name):
 
 # ---------------------------------------------------------------- CSV 로딩
 
+def locate(path, levels=3):
+    """경로가 지금 폴더 기준으로 없으면 상위 폴더(최대 levels 단계)에서 같은 상대경로를 찾는다.
+
+    센터 JupyterLab 의 Copy Path 는 서버 최상위 기준(예: import_data/x.csv)인데 노트북은 하위 폴더(team_share)에서
+    돈다. 손으로 '../'를 붙이다 틀리지 않게 한다. 어디에도 없으면 원래 경로를 돌려준다(부르는 쪽이 오류를 낸다).
+    """
+    p = Path(str(path).strip().strip("\"'")).expanduser()
+    if p.exists():
+        return p.resolve()   # 절대경로로 — 설정 JSON 은 결과 폴더 기준으로 상대경로를 다시 해석한다
+    if p.is_absolute():
+        return p
+    for parent in list(Path.cwd().parents)[:levels]:
+        if (parent / p).exists():
+            log.info("경로 %s → %s (상위 폴더에서 찾음)", p, parent / p)
+            return parent / p
+    return p
+
+
 def resolve_csv_path(path, source="CSV"):
     """센터의 Copy Path를 실제 CSV 파일 하나로 확정한다.
 
@@ -75,7 +93,7 @@ def resolve_csv_path(path, source="CSV"):
     raw = str(path or "").strip().strip("\"'")
     if not raw:
         raise ValueError(f"[{source}] Copy Path가 비어 있음")
-    candidate = Path(raw).expanduser()
+    candidate = locate(raw)
     if candidate.is_file():
         if candidate.suffix.lower() != ".csv":
             raise ValueError(f"[{source}] CSV 파일이 아님: {candidate}")
@@ -140,6 +158,7 @@ def detect_sep(path, encoding):
 
 
 def read_header(path):
+    path = locate(path)
     enc = detect_encoding(path)
     sep = detect_sep(path, enc)
     return list(pd.read_csv(path, encoding=enc, sep=sep, nrows=0).columns), enc, sep
@@ -175,7 +194,7 @@ def resolve_columns(columns, mapping, source, required=None):
 
 def read_columns(path, mapping, source, required=None, chunksize=None, nrows=None):
     """필요한 컬럼만 문자열로 읽어 내부 키 이름으로 바꾼다. chunksize 를 주면 청크 반복자."""
-    path = str(path)
+    path = str(locate(path))
     header, enc, sep = read_header(path)
     colmap = resolve_columns(header, mapping, source, required)
     rename = {orig: key for key, orig in colmap.items()}

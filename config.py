@@ -79,6 +79,8 @@ DEFAULT_PARAMS = {
         #   시간마다 바뀜 + 집계에 들어간 칸이 하나라도 기준 미만이면 안 됨 -> "min"
         # KEPCO 법정동 표에만 적용된다. CAN 표에는 적용되지 않는다(R1, 2026-09-19).
         "suppress_basis": "max",
+        # 8-A 시간별 로더: 결측·마스킹 시간은 0으로 채우지 않고 빼되(그날은 불완전한 날로 빠짐), 비율이 이보다 크면 멈춘다.
+        "max_missing_share": 0.2,
     },
     "bjd": {"fail_warn_rate": 0.30},
     "activation": {
@@ -125,6 +127,9 @@ DEFAULT_PARAMS = {
         "lat_range": [33.0, 39.0], "lon_range": [124.0, 132.0],
         "charging_true_values": ["1", "Y", "TRUE", "충전중", "CONNECTED"],
         "chunksize": 1_000_000,
+        # 대용량 대비(현장 CAN 은 통째로 열면 커널이 죽었다): 분석 범위(서울 + 약 5km 여유) 밖 좌표 행은 읽으면서 버리고,
+        # max_rows 를 넘으면 앞부분 표본으로 멈춘다(결과표에 기록). None 이면 제한 없음.
+        "keep_bbox": [37.38, 37.75, 126.70, 127.32], "max_rows": 20_000_000,
         # verify_join_key
         "min_ids": 3,
         "min_rows_per_id": 20,
@@ -172,7 +177,8 @@ DEFAULT_PARAMS = {
     "headline": {"risk_threshold": 0.1},
     # v11 8-B: ESS 스케줄 입력(p90 기본 | p50 | baseline). compare_inputs 면 증설 compare_new_chargers 대(기준 3대)에서
     # 상한 1.1·1.2·1.3배 모두 같은 사전 선정 용량으로 기준 모델·P50·P90·oracle 을 돌려 AI 효과를 낸다.
-    "ess": {"forecast_input": "p90", "compare_inputs": True, "compare_new_chargers": 3},
+    # max_regions: 고집중 동네 중 집중도 상위 몇 곳만 돌릴지(부록용, 서울 전체면 LP 수십만 번). None 이면 전부.
+    "ess": {"forecast_input": "p90", "compare_inputs": True, "compare_new_chargers": 3, "max_regions": 30},
     # v11 8-F 시나리오(선택). base_month 는 전국 값의 기준월이며 EV_now 도 이 달 값을 쓴다.
     # goal_national: 제1차 국가 탄소중립녹색성장 기본계획 2030 누적 보급 목표. national_base: 2026-06 전국 전기차 등록
     # (국토교통부 자동차 등록현황 연료별, 6월 말 보도자료 "전기 1,095천대"와 일치). seoul_base: 2026-06 서울(2차 출처
@@ -194,6 +200,9 @@ DEFAULT_PARAMS = {
                  # 8-G 충전기 추가 시뮬레이션(순위 상위 sim_top_n 곳에 sim_chargers_each 기씩 가상 추가 후 2SFCA 재계산)
                  # 과 9단계 동네 카드(card_top_n 곳). 실제 설치 계획이 아니라 순위의 쓸모를 보이는 가정 실험이다.
                  "sim_top_n": 20, "sim_chargers_each": 2, "card_top_n": 10},
+    # v11.7 8-C 경사 보정(LX DEM 5M, paths.dem 이 있을 때만): 중심점·충전소 직선 경사로 도보 거리를 늘려 2SFCA 재계산.
+    # 경사는 ±max_grade 로 자르고, min_dist_m 미만 쌍은 평지로 본다(짧은 거리의 표고 잡음).
+    "dem": {"max_grade": 0.3, "min_dist_m": 50.0},
     "kill": {"sample_rows": 2_000_000, "compare_rows": 1_000_000, "kepco_max_chunks": None,
              "cf_min_regions": 30, "es_min_regions": 10, "min_tizo": 4, "mask_max_rate": 0.30,
              "access_match_min": 0.70, "robust_top_min_share": 0.05,
@@ -222,7 +231,7 @@ DEFAULT_INDUSTRY = {
 
 PATH_KEYS = ("bjd_master", "bjd_crosswalk", "emd_centroids", "kepco_001", "kepco_002", "shc001", "shc002",
              "can_m", "kep007", "industry_codes", "out_dir", "kepco_hourly", "smp", "public_evidence",
-             "access_stations", "ev_registration", "font", "weather", "holidays", "ev_history", "hdong_bjd")
+             "access_stations", "ev_registration", "font", "weather", "holidays", "ev_history", "hdong_bjd", "dem")
 
 
 def _strip_comments(obj):

@@ -48,6 +48,11 @@ def test_story_sentence_reports_ai_vs_baseline_honestly():
     assert "넘지 못했다" in worse                                     # 못 이긴 결과도 그대로
     missing = headline.story_table(pd.DataFrame(columns=["번호", "내용", "값", "비교"])).loc[0, "내용"]
     assert "미산출" in missing                                       # 값이 없으면 지어내지 않음
+    dem = pd.DataFrame({"항목": ["하위 20% 유지"], "값": [3], "비고": [""]})
+    dem.attrs.update(keep=3, n_low=4, rho=0.9)
+    row = headline.story_table(_head(0.72, 0.51), sim, dem_check=dem).set_index("구분").loc["지형 강건성(DEM)"]
+    assert row["값"] == 0.75 and row["비교"] == 0.9
+    assert "미산출" in story.set_index("구분").at["지형 강건성(DEM)", "내용"]   # DEM 없으면 미산출
 
 
 def test_region_cards_rank_recommend_and_hide_small_regions():

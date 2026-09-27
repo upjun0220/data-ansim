@@ -18,7 +18,7 @@ import pandas as pd
 import kepcoloader
 from bjdmapping import BJD_COLUMN_ALIASES
 from canloader import CAN_COLUMN_ALIASES
-from common import detect_columns, resolve_csv_path
+from common import detect_columns, locate, resolve_csv_path
 from config import DEFAULT_COLUMNS, DEFAULT_PARAMS, deep_merge
 from killcriteria import run_checks
 from pipeline import run as run_pipeline
@@ -100,10 +100,11 @@ def default_evaluation_start(kepco_path, days=None):
 
 
 def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluation_start=None, out_dir="fullout",
-             extra_params=None):
+             extra_params=None, dem_path=None):
     """전체 분석. import_dir = 반입 자료 2~10번이 든 폴더(또는 그중 파일 하나의 Copy Path).
+    dem_path = LX DEM 5M .img 파일 또는 그 폴더(선택, 8-C 경사 보정 — rasterio·GDAL 이 없으면 그 단계만 생략).
     없는 파일은 해당 단계를 생략하고 '입력' 표에 적는다."""
-    folder = Path(str(import_dir).strip().strip("\"'")).expanduser()
+    folder = locate(import_dir)
     if folder.is_file():   # 반입 파일 하나(예: 5.csv)의 Copy Path 를 넣어도 그 폴더를 쓴다
         folder = folder.parent
     if not folder.is_dir():
@@ -116,16 +117,23 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
     holidays = next((p for p in (here / "holidays.yaml", here / "config" / "holidays.yaml") if p.is_file()), None)
 
     bjd_columns = detect_columns(bjd, BJD_COLUMN_ALIASES, "법정동 마스터", required={"code"})
-    columns = {"bjd": bjd_columns}
+    columns, can_note = {"bjd": bjd_columns}, "센터 CAN"
     if can:
-        columns["can_m"] = detect_columns(can, CAN_COLUMN_ALIASES, "TB_TBE_TERMINAL_LOGMOCEAN",
-                                          required=set(CAN_COLUMN_ALIASES))
-    start = evaluation_start or default_evaluation_start(kepco)
+        # CAN 은 선택 입력이다 — 헤더를 못 맞추면 CAN 만 빼고 전체 분석은 계속한다(사유는 '입력' 표에).
+        try:
+            columns["can_m"] = detect_columns(can, CAN_COLUMN_ALIASES, "TB_TBE_TERMINAL_LOGMOCEAN",
+                                              required=set(CAN_COLUMN_ALIASES))
+        except KeyError as exc:
+            can, can_note = None, f"헤더 판별 실패로 제외 — {str(exc).split(' / ')[0][:120]}"
+    # 조회기간이 월(YYYYMM)뿐이면 다음날 예측(8-A)·ESS·2030 은 못 한다 → 멈추지 않고 플랜 B(월 피크 증가 위험축)로 간다.
+    daily = not kepcoloader.scan_observed_dates(kepco, DEFAULT_COLUMNS["kepco"], DEFAULT_PARAMS["kepco"]).empty
+    start = evaluation_start or (default_evaluation_start(kepco) if daily else None)
 
     output = Path(out_dir).resolve()
     output.mkdir(parents=True, exist_ok=True)
     paths = {"bjd_master": str(bjd), "kepco_001": str(kepco), "kepco_hourly": str(kepco),
              "can_m": str(can) if can else None, "holidays": str(holidays) if holidays else None,
+             "dem": str(locate(dem_path)) if dem_path else None,
              "out_dir": str(output), **{key: str(path) for key, path in found.items()}}
     config = {
         "paths": paths,
@@ -133,7 +141,7 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
         "params": {
             "stages": {"commerce": False},
             "kepco": {"source": "001"},
-            "energy": {"enabled": True, "evaluation_start": start},
+            "energy": {"enabled": daily, **({"evaluation_start": start} if daily else {})},
             "priority": {"enabled": True},
             "kill": {"kepco_max_chunks": 3},
         },
@@ -145,8 +153,10 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
     used = pd.DataFrame([{"입력": key, "반입 이름": IMPORT_FILES.get(key, ""), "사용": key in found}
                          for key in IMPORT_FILES] +
                         [{"입력": "holidays", "반입 이름": "번들 내장", "사용": paths["holidays"] is not None},
-                         {"입력": "can_m", "반입 이름": "센터 CAN", "사용": can is not None},
-                         {"입력": "evaluation_start", "반입 이름": start, "사용": True}])
+                         {"입력": "can_m", "반입 이름": can_note, "사용": can is not None},
+                         {"입력": "dem", "반입 이름": "센터 LX DEM", "사용": paths["dem"] is not None},
+                         {"입력": "evaluation_start", "사용": daily,
+                          "반입 이름": start if daily else "월별 자료 — 8-A·8-B·8-F 생략, 위험 축은 월 피크 증가(플랜 B)"}])
     kill = run_checks(config_path)
     pipeline = run_pipeline(config_path)
     pngs = sorted(str(p) for p in (output / "png").glob("*.png"))
@@ -208,7 +218,7 @@ def run_seasons(kepco_001_path, import_dir, bjd_path=None, n_windows=4, step_mon
     table, common = compare_windows(priority, top_n)
     from outputs import OutputWriter
 
-    folder = Path(str(import_dir).strip().strip("\"'"))
+    folder = locate(import_dir)
     font = (folder.parent if folder.is_file() else folder) / IMPORT_FILES["font"]
     writer = OutputWriter(output, **DEFAULT_PARAMS["outputs"], font_path=str(font) if font.is_file() else None)
     writer.table(table, "s9_season_robustness", f"계절 강건성 — 평가 창별 우선순위 상위 {top_n} 유지", digits=3,

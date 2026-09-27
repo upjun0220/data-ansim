@@ -29,8 +29,10 @@ def v11_env(tmp_path_factory):
              "weather": "weather_mock.csv", "holidays": "holidays.yaml", "access_stations": "access_stations.csv",
              "ev_registration": "ev_registration.csv", "can_m": "can_m_individual.csv", "kep007": "kep007.csv",
              "ev_history": "ev_history.csv", "hdong_bjd": "hdong_bjd.csv"}
-    cfg = {"paths": {**{k: str(data / v) for k, v in names.items()}, "out_dir": str(base / "out")},
-           "params": {"energy": {"enabled": True}, "priority": {"enabled": True},
+    (data / "dem.img").write_bytes(b"")                                    # 래스터 도구가 없으면 8-C 경사 단계만 생략
+    cfg = {"paths": {**{k: str(data / v) for k, v in names.items()}, "out_dir": str(base / "out"),
+                     "dem": str(data / "dem.img")},
+           "params": {"energy": {"enabled": True}, "priority": {"enabled": True}, "ess": {"max_regions": 5},
                       "kill": {"sample_rows": 200000, "compare_rows": 200000},
                       "scenario": {"seoul_base": None, "n_boot": 199}}}
     path = base / "config.json"
@@ -51,8 +53,9 @@ def test_mock_has_no_shc_by_default(v11_env, tmp_path):
 
 def test_full_run_without_shc(v11_result):
     stages = v11_result["stages"]
-    assert v11_result["status"] == "완료", stages.to_string()
-    off = stages[stages["상태"] == "비활성"]
+    skipped = stages.loc[stages["상태"] == "생략", "이름"].tolist()           # 래스터 도구가 없으면 DEM 단계만 생략
+    assert v11_result["status"] == "완료" or skipped == ["지형(DEM) 경사 반영 접근성"], stages.to_string()
+    off = stages[stages["상태"] == "비활성"]                                # DEM 경로는 주었으므로 비활성은 상권 하나
     assert len(off) == 1 and off.iloc[0]["비고"] == "상권 단계 비활성(v11)"
     assert not stages["단계"].isin(["2", "4", "4.5", "5", "6", "6.5", "7"]).any()
     assert stages["분석지역"].iloc[0] == "서울특별시(11)" and stages["지역단위수"].iloc[0] == 30
@@ -65,10 +68,19 @@ def test_full_run_without_shc(v11_result):
     assert v11_result["state"]["can"]["treated_excl_base"] is None
     assert v11_result["state"]["can"]["charging_shape"] is not None          # u(t)은 그대로
     assert (out / "png" / "s8f_scenario_2030_mid.png").exists()
+    assert (out / "png" / "s9_priority_map.png").exists()                    # “1지도”는 센터에서 PNG 로 나온다
     ai = v11_result["state"]["ai"]
     assert ai["model_used"] in {"lightgbm", "sklearn"} and ai["weather_mode"] == "forecast"
     risk = v11_result["state"]["risk"]
     assert (risk["status"] == "assessed").mean() > 0.9                     # 급증위험은 모든 법정동에 계산
+    hourly, regions, _ = v11_result["state"]["energy_input"]                 # ESS 는 집중도 상위 max_regions 곳만
+    ess_codes = set(v11_result["state"]["energy_results"]["bjd_code"])
+    assert len(regions) > 5 and ess_codes == set(map(str, regions[:5]))
+    assert "집중도 상위 5동만" in stages.set_index("이름").at["ESS 시나리오 및 공공 검토", "비고"]
+    import demloader
+    dem = stages.set_index("이름").loc["지형(DEM) 경사 반영 접근성"]
+    if demloader.backend() is None:
+        assert dem["상태"] == "생략" and "ImportError" in dem["비고"]
     import loadscenario
     assert loadscenario.SCENARIO_TITLE == "시나리오(예측 아님), 충전기 추가 설치 없음 가정"   # 8-F 표·그림 제목에 붙임
 
@@ -159,3 +171,13 @@ def test_fetch_holidays_build_keeps_api_dates_and_marks_source():
     out = build(raw)
     assert out["2025-12-25"]["type"] == "holiday" and out["2025-12-25"]["source"].startswith("한국천문연구원")
     assert all(d in raw or e["type"] == "pre_post_holiday" for d, e in out.items())
+
+
+def test_kill_criteria_without_can_is_not_an_error(v11_env, tmp_path):
+    cfg = json.loads(v11_env["config"].read_text(encoding="utf-8"))
+    cfg["paths"].pop("can_m")                                                # run_full 에서 CAN 을 빼거나 헤더 판별 실패
+    cfg["paths"]["out_dir"] = str(tmp_path / "out")
+    path = tmp_path / "nocan.json"
+    path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    table = run_checks(path, write=False).set_index("번호")
+    assert table.at[8, "판정"] == "해당 없음" and not (table["판정"] == "오류").any(), table.to_string()

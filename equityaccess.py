@@ -51,8 +51,8 @@ def _minmax(values, reverse=False):
     return 1 - out if reverse else out
 
 
-def compute_2sfca(stations, demand_points, radii_m=(300, 500, 800), default_radius_m=500):
-    """충전소 공급/반경 내 EV 수요로 2SFCA를 계산한다.
+def compute_2sfca(stations, demand_points, radii_m=(300, 500, 800), default_radius_m=500, dist_km=None):
+    """충전소 공급/반경 내 EV 수요로 2SFCA를 계산한다. dist_km(수요점×충전소)를 주면 직선거리 대신 쓴다.
 
     ponytail: 점-충전소 전체 거리행렬이다. 수도권 격자 규모에서 메모리가 문제가 될 때만 공간 인덱스로 교체한다.
     """
@@ -69,7 +69,7 @@ def compute_2sfca(stations, demand_points, radii_m=(300, 500, 800), default_radi
     d = demand_points.reset_index(drop=True).copy()
     s = stations.reset_index(drop=True).copy()
     dist = _distance_km(d["lat"].to_numpy()[:, None], d["lon"].to_numpy()[:, None],
-                        s["lat"].to_numpy()[None, :], s["lon"].to_numpy()[None, :])
+                        s["lat"].to_numpy()[None, :], s["lon"].to_numpy()[None, :]) if dist_km is None else dist_km
     ev = pd.to_numeric(d["ev_count"], errors="coerce").fillna(0).clip(lower=0).to_numpy(float)
     chargers = pd.to_numeric(s["chargers"], errors="raise").to_numpy(float)
     out = d[["bjd_code"]].copy()
@@ -82,6 +82,54 @@ def compute_2sfca(stations, demand_points, radii_m=(300, 500, 800), default_radi
     out["access_2sfca"] = raw
     out["equity_need_norm"] = _minmax(raw, reverse=True)
     out["access_data_present"] = d["ev_count"].notna()
+    return out
+
+
+def slope_factor(grade):
+    """경사(오르막 +)를 걸을 때 평지 대비 시간 배율. Tobler 보행 함수 v = 6·exp(−3.5·|g + 0.05|) 기준이며,
+    충전기에 꽂아 두고 걸어서 오가는 왕복이라 갈 때·올 때 배율을 평균한다(평지 = 1)."""
+    g = np.asarray(grade, float)
+    flat = np.exp(-3.5 * 0.05)
+    return (flat / np.exp(-3.5 * np.abs(g + 0.05)) + flat / np.exp(-3.5 * np.abs(-g + 0.05))) / 2
+
+
+def slope_adjusted_2sfca(stations, demand_points, elev_points, elev_stations, radii_m=(300, 500, 800),
+                         default_radius_m=500, max_grade=0.3, min_dist_m=50.0):
+    """중심점·충전소 표고로 직선 경사를 구해 거리에 slope_factor 를 곱한 뒤 2SFCA 를 다시 계산한다.
+
+    직선 경사는 실제 보행로의 오르내림이 아니라 근사다. 표고가 없는 쌍과 min_dist_m 미만 쌍은 경사 0(평지),
+    경사는 ±max_grade 로 자른다(다리·절개지 같은 이상값 방지). 반환: (보정 2SFCA 표, 반경 안 쌍의 |경사| 배열).
+    """
+    d = demand_points.reset_index(drop=True)
+    s = stations.reset_index(drop=True)
+    dist = _distance_km(d["lat"].to_numpy()[:, None], d["lon"].to_numpy()[:, None],
+                        s["lat"].to_numpy()[None, :], s["lon"].to_numpy()[None, :])
+    rise = np.asarray(elev_stations, float)[None, :] - np.asarray(elev_points, float)[:, None]
+    grade = np.divide(rise, dist * 1000.0, out=np.zeros_like(dist), where=dist * 1000.0 >= min_dist_m)
+    grade = np.clip(np.nan_to_num(grade, nan=0.0), -max_grade, max_grade)
+    out = compute_2sfca(s, d, radii_m, default_radius_m, dist_km=dist * slope_factor(grade))
+    near = dist <= max(radii_m) / 1000.0
+    return out, np.abs(grade[near])
+
+
+def compare_slope(base, slope, grades, n_points, n_stations, share=0.20):
+    """기본 2SFCA 대 경사 보정 2SFCA — 법정동 집계 요약만(표고 값·동네 목록은 싣지 않음)."""
+    a, b = _present(base), _present(slope).reindex(_present(base).index)
+    low_a, low_b = set(bottom_codes(base, share)), set(bottom_codes(slope, share))
+    rho = a.rank().corr(b.rank()) if len(a) > 2 and a.nunique() > 1 and b.nunique() > 1 else np.nan
+    rows = [("표고 확보 법정동", f"{n_points[0]} / {n_points[1]}", "중심점 표고. 없으면 그 동네 쌍은 평지로 봄"),
+            ("표고 확보 충전소", f"{n_stations[0]} / {n_stations[1]}", ""),
+            ("반경 안 쌍의 |경사| 중앙값", float(np.median(grades)) if len(grades) else np.nan, "직선 경사(높이차 ÷ 거리)"),
+            ("반경 안 쌍 중 경사 5% 이상 비율", float((grades >= 0.05).mean()) if len(grades) else np.nan, ""),
+            ("순위 상관(스피어만)", rho, "기본 대 경사 보정, 수요 있는 동네"),
+            (f"하위 {share:.0%} 동네 수(기본 → 보정)", f"{len(low_a)} → {len(low_b)}", "동률 포함"),
+            (f"하위 {share:.0%} 유지", len(low_a & low_b), "기본 하위 중 보정 후에도 하위"),
+            (f"하위 {share:.0%} 새로 진입", len(low_b - low_a), "경사 때문에 새로 하위가 된 동네"),
+            ("자카드(하위 집합)", len(low_a & low_b) / len(low_a | low_b) if low_a | low_b else np.nan, ""),
+            ("접근성 0 동네(기본 → 보정)", f"{int((a <= 0).sum())} → {int((b <= 0).sum())}", ""),
+            ("평균 접근성 변화율", float(b.mean() / a.mean() - 1) if a.mean() > 0 else np.nan, "음수 = 경사로 멀어짐")]
+    out = pd.DataFrame(rows, columns=["항목", "값", "비고"])
+    out.attrs.update(keep=len(low_a & low_b), n_low=len(low_a), rho=rho)   # s9_story '지형 강건성' 행
     return out
 
 

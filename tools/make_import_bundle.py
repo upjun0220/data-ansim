@@ -1,7 +1,7 @@
 """반입 폴더 만들기 — 코드 파일을 하나씩 따로 반입한다(한 폴더에 평평하게 놓이는 구성).
 
 반입 포털은 .py·.csv·.txt·폰트만 받고(zip·json·md 불가) 파일명은 영문·숫자만 된다. 그래서
-  - 분석 모듈 20개는 원래 이름 그대로(.py),
+  - 분석 모듈 21개는 원래 이름 그대로(.py),
   - 설정 템플릿(json)·공휴일 달력(yaml)·README(md)는 내용 그대로 .txt 로 바꿔 담는다. 코드는 확장자가 아니라
     내용(JSON)으로 읽으므로 그대로 동작한다.
   - 올린 파일은 센터에서 한 폴더에 평평하게 놓이므로, 경로가 같은 폴더를 가리키는 fieldtemplate.txt 를 따로 만든다.
@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = ["bjdmapping", "canloader", "common", "config", "diagnostics", "equityaccess", "essoptimizer", "headline",
+MODULES = ["bjdmapping", "canloader", "common", "config", "demloader", "diagnostics", "equityaccess", "essoptimizer", "headline",
            "heterogeneity", "identification", "kep007loader", "kepcoloader", "killcriteria", "loadaxis", "loadforecast",
            "outputs", "pipeline", "priorityscore", "weatherloader", "loadscenario"]
 # 원본 → 반입 이름(.txt). fieldtemplate.txt 는 flat_template() 이 한 폴더용으로 만든다.
