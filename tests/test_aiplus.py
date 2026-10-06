@@ -43,7 +43,7 @@ def test_ai_plus_runs_and_calibrates_p90():
     assert h.loc[("평가", "전체"), "mae_ai_plus"] <= 1.2 * h.loc[("평가", "전체"), "mae_persistence"]   # 어제값에서 출발
     assert set(res["peak"]["기간"]) == {"검증", "평가"} and res["alerts"]["전체"]["방법"].nunique() == 3
     assert set(res["agg"]["단위"]) == {"구", "서울 합계"}
-    assert len(res["importance"]) == len(aiplus.FEATURES) - 1            # 기온 입력 없음 → 그 특성만 빠짐
+    assert len(res["importance"]) == len(aiplus.FEATURES) - 1 - len(aiplus.LIVING)   # 기온·생활인구 입력 없음 → 그 특성만 빠짐
     assert abs(res["importance"]["비중"].sum() - 1) < 1e-6
     assert len(res["type_table"]) == 4 and res["types"].between(1, 4).all()
 
@@ -67,3 +67,24 @@ def test_conformal_offset_hits_target_coverage():
     e = rng.normal(0, 1, 2000)
     off = aiplus.conformal_offset(e, 0.9)
     assert abs((e <= off).mean() - 0.9) < 0.01
+
+
+def test_living_population_features_use_week_old_values_and_enter_model():
+    hourly = _hourly()
+    codes = hourly["bjd_code"].unique()
+    dates = pd.date_range("2024-12-01", "2025-10-31")
+    rng = np.random.default_rng(3)
+    living = pd.DataFrame([(d, c, 1000 + 100 * (d.dayofweek >= 5) + rng.normal(0, 10), 2000.0, 1500.0)
+                           for d in dates for c in codes], columns=["date", "bjd_code", "lp_night", "lp_day", "lp_eve"])
+    f = aiplus.living_features(living)
+    c, d = codes[0], pd.Timestamp("2025-06-15")
+    lv = living.set_index(["bjd_code", "date"])["lp_night"]
+    want = lv[(c, d - pd.Timedelta(days=7))] / lv.loc[c].loc[d - pd.Timedelta(days=35):d - pd.Timedelta(days=8)].mean()
+    got = f.set_index(["bjd_code", "date"]).loc[(c, d), "lp_night_r"]
+    assert np.isclose(got, want)                                          # d−7 값 ÷ d−35~d−8 평균(누설 없음)
+    params = dict(copy.deepcopy(DEFAULT_PARAMS["energy"]), evaluation_start="2025-09-29",
+                  forecast=dict(DEFAULT_PARAMS["forecast"], train_days=150),
+                  forecast_plus=dict(DEFAULT_PARAMS["forecast_plus"], max_iter=40, importance_rows=2000),
+                  min_calib_peak_kw=1.0)
+    res = aiplus.run_ai_plus(hourly, params, living=living)
+    assert {"생활인구 야간(1주 전·4주 대비)", "생활인구 야간÷주간(1주 전)"} <= set(res["importance"]["특성"])

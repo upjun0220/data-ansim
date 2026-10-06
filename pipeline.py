@@ -795,7 +795,8 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 res = aiplus.run_ai_plus(S["energy_input"][0], dict(P["energy"], forecast=P["forecast"],
                                                                       forecast_plus=P["forecast_plus"],
                                                                       min_calib_peak_kw=P["risk"]["min_calib_peak_kw"]),
-                                         v1, S.get("calib_peak"), temp, visible)
+                                         v1, S.get("calib_peak"), temp, visible,
+                                         aiplus.load_living(paths["living_pop"]) if paths.get("living_pop") else None)
                 png = lambda d: d[d["범위"] == "PNG"]
                 note = ("mae = 평균 절대 오차(kW), skill = 어제값(persistence) 대비 오차 감소율(+ 가 좋음), p90cov = P90 적중률. "
                         "같은 셀(모든 예측이 있는 곳)만 비교. PNG 는 소표본 법정동 제외")

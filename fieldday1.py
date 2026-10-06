@@ -26,7 +26,8 @@ from pipeline import run_day1 as run_pipeline_day1
 
 # 반입 자료 이름(tools/make_import_bundle.py IMPORT_NAMES). 2.csv 는 법정동 마스터 기본값.
 IMPORT_FILES = {"bjd_crosswalk": "3.csv", "emd_centroids": "4.csv", "smp": "5.csv", "access_stations": "6.csv",
-                "ev_history": "7.csv", "hdong_bjd": "8.csv", "weather": "9.csv", "font": "10.ttf"}
+                "ev_history": "7.csv", "hdong_bjd": "8.csv", "weather": "9.csv", "font": "10.ttf",
+                "living_pop": "13.csv"}
 # 같은 이름으로 다시 반입할 수 없어 갱신본은 새 번호를 쓴다 — 있으면 옛 이름보다 먼저 쓴다(2026-10: 2026-05까지 연장).
 UPDATED_FILES = {"smp": ("11.csv",), "weather": ("12.csv",)}
 

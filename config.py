@@ -246,7 +246,7 @@ DEFAULT_INDUSTRY = {
 
 PATH_KEYS = ("bjd_master", "bjd_crosswalk", "emd_centroids", "kepco_001", "kepco_002", "shc001", "shc002",
              "can_m", "kep007", "industry_codes", "out_dir", "kepco_hourly", "smp", "public_evidence",
-             "access_stations", "ev_registration", "font", "weather", "holidays", "ev_history", "hdong_bjd", "dem")
+             "access_stations", "ev_registration", "font", "weather", "holidays", "ev_history", "hdong_bjd", "dem", "living_pop")
 
 
 def _strip_comments(obj):

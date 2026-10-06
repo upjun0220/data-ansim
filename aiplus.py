@@ -24,14 +24,41 @@ from common import log
 KW = ["lag1", "lag2", "lag7", "lag14", "roll7", "baseline", "yday_total", "yday_peak", "wk_peak"]
 # 월·연중 위치는 넣지 않는다: 학습(약 반년) 뒤 검증·평가 기간의 달은 학습에 없던 값이라 나무 모델이 학습기간의 달별 우연한
 # 차이를 그대로 옮긴다(가짜 자료에서 합계 예측이 어제값보다 60% 나빠졌다). 계절은 기온 예보·최근 값·추세로만 반영한다.
-FEATURES = [f"{c}_n" for c in KW] + ["ref_n", "group_lag1_n", "trend", "hour", "dow", "holiday_type", "temp_c"]
+LIVING = ["lp_night_r", "lp_day_r", "lp_eve_r", "lp_mix"]   # 생활인구(13.csv, 선택) — 1주 전 값만(공개가 며칠 늦다)
+FEATURES = [f"{c}_n" for c in KW] + ["ref_n", "group_lag1_n", "trend", "hour", "dow", "holiday_type", "temp_c"] + LIVING
 PEAK_FEATURES = ["yday_peak_n", "wk_peak_n", "base_peak_n", "lag7_peak_n", "yday_total_n", "ref_n", "group_yday_peak_n",
-                 "trend", "dow", "holiday_type", "temp_max"]
+                 "trend", "dow", "holiday_type", "temp_max"] + LIVING
 LABELS = {"lag1_n": "어제 같은 시각", "lag2_n": "2일 전 같은 시각", "lag7_n": "1주 전 같은 시각", "lag14_n": "2주 전 같은 시각",
           "roll7_n": "최근 7일 같은 시각 평균", "baseline_n": "4주 중앙값(기준 모델)", "yday_total_n": "어제 일총량",
           "yday_peak_n": "어제 일피크", "wk_peak_n": "최근 7일 최대 일피크", "ref_n": "기준값", "group_lag1_n": "같은 구 이웃 어제",
           "trend": "추세(7일÷28일)", "hour": "시각", "dow": "요일", "holiday_type": "휴일 유형", "month": "월",
-          "doy_sin": "연중 위치(sin)", "doy_cos": "연중 위치(cos)", "temp_c": "기온 예보"}
+          "doy_sin": "연중 위치(sin)", "doy_cos": "연중 위치(cos)", "temp_c": "기온 예보",
+          "lp_night_r": "생활인구 야간(1주 전·4주 대비)", "lp_day_r": "생활인구 주간(1주 전·4주 대비)",
+          "lp_eve_r": "생활인구 저녁(1주 전·4주 대비)", "lp_mix": "생활인구 야간÷주간(1주 전)"}
+
+
+def load_living(path):
+    """13.csv(서울 생활인구 법정동·일: date, bjd_code, lp_night, lp_day, lp_eve) → 표."""
+    d = pd.read_csv(path, dtype={"bjd_code": str}, encoding="utf-8-sig")
+    return d.assign(date=pd.to_datetime(d["date"]).dt.normalize())
+
+
+def living_features(living, key=lambda c: c):
+    """(코드, 날짜) 생활인구 특성. 날짜 d 에는 d−7일 값만 쓴다(실제 공개가 며칠 늦어 전날 값은 운영에서 못 쓴다).
+    비율 = d−7일 값 ÷ 그 전 28일(d−35~d−8) 평균 — 방학·연휴처럼 동네에 머무는 사람이 평소와 다른지를 본다."""
+    bands = ["lp_night", "lp_day", "lp_eve"]
+    lv = living.assign(code=living["bjd_code"].astype(str).map(key)).groupby(["code", "date"])[bands].sum()
+    days = pd.date_range(lv.index.get_level_values("date").min(), lv.index.get_level_values("date").max() + pd.Timedelta(days=7))
+    out = {}
+    for b in bands:
+        wide = lv[b].unstack("code").reindex(days)
+        out[f"{b}_r"] = wide.shift(7) / wide.shift(8).rolling(28, min_periods=7).mean()
+        out[b] = wide.shift(7)
+    feats = pd.concat({k: v.stack(future_stack=True) for k, v in out.items()}, axis=1)
+    feats.index = feats.index.set_names(["date", "bjd_code"])
+    feats = feats.reset_index()
+    feats["lp_mix"] = feats["lp_night"] / feats["lp_day"]
+    return feats[["bjd_code", "date"] + LIVING].replace([np.inf, -np.inf], np.nan)
 
 
 # ---------------------------------------------------------------- 특성
@@ -154,7 +181,7 @@ def peak_frame(panel):
         return g[col].max().where(g[col].count() == 24)
 
     first = g[["yday_peak_kw", "wk_peak_kw", "yday_total_kw", "level_peak_kw", "trend", "dow", "holiday_type",
-               "group"]].first()
+               "group"] + [c for c in LIVING if c in panel]].first()
     out = first.assign(actual_peak=full_max("actual_kw"), base_peak_kw=full_max("baseline_kw"),
                        lag7_peak_kw=full_max("lag7_kw"))
     if "temp_c" in panel:
@@ -242,7 +269,7 @@ def aggregate_matrices(hourly, key=lambda c: str(c)[:5]):
     return loadforecast._matrices(h)
 
 
-def _hourly_plus(matrices, days, params, temp, group_of, fp):
+def _hourly_plus(matrices, days, params, temp, group_of, fp, living=None):
     train_days, valid_days, eval_days = days
     panel = build_panel(matrices, train_days.append(valid_days).append(eval_days), params["holidays"],
                         int(params["weeks"]), group_of)
@@ -250,6 +277,10 @@ def _hourly_plus(matrices, days, params, temp, group_of, fp):
         panel = panel.merge(temp, on=["date", "hour"], how="left")
     else:
         panel["temp_c"] = np.nan
+    if living is not None:
+        panel = panel.merge(living, on=["bjd_code", "date"], how="left")
+    else:
+        panel[LIVING] = np.nan
     tr, va = panel["date"].isin(train_days), panel["date"].isin(valid_days)
     s = _scale(panel, tr)
     panel = _normalize(panel, KW + ["ref"], s)
@@ -259,14 +290,16 @@ def _hourly_plus(matrices, days, params, temp, group_of, fp):
     return panel.drop(columns=["lag2_kw", "lag14_kw", "roll7_kw"]), model, off, s
 
 
-def run_ai_plus(hourly, params, v1=None, calib_peak=None, temp=None, visible=None):
+def run_ai_plus(hourly, params, v1=None, calib_peak=None, temp=None, visible=None, living=None):
     """8-A+ 전체. params = energy 설정 + forecast + forecast_plus. v1 = 기존 AI 예측(valid·eval 합친 표, q50·q90).
-    temp = (date, hour, temp_c) 기온 예보(마감 이전 발표분) 또는 None. visible = PNG 에 실을 법정동(소표본 제외)."""
+    temp = (date, hour, temp_c) 기온 예보(마감 이전 발표분) 또는 None. visible = PNG 에 실을 법정동(소표본 제외).
+    living = load_living(13.csv) 생활인구 또는 None(그 특성만 빠진다)."""
     fp = params["forecast_plus"]
     matrices = loadforecast._matrices(hourly)
     days = loadforecast.ai_periods(params, matrices)
     train_days, valid_days, eval_days = days
-    panel, model, off, s = _hourly_plus(matrices, days, params, temp, lambda c: str(c)[:5], fp)
+    panel, model, off, s = _hourly_plus(matrices, days, params, temp, lambda c: str(c)[:5], fp,
+                                        living_features(living) if living is not None else None)
     if v1 is not None and len(v1):
         panel = panel.merge(v1[["bjd_code", "date", "hour", "q50", "q90"]].assign(bjd_code=lambda d: d["bjd_code"].astype(str)),
                             on=["bjd_code", "date", "hour"], how="left")
@@ -314,7 +347,8 @@ def run_ai_plus(hourly, params, v1=None, calib_peak=None, temp=None, visible=Non
 
     # 6) 구·서울 합계
     agg = aggregate_matrices(hourly)
-    gpanel, _, _, _ = _hourly_plus(agg, days, params, temp, lambda c: "11", fp)
+    gpanel, _, _, _ = _hourly_plus(agg, days, params, temp, lambda c: "11", fp,
+                                   living_features(living, lambda c: str(c)[:5]) if living is not None else None)
     agg_rows = []
     for period, ds in (("검증", valid_days), ("평가", eval_days)):
         g = gpanel[gpanel["date"].isin(ds)]

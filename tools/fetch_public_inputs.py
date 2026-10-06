@@ -4,6 +4,7 @@
 
 5.csv  전력거래소 EPSIS 시간별 SMP(육지). EPSIS 화면이 쓰는 공개 조회 주소를 월 단위로 부른다.
        EPSIS 의 "1시"는 00:00~01:00 구간이므로 시간 시작 시각(KST)으로 바꿔 timestamp,smp(원/kWh)로 저장한다.
+13.csv 서울 생활인구(OA-14991, 공공누리 1유형) 법정동·일 평균(0~6·9~17·18~23시) — python tools/fetch_public_inputs.py --living 2508-2605 --hdong 8.csv
 9.csv  Open-Meteo(무료·키 없음, CC BY 4.0) — 서울 ASOS 108 지점 좌표(37.5714, 126.9658) 한 점.
        temp_fcst_c  = ECMWF IFS 0.25° 예보모델(ecmwf_ifs025)이 대상 시각 48시간 전에 낸 예보(previous_day2), 빈 시각만
                       JMA(jma_seamless)로 채운다. 기상청 모델(kma_seamless)은 Open-Meteo 에서 2026-04-12 이후가 없어
@@ -108,12 +109,74 @@ def fetch_weather(start, end, models=("ecmwf_ifs025", "jma_seamless")):
     return df[["timestamp", "station_or_grid", "temp_obs_c", "temp_fcst_c", "fcst_issued_at"]]
 
 
+LIVING_URL = "https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do?&useCache=false"
+LIVING_BANDS = {"lp_night": range(0, 7), "lp_day": range(9, 18), "lp_eve": range(18, 24)}
+
+
+def fetch_living_population(yymm, out_dir):
+    """서울 열린데이터광장 OA-14991 행정동 단위 서울 생활인구(내국인) 월별 ZIP(약 45MB) — yymm 예: "2605".
+    공공누리 1유형(출처 표시). 행정동 단위 생산은 2026-07 로 끝났다(이후 250m 격자)."""
+    path = Path(out_dir) / f"LOCAL_PEOPLE_DONG_20{yymm}.zip"
+    if not path.is_file():
+        data = urllib.parse.urlencode({"infId": "OA-14991", "seqNo": "", "seq": yymm, "infSeq": "3"}).encode()
+        req = urllib.request.Request(LIVING_URL, data=data,
+                                     headers={"Referer": "https://data.seoul.go.kr/dataList/OA-14991/S/1/datasetView.do"})
+        with urllib.request.urlopen(req, timeout=600) as resp:
+            path.write_bytes(resp.read())
+    return path
+
+
+def living_population(zips, hdong_bjd):
+    """월별 ZIP → 13.csv 표(date, bjd_code, lp_night·lp_day·lp_eve = 0~6시·9~17시·18~23시 평균 생활인구).
+    행정동(8자리) → 법정동은 8.csv 면적 가중치(행정동마다 합 1)로 나눈다. 반환: (표, 대응 안 된 생활인구 몫)."""
+    import zipfile
+
+    import numpy as np
+
+    w = pd.read_csv(hdong_bjd, dtype=str, encoding="utf-8-sig")
+    w.columns = ["hdong", "bjd", "weight"]
+    w["hdong"], w["weight"] = w["hdong"].str[:8], pd.to_numeric(w["weight"])
+    w["weight"] = w["weight"] / w.groupby("hdong")["weight"].transform("sum")
+    parts, lost, total = [], 0.0, 0.0
+    for z in zips:
+        with zipfile.ZipFile(z) as f:
+            d = pd.read_csv(f.open(f.namelist()[0]), header=None, skiprows=1, usecols=[0, 1, 2, 3],
+                            dtype={0: str, 1: int, 2: str, 3: float}, encoding="latin-1")   # 헤더만 월마다 UTF-8/CP949 — 건너뛰고 숫자 행만 읽는다
+        d.columns = ["date", "hour", "hdong", "pop"]
+        band = pd.Series(np.nan, index=d.index, dtype=object)
+        for name, hours in LIVING_BANDS.items():
+            band[d["hour"].isin(hours)] = name
+        d = d.dropna(subset=["pop"]).assign(band=band).dropna(subset=["band"])
+        day = d.groupby(["date", "hdong", "band"])["pop"].mean().unstack("band").reset_index()
+        m = day.merge(w, on="hdong", how="left")
+        total += float(day[list(LIVING_BANDS)].sum().sum())
+        lost += float(m.loc[m["bjd"].isna(), list(LIVING_BANDS)].sum().sum())
+        m = m.dropna(subset=["bjd"])
+        for c in LIVING_BANDS:
+            m[c] = m[c] * m["weight"]
+        parts.append(m.groupby(["date", "bjd"], as_index=False)[list(LIVING_BANDS)].sum())
+    out = pd.concat(parts, ignore_index=True).rename(columns={"bjd": "bjd_code"})
+    out["date"] = pd.to_datetime(out["date"], format="%Y%m%d").dt.strftime("%Y-%m-%d")
+    return out.sort_values(["date", "bjd_code"]).round(1), (lost / total if total else 0.0)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("start")
-    ap.add_argument("end")
+    ap.add_argument("start", nargs="?")
+    ap.add_argument("end", nargs="?")
     ap.add_argument("--out", default="dist/import")
+    ap.add_argument("--living", help="생활인구 13.csv 만들기: 월 범위 YYMM-YYMM(예 2508-2605). --hdong 8.csv 필요")
+    ap.add_argument("--hdong", help="행정동→법정동 대응표(8.csv)")
     a = ap.parse_args()
+    if a.living:
+        lo, hi = a.living.split("-")
+        months = [m.strftime("%y%m") for m in pd.period_range(f"20{lo[:2]}-{lo[2:]}", f"20{hi[:2]}-{hi[2:]}", freq="M")]
+        Path(a.out).mkdir(parents=True, exist_ok=True)
+        zips = [fetch_living_population(m, a.out) for m in months]
+        lp, lost = living_population(zips, a.hdong)
+        lp.to_csv(Path(a.out) / "13.csv", index=False)
+        print(f"13.csv {len(lp):,}행 {lp['date'].min()}~{lp['date'].max()} · 법정동 {lp['bjd_code'].nunique()} · 대응 안 된 생활인구 {lost:.1%}")
+        return
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     smp = fetch_smp(a.start, a.end)

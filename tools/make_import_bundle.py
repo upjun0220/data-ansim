@@ -41,10 +41,11 @@ IMPORT_NAMES = {
     "10.ttf": "한글 폰트(서버에 없을 때만)",
     "11.csv": "SMP 2024-01~2026-05(5.csv 갱신본 — 같은 이름 재반입 불가)",
     "12.csv": "기온 실측·과거 예보 2024-01~2026-05(9.csv 갱신본, 예보 모델 ECMWF IFS)",
+    "13.csv": "서울 생활인구 법정동·일(OA-14991, 2025-08~2026-05, 0~6·9~17·18~23시 평균) — 8-A+ 특성",
 }
 # 한 폴더 구성에서 설정 경로 → 반입 이름. KEPCO·CAN 은 센터가 주는 원자료라 센터에서 경로를 적는다.
 FLAT_PATHS = {"bjd_master": "2.csv", "bjd_crosswalk": "3.csv", "emd_centroids": "4.csv", "smp": "5.csv",
-              "access_stations": "6.csv", "ev_history": "7.csv", "hdong_bjd": "8.csv", "weather": "9.csv",
+              "access_stations": "6.csv", "ev_history": "7.csv", "hdong_bjd": "8.csv", "weather": "9.csv", "living_pop": "13.csv",
               "holidays": "holidays.txt", "out_dir": "out", "font": None, "ev_registration": None}
 
 
