@@ -5,7 +5,9 @@
 5.csv  전력거래소 EPSIS 시간별 SMP(육지). EPSIS 화면이 쓰는 공개 조회 주소를 월 단위로 부른다.
        EPSIS 의 "1시"는 00:00~01:00 구간이므로 시간 시작 시각(KST)으로 바꿔 timestamp,smp(원/kWh)로 저장한다.
 9.csv  Open-Meteo(무료·키 없음, CC BY 4.0) — 서울 ASOS 108 지점 좌표(37.5714, 126.9658) 한 점.
-       temp_fcst_c  = 기상청(KMA) 예보모델(kma_seamless)이 대상 시각 48시간 전에 낸 예보(previous_day2).
+       temp_fcst_c  = ECMWF IFS 0.25° 예보모델(ecmwf_ifs025)이 대상 시각 48시간 전에 낸 예보(previous_day2), 빈 시각만
+                      JMA(jma_seamless)로 채운다. 기상청 모델(kma_seamless)은 Open-Meteo 에서 2026-04-12 이후가 없어
+                      (2026-10-06 확인) 평가 기간(2026-05)을 못 채우므로, 기간 전체를 한 모델로 맞추려고 바꿨다.
        fcst_issued_at = timestamp − 48시간(보수적 근사). 모든 값이 전날 18:00 마감 이전 발표분이 된다.
        temp_obs_c   = ERA5 재분석 기온(archive API). 기상청 ASOS 관측값이 아니다 — 실측 기온은 "observed" 참고 모델에만 쓴다.
        설계서의 1순위 출처(기상청 ASOS·동네예보 과거자료)는 로그인·API 키가 필요하다. 팀이 그 자료를 확보하면 같은 열로 바꿔 넣는다.
@@ -62,13 +64,16 @@ def fetch_smp(start, end):
     return df
 
 
-def fetch_weather(start, end):
+def fetch_weather(start, end, models=("ecmwf_ifs025", "jma_seamless")):
     q = {**SEOUL, "start_date": start, "end_date": end, "timezone": "Asia/Seoul"}
-    fc = json.loads(_get(PREV_URL + "?" + urllib.parse.urlencode(
-        {**q, "hourly": "temperature_2m_previous_day2", "models": "kma_seamless"}), timeout=180))
+    f = None
+    for model in models:   # 앞 모델이 우선, 빈 시각만 다음 모델로
+        fc = json.loads(_get(PREV_URL + "?" + urllib.parse.urlencode(
+            {**q, "hourly": "temperature_2m_previous_day2", "models": model}), timeout=180))
+        g = pd.Series(fc["hourly"]["temperature_2m_previous_day2"], index=pd.to_datetime(fc["hourly"]["time"]), dtype=float)
+        f = g if f is None else f.combine_first(g)
     ob = json.loads(_get(ARCHIVE_URL + "?" + urllib.parse.urlencode({**q, "hourly": "temperature_2m"}), timeout=180))
-    f = pd.DataFrame({"timestamp": pd.to_datetime(fc["hourly"]["time"]),
-                      "temp_fcst_c": fc["hourly"]["temperature_2m_previous_day2"]})
+    f = pd.DataFrame({"timestamp": f.index, "temp_fcst_c": f.to_numpy()})
     o = pd.DataFrame({"timestamp": pd.to_datetime(ob["hourly"]["time"]), "temp_obs_c": ob["hourly"]["temperature_2m"]})
     df = o.merge(f, on="timestamp", how="outer").sort_values("timestamp")
     df.insert(1, "station_or_grid", STATION)

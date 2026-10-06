@@ -22,7 +22,10 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9]+\.[A-Za-z0-9]+$")
 
 # 이전에 반입했거나 반입 요청한 파일명(2026-09-21 V10 반입). 새 반입에 같은 이름을 쓰지 않는다.
 PREVIOUS_NAMES = {"dataansimbundle.py", "dataansimcodev10.zip", "bjdmaster.csv", "bjdcrosswalk.csv",
-                  "bjdcentroids.csv", "smp.csv", "evstations.csv", "evregistration.csv", "koreanfont.ttf"}
+                  "bjdcentroids.csv", "smp.csv", "evstations.csv", "evregistration.csv", "koreanfont.ttf",
+                  # 9/22 데이터 반입, 이후 코드 반입·신청(같은 이름 재사용 불가)
+                  *(f"{i}.csv" for i in range(2, 10)), "10.ttf", "day1bundle.py",
+                  *(f"day1bundle{i}.py" for i in range(2, 9)), "ansim9.py"}
 
 
 def collect(paths):

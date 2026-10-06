@@ -72,8 +72,13 @@ def years_ahead(base_month, year):
     return (int(year) * 12 + 12 - (y * 12 + m)) / 12
 
 
-def growth_rate(history, base_month, months=36):
-    """법정동별 연평균 증가율. 36개월 전 값이 없거나 0이면 서울 합계 증가율로 대신하고 표시한다."""
+def growth_rate(history, base_month, months=36, min_base=30.0, g_cap=1.0):
+    """법정동별 연평균 증가율. 36개월 전 값이 min_base 대 미만(없음·0 포함)이면 서울 합계 증가율로 대신하고 표시한다.
+
+    실데이터 1차 실행(10/6): 3년 전 1~2대(면적 배분 소수점 포함)였던 동네가 지금 수백 대면 연 증가율이 수백 %가 되고
+    4.5년 거듭제곱으로 서울 2030 합계가 2,764만 대(현재 11.5만)로 터졌다. 작은 기준값은 증가율을 믿을 수 없으므로
+    서울 합계로 대신하고, 남은 값도 연 g_cap(기본 100%)에서 자른다.
+    """
     y, m = (int(v) for v in base_month.split("-"))
     idx = y * 12 + m - 1 - int(months)
     past = f"{idx // 12:04d}-{idx % 12 + 1:02d}"
@@ -82,12 +87,15 @@ def growth_rate(history, base_month, months=36):
     if now.empty:
         raise ValueError(f"기준월 {base_month} 전기차 등록 자료 없음")
     total = (now.sum() / then.sum()) ** (12 / months) - 1 if then.sum() > 0 else np.nan
-    g = (now / then.where(then > 0)) ** (12 / months) - 1
+    g = (now / then.where(then >= float(min_base))) ** (12 / months) - 1
     fallback = g.isna()
     g = g.fillna(total)
-    if fallback.any():
-        log.warning("증가율: %d곳은 %s 값이 없어 서울 합계 증가율 %.3f 사용", int(fallback.sum()), past, total)
-    return pd.DataFrame({"ev_now": now, "g": g, "g_fallback": fallback})
+    capped = g > float(g_cap)
+    g = g.clip(upper=float(g_cap))
+    if fallback.any() or capped.any():
+        log.warning("증가율: %d곳은 %s 값이 %.0f대 미만이라 서울 합계 증가율 %.3f 사용 · %d곳은 연 %.0f%%에서 자름",
+                    int(fallback.sum()), past, float(min_base), total, int(capped.sum()), 100 * float(g_cap))
+    return pd.DataFrame({"ev_now": now, "g": g, "g_fallback": fallback | capped})
 
 
 def project_ev(ev_now, g, k, t):
@@ -156,7 +164,8 @@ def run_scenarios_8f(ev_hist, curves, calib_peak, access, params, energy_params,
     from essoptimizer import policy_target, size_ess
 
     sp = params
-    base = growth_rate(ev_hist, sp["base_month"], int(sp["growth_months"]))
+    base = growth_rate(ev_hist, sp["base_month"], int(sp["growth_months"]), sp.get("min_base_ev", 30.0),
+                       sp.get("g_cap", 1.0))
     codes = sorted(set(base.index) & set(curves) & set(calib_peak.index))
     if len(codes) < 2:
         raise ValueError(f"전기차 이력·대표 부하·교정기간 최대가 모두 있는 법정동 {len(codes)}곳 — 시나리오 불가")
@@ -182,6 +191,9 @@ def run_scenarios_8f(ev_hist, curves, calib_peak, access, params, energy_params,
         notes.append(msg)
     else:
         k["고"] = k_goal
+        if k_goal < k.get("중", 1.0):   # 이름은 '고'인데 추세(중)보다 낮으면 그대로 알린다
+            notes.append(f"목표 기반 시나리오(k={k_goal:.2f})가 추세 연장(중, k={k.get('중', 1.0):.2f})보다 낮음 — "
+                         "현재 서울 증가 속도가 전국 2030 목표가 요구하는 속도보다 빠르다는 뜻")
     betas = [("main", beta["beta"])] + [(f"sens_{b}", b) for b in beta["sensitivity"]]
     chargers = access.set_index(access["bjd_code"].astype(str))["chargers_assigned"] if access is not None \
         and "chargers_assigned" in access else None

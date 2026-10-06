@@ -27,6 +27,16 @@ from pipeline import run_day1 as run_pipeline_day1
 # 반입 자료 이름(tools/make_import_bundle.py IMPORT_NAMES). 2.csv 는 법정동 마스터 기본값.
 IMPORT_FILES = {"bjd_crosswalk": "3.csv", "emd_centroids": "4.csv", "smp": "5.csv", "access_stations": "6.csv",
                 "ev_history": "7.csv", "hdong_bjd": "8.csv", "weather": "9.csv", "font": "10.ttf"}
+# 같은 이름으로 다시 반입할 수 없어 갱신본은 새 번호를 쓴다 — 있으면 옛 이름보다 먼저 쓴다(2026-10: 2026-05까지 연장).
+UPDATED_FILES = {"smp": ("11.csv",), "weather": ("12.csv",)}
+
+
+def _import_name(folder, key):
+    """그 폴더에 있는 이 입력의 반입 파일 이름(갱신본 우선) 또는 None."""
+    for name in UPDATED_FILES.get(key, ()) + (IMPORT_FILES[key],):
+        if (folder / name).is_file():
+            return name
+    return None
 
 
 def run_first_visit(bjd_path, can_path, kepco_001_path=None, kepco_002_path=None, out_dir="day1out"):
@@ -109,7 +119,7 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
         folder = folder.parent
     if not folder.is_dir():
         raise FileNotFoundError(f"반입 자료 폴더를 찾지 못함: {str(import_dir)!r} (현재 작업 폴더: {Path.cwd()})")
-    found = {key: folder / name for key, name in IMPORT_FILES.items() if (folder / name).is_file()}
+    found = {key: folder / name for key in IMPORT_FILES if (name := _import_name(folder, key))}
     bjd = resolve_csv_path(bjd_path or folder / "2.csv", "법정동 마스터")
     kepco = resolve_csv_path(kepco_001_path, "KEPCO_001")
     can = resolve_csv_path(can_path, "TB_TBE_TERMINAL_LOGMOCEAN") if can_path else None
@@ -150,7 +160,7 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
     config_path = output / "fullconfig.json"
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    used = pd.DataFrame([{"입력": key, "반입 이름": IMPORT_FILES.get(key, ""), "사용": key in found}
+    used = pd.DataFrame([{"입력": key, "반입 이름": found[key].name if key in found else IMPORT_FILES[key], "사용": key in found}
                          for key in IMPORT_FILES] +
                         [{"입력": "holidays", "반입 이름": "번들 내장", "사용": paths["holidays"] is not None},
                          {"입력": "can_m", "반입 이름": can_note, "사용": can is not None},

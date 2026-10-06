@@ -90,3 +90,14 @@ def test_scenarios_run_high_skipped_without_goal_and_seoul_check_warns():
 def test_scenario_does_not_use_tree_model():
     import inspect
     assert "loadforecast" not in inspect.getsource(ls) and "predict" not in inspect.getsource(ls.run_scenarios_8f)
+
+
+def test_growth_rate_ignores_tiny_bases_and_caps():
+    """실데이터 1차(10/6): 3년 전 1~2대였던 동네의 증가율이 수백 %가 되어 2030 서울 합계가 2,764만 대로 터졌다."""
+    hist = pd.DataFrame({"bjd_code": list("ABCD") * 2, "ym": ["2023-06"] * 4 + ["2026-06"] * 4,
+                         "ev_count": [100.0, 1.5, 40.0, 50.0, 200.0, 600.0, 400.0, 120.0]})
+    g = ls.growth_rate(hist, "2026-06", 36)
+    total = (1320 / 191.5) ** (1 / 3) - 1                                                  # 서울 합계 연 90%
+    assert g.at["B", "g"] == pytest.approx(total) and g.at["B", "g_fallback"]          # 기준 1.5대 → 서울 합계로
+    assert g.at["A", "g"] == pytest.approx(2 ** (1 / 3) - 1) and not g.at["A", "g_fallback"]
+    assert g.at["C", "g"] == 1.0 and g.at["C", "g_fallback"]                              # 10배/3년 → 연 100% 에서 자름

@@ -38,6 +38,17 @@ CAN_COLUMN_ALIASES = {
 }
 
 
+def charging_flag(values, true_values):
+    """충전중여부 → bool. 숫자 표기(1·1.0·2 등 0이 아닌 값)와 문자 표기(Y·TRUE·충전중 등) 모두 인정한다.
+
+    실데이터 1차 실행(10/6)에서 충전 레코드가 0건으로 잡혀 CAN 단계 전체가 생략됐다 — 문자 '1' 만 인정해서
+    '1.0' 같은 표기를 놓쳤을 가능성이 크다.
+    """
+    s = values.fillna("").astype(str).str.strip()
+    num = pd.to_numeric(s, errors="coerce")
+    return num.gt(0).where(num.notna(), s.str.upper().isin(true_values)).astype(bool)
+
+
 def load_can_m(path, columns, params, nrows=None):
     """CAN 을 청크로 읽는다. 대용량(센터에서 통째로 열면 커널 종료)이라 메모리를 줄인다.
 
@@ -68,7 +79,7 @@ def load_can_m(path, columns, params, nrows=None):
         parts.append(pd.DataFrame({
             "vehicle_id": vid.map(codes).fillna(-1).astype("int32"),
             "time": pd.to_datetime(chunk["time"], errors="coerce"),
-            "charging": chunk["charging"].fillna("").astype(str).str.strip().str.upper().isin(true_values),
+            "charging": charging_flag(chunk["charging"], true_values),
             "soc": to_num(chunk["soc"]).astype("float32"),
             "lat": lat.astype("float32"), "lon": lon.astype("float32"),
         }))
@@ -199,8 +210,11 @@ def build_sessions(can_df, params, mode):
         chg = chg.sort_values(["key", "time"], kind="mergesort")
         dt = chg.groupby("key")["time"].diff().dt.total_seconds() / 60.0
         chg["sid"] = ((dt > gap) | dt.isna()).astype(int).groupby(chg["key"]).cumsum()
-    if chg.empty:
-        return pd.DataFrame(columns=["vehicle_id", "start", "duration_min", "soc_gain", "lat", "lon", "date"])
+    if chg.empty:   # 빈 표도 날짜 열은 날짜형으로(다음 단계의 .dt 가 AttributeError 를 내지 않게)
+        t = pd.Series(dtype="datetime64[ns]")
+        return pd.DataFrame({"vehicle_id": pd.Series(dtype="int32"), "start": t, "end": t, "soc_start": pd.Series(dtype=float),
+                             "soc_end": pd.Series(dtype=float), "lat": pd.Series(dtype=float), "lon": pd.Series(dtype=float),
+                             "duration_min": pd.Series(dtype=float), "soc_gain": pd.Series(dtype=float), "date": t})
     s = chg.groupby(["key", "sid"]).agg(vehicle_id=("vehicle_id", "first"), start=("time", "min"), end=("time", "max"),
                                          soc_start=("soc", "first"), soc_end=("soc", "last"),
                                          lat=("lat", "median"), lon=("lon", "median")).reset_index(drop=True)
@@ -397,6 +411,9 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
     세션 시간대 모양 u(t)(charging_shape)과 반복 충전 위치 비율(공간 반복성 참고)은 그대로 낸다.
     """
     can = load_can_m(path, columns, params)
+    if not can["charging"].any():
+        raise ValueError(f"CAN 충전중 레코드 0건 — 충전중여부 표기가 설정({params['charging_true_values']})과 다름. "
+                         "센터에서 이 열의 값 종류만 확인할 것(원본 행은 적지 않음)")
     verdict, evidence = verify_join_key(can, params)
     evidence = pd.concat([evidence, pd.DataFrame([{"항목": "읽기 범위", "값": can.attrs.get("read_note", "")}])],
                          ignore_index=True)

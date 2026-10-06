@@ -317,8 +317,26 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     if out.duplicated(["bjd_code", "date", "hour"]).any():
         raise ValueError("기준코드 보정 후 시간별 셀 중복 — 합산 전 원천 범위 확인 필요")
     out["kw"] = out.pop("kwh") / 1.0  # 1시간 구간 에너지 / 1h. 순간 최대전력 아님.
+    # 날짜 행 자체가 없는 날: 동네마다 첫 관측일~자료 마지막 날 중 행이 없는 날의 비율(실데이터 1차 실행에서 많은 동네가
+    # 검증 56일 중 하루만 '완전한 날'이었다). 그날이 '사용량 0'이라고 센터에서 확인되면 kepco.fill_missing_days=true 로
+    # 0을 채운다(기본은 채우지 않음 — 결측과 0을 섞지 않는다).
+    last = out["date"].max()
+    first = out.groupby("bjd_code")["date"].min()
+    span = int(((last - first).dt.days + 1).sum())
+    present = int(out.groupby("bjd_code")["date"].nunique().sum())
+    absent_share = 1 - present / span if span else 0.0
+    filled = 0
+    if params.get("fill_missing_days") and absent_share > 0:
+        grid = pd.concat([pd.DataFrame({"bjd_code": c, "date": pd.date_range(d0, last, freq="D")}) for c, d0 in first.items()])
+        grid = grid.merge(pd.DataFrame({"hour": range(24)}), how="cross")
+        have = grid.merge(out[["bjd_code", "date"]].drop_duplicates(), on=["bjd_code", "date"], how="left", indicator=True)
+        add = have.loc[have["_merge"] == "left_only", ["bjd_code", "date", "hour"]].assign(kw=0.0, cust=0.0)
+        filled = len(add) // 24
+        out = pd.concat([out, add], ignore_index=True)
+        log.warning("[KEPCO_hourly] 날짜 행 없는 동네·일 %s개를 사용량 0으로 채움(kepco.fill_missing_days)", f"{filled:,}")
     out = out.sort_values(["bjd_code", "date", "hour"]).reset_index(drop=True)
     out.attrs["missing_hours"], out.attrs["missing_share"] = n_missing, share
+    out.attrs["absent_day_share"], out.attrs["filled_days"] = absent_share, filled
     return out
 
 

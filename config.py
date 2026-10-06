@@ -81,6 +81,8 @@ DEFAULT_PARAMS = {
         "suppress_basis": "max",
         # 8-A 시간별 로더: 결측·마스킹 시간은 0으로 채우지 않고 빼되(그날은 불완전한 날로 빠짐), 비율이 이보다 크면 멈춘다.
         "max_missing_share": 0.2,
+        # 날짜 행이 없는 동네·일을 사용량 0으로 채울지(센터에서 "행 없음 = 0" 확인 후 true). 기본 false — 결측과 0을 섞지 않음
+        "fill_missing_days": False,
     },
     "bjd": {"fail_warn_rate": 0.30},
     "activation": {
@@ -185,6 +187,8 @@ DEFAULT_PARAMS = {
     # DataFact, 원자료 미대조) — 계산에 쓰지 않는 점검용. goal_national·national_base 가 비면 고 시나리오만 생략.
     "scenario": {"base_month": "2026-06", "goal_national": 4_200_000, "national_base": 1_095_218, "seoul_base": 118_967,
                  "years": [2028, 2030], "k": {"저": 0.5, "중": 1.0}, "growth_months": 36, "fuel_value": "전기",
+                 # 증가율: 36개월 전 min_base_ev 대 미만인 동네는 서울 합계 증가율, 연 g_cap 에서 자름(10/6 실데이터 폭주 대응)
+                 "min_base_ev": 30.0, "g_cap": 1.0,
                  "beta_bounds": [0.3, 2.0], "n_boot": 999, "seed": 42},
     "priority": {"enabled": False, "radii_m": [300, 500, 800], "default_radius_m": 500,
                  # v11: axes 기본 ["risk","equity"](급증위험·형평성, 1/2씩). ["safety","equity","economy"]는 레거시

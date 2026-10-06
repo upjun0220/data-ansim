@@ -67,7 +67,12 @@ class StageRunner:
         except Exception as exc:
             elapsed = time.time() - t0
             msg = f"{type(exc).__name__}: {exc}"
-            self.rows.append({"단계": key, "이름": name, "상태": "실패" if critical else "생략", "소요초": elapsed, "비고": msg})
+            # 반출 PNG 에는 오류 전문(원본 값이 섞일 수 있음) 대신 종류와 우리 코드 위치(파일:줄 함수)만 싣는다.
+            here = Path(__file__).resolve().parent
+            ours = [f for f in traceback.extract_tb(exc.__traceback__) if Path(f.filename).resolve().parent == here]
+            where = f"{Path(ours[-1].filename).name}:{ours[-1].lineno} {ours[-1].name}" if ours else ""
+            self.rows.append({"단계": key, "이름": name, "상태": "실패" if critical else "생략", "소요초": elapsed, "비고": msg,
+                              "위치": where})
             if critical:
                 log.error("%s단계 실패 — 파이프라인 중단: %s\n%s", key, msg, traceback.format_exc())
                 raise
@@ -688,10 +693,13 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 S["energy_input"] = (hourly, regions, validation)
                 S["energy_customer_min"] = customer_min
             runner.run("8-A", "기준 모델(4주 중앙값) 검증", stage8a, ISOLATED)
-            if "energy_input" in S and S["energy_input"][0].attrs.get("missing_hours"):
-                h = S["energy_input"][0].attrs
-                runner.rows[-1]["비고"] = (f"시간별 결측·마스킹 {h['missing_hours']:,}시간({h['missing_share']:.2%}) 제외 — "
-                                          "0으로 채우지 않음, 그날은 불완전한 날로 빠짐")
+            if "energy_input" in S:
+                h, note = S["energy_input"][0].attrs, []
+                if h.get("missing_hours"):
+                    note.append(f"시간별 결측·마스킹 {h['missing_hours']:,}시간({h['missing_share']:.2%}) 제외")
+                note.append(f"날짜 행 없는 동네·일 {h.get('absent_day_share', 0):.1%}"
+                            + (f" → {h['filled_days']:,}일을 0으로 채움" if h.get("filled_days") else " (채우지 않음)"))
+                runner.rows[-1]["비고"] = " · ".join(note)
 
             def stage8a_ai():
                 """v11 AI 분위수 예측(모든 서울 법정동) + 증설 0대 급증 위험. 8-C 동네 특성이 없으면 빼고 학습한다."""
@@ -750,8 +758,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
             if runner.rows and runner.rows[-1]["이름"] == "AI 분위수 예측·급증 위험" and "ai" in S:
                 ok, why = loadforecast.ai_improvement(S["ai"]["metrics"], P["forecast"]["min_p90_coverage"])
                 runner.rows[-1]["비고"] = (f"사용 모델 {S['ai']['model_used']} · 기온 {S['ai']['weather_mode']} · "
-                                          f"{'AI 개선' if ok else 'AI 개선 없음(킬 18)'}: {why} · "
-                                          "mock(합성) 자료에서 AI가 기준 모델을 이겨도 성능 근거가 아님")
+                                          f"{'AI 개선' if ok else 'AI 개선 없음(킬 18)'}: {why}")
 
             def stage8b():
                 if "energy_input" not in S:
@@ -1073,8 +1080,10 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
         stages["상권단계"] = "활성" if commerce else "비활성(v11)"
         # PNG 에는 센터 경로·원본 값이 섞일 수 있는 오류 전문과 절대경로를 싣지 않는다(전문은 내부 CSV).
         failed = stages["상태"].isin(["실패", "생략"]) & stages["비고"].notna()
+        where = stages["위치"].fillna("") if "위치" in stages else pd.Series("", index=stages.index)
         stages_png = stages.assign(비고=stages["비고"].where(
-            ~failed, stages["비고"].astype(str).str.split(":").str[0] + " — 상세는 내부 CSV"))
+            ~failed, stages["비고"].astype(str).str.split(":").str[0]
+            + np.where(where.ne(""), " @ " + where, "") + " — 상세는 내부 CSV")).drop(columns="위치", errors="ignore")
         writer.table(stages, "s0_run_summary", "실행 요약 — 단계별 상태", digits=1, png_df=stages_png)
         manifest = writer.manifest_table()
         manifest_png = manifest.assign(경로=[Path(p).name for p in manifest["경로"]])

@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import pytest
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -128,3 +129,34 @@ def test_copy_path_from_server_root_is_found_from_subfolder(tmp_path, monkeypatc
     assert resolve_csv_path("import_data/x.csv") == tmp_path / "import_data" / "x.csv"
     assert read_header("import_data/x.csv")[0] == ["a"]
     assert locate("import_data") == tmp_path / "import_data" and not locate("nope.csv").exists()
+
+
+def test_absent_days_are_reported_and_optionally_zero_filled(tmp_path):
+    """실데이터 1차(10/6): 많은 동네가 검증 56일 중 하루만 완전 — 날짜 행 자체가 없는 날. 진단하고, 옵션으로 0을 채운다."""
+    import mock_data
+    from bjdmapping import load_bjd_master
+    rng = np.random.default_rng(1)
+    reg = mock_data.build_regions(rng)
+    mock_data.write_master(reg, tmp_path / "master.txt")
+    mock_data.write_kepco(reg.iloc[:2], rng, tmp_path / "001.csv", tmp_path / "002.csv", daily_period=("2025-12-01", "2025-12-10"))
+    master = load_bjd_master(tmp_path / "master.txt", DEFAULT_COLUMNS["bjd"])
+    raw = pd.read_csv(tmp_path / "001.csv", encoding="cp949", dtype=str)
+    day = raw["조회기간"].str[:8]
+    second = raw["읍면동"] == raw["읍면동"].unique()[1]
+    raw[~(day.isin(["20251203", "20251207"]) & second)].to_csv(tmp_path / "gap.csv", index=False, encoding="cp949")  # 둘째 동네 이틀 빠짐
+    params = copy.deepcopy(DEFAULT_PARAMS["kepco"])
+    out = kepcoloader.load_kepco_hourly(tmp_path / "gap.csv", DEFAULT_COLUMNS["kepco"], params, master)
+    assert out.attrs["absent_day_share"] == pytest.approx(2 / 20) and out.attrs["filled_days"] == 0
+    filled = kepcoloader.load_kepco_hourly(tmp_path / "gap.csv", DEFAULT_COLUMNS["kepco"], dict(params, fill_missing_days=True), master)
+    assert filled.attrs["filled_days"] == 2 and len(filled) == 2 * 10 * 24
+    assert filled.groupby("bjd_code")["date"].nunique().eq(10).all() and (filled["kw"] >= 0).all()
+
+
+def test_updated_import_names_take_priority(tmp_path):
+    """같은 이름은 다시 반입할 수 없어 2026까지 늘린 SMP·기온은 11.csv·12.csv — 있으면 5.csv·9.csv 대신 쓴다."""
+    import fieldday1
+    for n in ("5.csv", "9.csv", "12.csv"):
+        (tmp_path / n).write_text("x\n", encoding="utf-8")
+    assert fieldday1._import_name(tmp_path, "weather") == "12.csv"
+    assert fieldday1._import_name(tmp_path, "smp") == "5.csv"                 # 11.csv 가 없으면 옛 이름
+    assert fieldday1._import_name(tmp_path, "font") is None

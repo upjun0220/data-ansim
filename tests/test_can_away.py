@@ -82,3 +82,11 @@ def test_soc_flexibility_counts_peak_sessions_and_handles_fraction_scale():
     frac = s.assign(soc_start=s["soc_start"] / 100)
     assert canloader.soc_flexibility(frac, [19], 50.0, min_n=3)[1].attrs["share"] == 0.6
     assert canloader.peak_hours_from(None) == [18, 19, 20, 21]
+
+
+def test_charging_flag_accepts_numeric_and_text_codes():
+    """실데이터 1차(10/6): 충전 레코드 0건 → CAN 단계 AttributeError. '1.0' 같은 숫자 표기도 충전으로 인정한다."""
+    import canloader
+    tv = {"1", "Y", "TRUE", "충전중", "CONNECTED"}
+    s = pd.Series(["1.0", "0.0", "1", "0", "Y", "N", "충전중", "", None, "2"])
+    assert canloader.charging_flag(s, tv).tolist() == [True, False, True, False, True, False, True, False, False, True]
