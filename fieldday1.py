@@ -150,7 +150,7 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
         "columns": columns,
         "params": {
             "stages": {"commerce": False},
-            "kepco": {"source": "001"},
+            "kepco": {"source": "001", "merge_small": True},
             "energy": {"enabled": daily, **({"evaluation_start": start} if daily else {})},
             "priority": {"enabled": True},
             "kill": {"kepco_max_chunks": 3},

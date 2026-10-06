@@ -160,3 +160,33 @@ def test_updated_import_names_take_priority(tmp_path):
     assert fieldday1._import_name(tmp_path, "weather") == "12.csv"
     assert fieldday1._import_name(tmp_path, "smp") == "5.csv"                 # 11.csv 가 없으면 옛 이름
     assert fieldday1._import_name(tmp_path, "font") is None
+
+
+def test_small_units_merge_within_hdong_and_detail_marks_members():
+    import headline
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from detail_from_export import check_page
+
+    cust = pd.Series({"a": 10, "b": 1, "c": 1, "d": 2, "e": 2, "f": 1, "g": 5, "h": 2}, dtype=float)
+    hdong = pd.DataFrame({"hdong_code": ["H1"] * 3 + ["H2"] * 2 + ["H3"] + ["H4"] * 2 + ["H9"],
+                          "bjd_code": list("abcdefgh") + ["b"], "weight": [1.0] * 8 + [0.1]})
+    groups = kepcoloader.small_unit_groups(cust, hdong, 3)
+    # 소표본끼리 모자라면 일반 동(a·g)에, 모이면 그들끼리(d), 혼자 남은 소표본(f)은 그대로
+    assert groups == {"b": "a", "c": "a", "e": "d", "h": "g"}
+    mh = pd.DataFrame({"bjd_code": list("abc"), "mi": 1, "hour": 0, "kwh": [5.0, 1.0, 2.0], "n_days": 30,
+                       "cust_sum": [10.0, 1.0, 1.0], "cust_min": [10.0, 1.0, 1.0], "region_name": "x"})
+    m = kepcoloader.merge_units(mh, groups, ["mi", "hour"], kepcoloader.MH_AGGS)
+    assert m[["bjd_code", "kwh", "cust_min"]].values.tolist() == [["a", 8.0, 12.0]]
+
+    codes = ["1111010100", "1111010200", "1111010300", "1111010400"]
+    pri = pd.DataFrame({"bjd_code": codes, "rank": [1, np.nan, np.nan, 2], "PriorityScore": [0.9, np.nan, np.nan, 0.5],
+                        "risk_raw": [1.2, np.nan, np.nan, 0.8],
+                        "risk_status": ["assessed", "missing", "missing", "assessed"], "robust_top": [True, False, False, False]})
+    g = {codes[1]: codes[0], codes[2]: codes[3]}
+    detail = headline.detail_table(pri, groups=g)
+    assert detail["위험상태"].tolist() == ["A", "G", "G", "A"] and detail["묶음"].tolist() == [codes[0], codes[0], codes[3], codes[3]]
+    cmin = pd.Series({codes[0]: 5.0, codes[3]: 1.0})                      # 대표 0400 은 묶은 뒤에도 소표본
+    (_, png), = headline.detail_pages(detail, cmin, 3, rows=10)
+    assert png["위험상태"].tolist()[:4] == ["A", "G", "G", "S"]
+    body, problems = check_page(png.astype(object).where(png.notna(), "—").astype(str))
+    assert problems == [] and body["묶음"].tolist() == [codes[0], codes[0], codes[3], codes[3]]

@@ -223,7 +223,7 @@ DETAIL_FLOAT_COLS = ["결합점수", "급증위험", "원정충전비율", "경�
 DETAIL_INT_COLS = ["순위", "강건상위", "AI적중일", "실제급증일"]
 
 
-def detail_table(priority, risk=None, base_multiplier=1.2, away=None, slope=None):
+def detail_table(priority, risk=None, base_multiplier=1.2, away=None, slope=None, groups=None):
     """모든 법정동의 안심구역 유래 값만 한 줄씩(법정동 코드 순). 공개자료로 다시 만들 수 있는 값(2SFCA·충전기 1기당 EV·
     최근접 거리·동네 이름)은 싣지 않는다 — 밖에서 equityaccess.public_access 로 같은 값을 다시 계산한다.
 
@@ -247,6 +247,10 @@ def detail_table(priority, risk=None, base_multiplier=1.2, away=None, slope=None
     if slope is not None and len(slope):
         out["경사보정접근성"] = out["bjd_code"].map(slope.assign(bjd_code=slope["bjd_code"].astype(str))
                                               .set_index("bjd_code")["access_2sfca"])
+    if groups:   # v12.1 소표본 묶기: 묶음 열 = 대표 동 코드(대표 자신 포함), 구성원은 위험상태 G(값은 대표 행에)
+        heads = set(groups.values())
+        out["묶음"] = out["bjd_code"].map(groups).where(~out["bjd_code"].isin(heads), out["bjd_code"])
+        out.loc[out["bjd_code"].isin(list(groups)), "위험상태"] = "G"
     return out.sort_values("bjd_code").reset_index(drop=True)
 
 
@@ -258,12 +262,14 @@ def _checksum_row(page, digits):
             row[c] = float(pd.to_numeric(page[c], errors="coerce").round(digits).sum())
         elif c in DETAIL_INT_COLS:
             row[c] = int(pd.to_numeric(page[c], errors="coerce").fillna(0).sum())
+    if "묶음" in page:
+        row["묶음"] = f"Σ{sum(int(c) for c in page['묶음'].dropna())}"
     return row
 
 
 def detail_pages(detail, customer_min, min_count, rows=29, digits=3):
     """(내부 CSV 쪽, 반출 PNG 쪽) 목록. PNG 쪽은 소표본 법정동의 KEPCO 유래 열을 비우고(위험상태 S), 쪽마다 검증 행을 붙인다."""
-    small = detail["bjd_code"].map(customer_min).fillna(0) < int(min_count)
+    small = (detail["bjd_code"].map(customer_min).fillna(0) < int(min_count)) & detail["위험상태"].ne("G")
     png = detail.copy()
     for c in DETAIL_KEPCO_COLS:
         if c in png:

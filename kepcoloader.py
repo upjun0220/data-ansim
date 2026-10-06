@@ -200,6 +200,41 @@ def attach_bjd(agg, master, fail_warn_rate, crosswalk=None):
     return out, rate_table, unmatched, fail_rate
 
 
+def small_unit_groups(cust_rep, hdong, min_n):
+    """소표본 법정동(대표 고객호수 < min_n)을 같은 행정동 안에서 묶는다 → {구성원 코드: 묶음 대표 코드}.
+
+    법정동의 행정동 = 대응표(8.csv) 가중치가 가장 큰 행정동. 같은 행정동의 소표본끼리 합쳐 min_n 이상이면 그들끼리 한 묶음
+    (대표 = 고객호수가 가장 많은 소표본), 모자라면 같은 행정동에서 고객호수가 가장 많은 일반 법정동에 더한다. 일반 법정동도
+    없으면 소표본끼리만 묶는다(묶음이 여전히 min_n 미만이면 계속 가려진다 — 억제 판정은 묶은 뒤 다시 한다).
+    """
+    rep = pd.DataFrame({"bjd_code": cust_rep.index.astype(str), "cust": cust_rep.to_numpy(dtype=float)})
+    home = (hdong.sort_values(["bjd_code", "weight", "hdong_code"], ascending=[True, False, True])
+            .drop_duplicates("bjd_code").set_index("bjd_code")["hdong_code"])
+    rep["hdong"] = rep["bjd_code"].map(home)
+    rep["small"] = rep["cust"] < min_n
+    groups = {}
+    for _, g in rep.dropna(subset=["hdong"]).groupby("hdong"):
+        g = g.sort_values(["cust", "bjd_code"], ascending=[False, True])
+        small, big = g[g["small"]], g[~g["small"]]
+        if small.empty or (len(small) == 1 and big.empty):
+            continue
+        head = small["bjd_code"].iloc[0] if big.empty or small["cust"].sum() >= min_n else big["bjd_code"].iloc[0]
+        groups.update({c: head for c in small["bjd_code"] if c != head})
+    return groups
+
+
+def merge_units(df, groups, keys, aggs):
+    """groups({구성원: 대표}) 대로 bjd_code 를 바꾸고 같은 (대표, keys) 행을 aggs 로 합친다. 고객호수는 서로 다른 동이라 더한다."""
+    if not groups:
+        return df
+    code = df["bjd_code"].astype(str)
+    df = df.assign(bjd_code=code.map(groups).fillna(code))
+    return df.groupby(["bjd_code"] + list(keys), as_index=False, sort=True).agg(aggs)
+
+
+MH_AGGS = {"kwh": "sum", "n_days": "max", "cust_sum": "sum", "cust_min": "sum", "region_name": "first"}
+
+
 def daily_series(mh):
     """법정동×월 일평균 충전량(kWh/일) = Σ_시각 (kWh / 관측일수). 월 길이·결측일 차이를 없앤다."""
     tmp = mh.assign(kwh_per_day=mh["kwh"] / mh["n_days"].where(mh["n_days"] > 0))
@@ -314,6 +349,7 @@ def load_kepco_hourly(path, columns, params, master, crosswalk=None):
     out = out.dropna(subset=["bjd_code"])[["bjd_code", "date", "hour", "kwh", "cust"]]
     if bjdmapping.ANALYSIS_LEVEL == "sigungu":  # 읍면동 시간별 값을 시군구로 합산(부하 kW 는 더해진다)
         out = out.groupby(["bjd_code", "date", "hour"], as_index=False)[["kwh", "cust"]].sum()
+    out = merge_units(out, params.get("merge_groups"), ["date", "hour"], {"kwh": "sum", "cust": "sum"})
     if out.duplicated(["bjd_code", "date", "hour"]).any():
         raise ValueError("기준코드 보정 후 시간별 셀 중복 — 합산 전 원천 범위 확인 필요")
     out["kw"] = out.pop("kwh") / 1.0  # 1시간 구간 에너지 / 1h. 순간 최대전력 아님.

@@ -225,6 +225,22 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     act_p["window"] = kepcoloader.clip_window(act_p["window"], last)
                     log.warning("activation.clip_to_data: 창 끝을 수록 마지막 달로 줄임 → %s", "~".join(act_p["window"]))
             mh, rate, unmatched, fail = kepcoloader.attach_bjd(raw, master, P["bjd"]["fail_warn_rate"], S["crosswalk"])
+            # v12.1 소표본 묶기: 고객호수 < 기준인 법정동을 같은 행정동 안에서 묶어 값을 낼 수 있게 한다(억제 판정은 묶은 뒤 다시).
+            S["merge_groups"] = {}
+            if P["kepco"].get("merge_small") and paths.get("hdong_bjd"):
+                rep = _period_customer_count(mh, "cust_min", P["kepco"].get("suppress_basis", "max"))
+                groups = kepcoloader.small_unit_groups(
+                    rep, loadscenario.load_hdong_bjd(paths["hdong_bjd"], C["hdong_bjd"]), P["can"]["min_cell_count"])
+                mh = kepcoloader.merge_units(mh, groups, ["mi", "hour"], kepcoloader.MH_AGGS)
+                after = _period_customer_count(mh, "cust_min", P["kepco"].get("suppress_basis", "max"))
+                S["merge_groups"] = groups
+                writer.table(pd.DataFrame([
+                    {"항목": "묶기 전 소표본 법정동", "값": int((rep < P["can"]["min_cell_count"]).sum())},
+                    {"항목": "묶인 법정동(대표 제외)", "값": len(groups)},
+                    {"항목": "묶음 수", "값": len(set(groups.values()))},
+                    {"항목": "묶은 뒤 소표본 단위", "값": int((after < P["can"]["min_cell_count"]).sum())}]),
+                    "s0_small_merge", "0단계 소표본 법정동 묶기(같은 행정동 안)",
+                    note="대표 고객호수 기준. 묶음 구성은 동네 상세(9-D) 묶음 열에만 싣는다")
             writer.table(rate, "s0_bjd_match_rate", "0단계 법정동 매칭률 (시도+시군구+읍면동 3단 매칭)",
                          note=f"실패율 {fail:.1%} — {P['bjd']['fail_warn_rate']:.0%} 이상이면 행정동 기준 의심" +
                               (" · KEPCO_002 잠정 결과" if preliminary else ""))
@@ -273,7 +289,8 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 return S["mh"]
             raw = kepcoloader.load_kepco_monthly_hour(paths[f"kepco_{src}"], C["kepco" if src == "001" else "kepco_cpo"],
                                                        P["kepco"], f"KEPCO_{src}")
-            return kepcoloader.attach_bjd(raw, S["master"], P["bjd"]["fail_warn_rate"], S.get("crosswalk"))[0]
+            mh = kepcoloader.attach_bjd(raw, S["master"], P["bjd"]["fail_warn_rate"], S.get("crosswalk"))[0]
+            return kepcoloader.merge_units(mh, S.get("merge_groups"), ["mi", "hour"], kepcoloader.MH_AGGS)
 
         # ------------------------------------------------ 1-C단계 (격리): KEPCO_002 채널 비교(v11, 합산 금지)
         if paths["kepco_002"]:
@@ -649,7 +666,8 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 ep = P["energy"]
                 _warn_energy_calendar(ep)
                 date_start, date_end = _energy_load_window(ep, P["forecast"]["train_days"])
-                hourly_params = dict(P["kepco"], date_start=str(date_start.date()), date_end=str(date_end.date()))
+                hourly_params = dict(P["kepco"], date_start=str(date_start.date()), date_end=str(date_end.date()),
+                                     merge_groups=S.get("merge_groups"))
                 hourly = kepcoloader.load_kepco_hourly(paths["kepco_hourly"] or paths["kepco_001"],
                                                        C["kepco"], hourly_params, S["master"], S.get("crosswalk"))
                 # 공학 평가 대상도 평가 시작 전 교정자료로 고정한다(CATE 크기로 제외하지 않음).
@@ -1052,16 +1070,27 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 if "priority_score" not in S or "energy_customer_min" not in S:
                     raise RuntimeError("8-E 순위 또는 소표본 기준 없음")
                 detail = headline.detail_table(S["priority_score"], S.get("risk"), P["priority"]["base_multiplier"],
-                                               S.get("can", {}).get("away_region_export"), S.get("access_slope"))
+                                               S.get("can", {}).get("away_region_export"), S.get("access_slope"),
+                                               groups=S.get("merge_groups"))
                 pages = headline.detail_pages(detail, S["energy_customer_min"], P["can"]["min_cell_count"],
                                               rows=int(P["outputs"]["png_max_rows"]) - 1)
                 for k, (page_csv, page_png) in enumerate(pages, 1):
                     writer.table(page_csv, f"s9_detail_p{k:02d}", f"9단계 동네 상세 {k}/{len(pages)} — 법정동 코드 순",
                                  digits=3, png_df=page_png,
-                                 note="마지막 Σ행 = 이 쪽 검증 합(옮겨 적은 뒤 대조). 위험상태 A 평가·L 저부하·M 결측·S 소표본(값 가림). "
+                                 note="마지막 Σ행 = 이 쪽 검증 합(옮겨 적은 뒤 대조). 위험상태 A 평가·L 저부하·M 결측·S 소표본(값 가림)·G 묶음 구성원(묶음 열의 대표 동 값). "
                                       "공개자료 값(접근성·충전기·이름)은 밖에서 다시 계산")
                 # 센터 안 태블로 지도용 — 반출 PNG 와 같은 값(소표본 가림, 원본 값 열 없음)만. 좌표는 싣지 않는다:
                 # 태블로에서 공개 중심점(반입 4.csv)과 bjd_code 로 연결한다. 이 파일로 그린 그림만 반출 후보가 된다.
+                # 가림(S) 사유를 건수로만: 고객호수 1~2(묶어도 모자람) 대 KEPCO 자료 자체가 없음(묶을 값 없음)
+                cm = S["energy_customer_min"]
+                hidden = detail["위험상태"].ne("G") & (detail["bjd_code"].map(cm).fillna(0) < P["can"]["min_cell_count"])
+                no_data = hidden & ~detail["bjd_code"].isin(cm.index.astype(str))
+                writer.table(pd.DataFrame([
+                    {"구분": "평가·저부하 등(값 있음)", "법정동 수": int((~hidden & detail["위험상태"].ne("G")).sum())},
+                    {"구분": "묶음 구성원(G)", "법정동 수": int(detail["위험상태"].eq("G").sum())},
+                    {"구분": "가림 — 고객호수 기준 미만", "법정동 수": int((hidden & ~no_data).sum())},
+                    {"구분": "가림 — KEPCO 자료 없음", "법정동 수": int(no_data.sum())}]),
+                    "s9_detail_status", "9-D 동네 상세 상태별 법정동 수", note="건수만. 동네 목록은 싣지 않는다")
                 tableau = pd.concat([png.iloc[:-1] for _, png in pages], ignore_index=True)
                 tableau.to_csv(writer.csv_dir / "s9_detail_tableau.csv", index=False, encoding="utf-8-sig")
                 S["detail_pages"] = len(pages)

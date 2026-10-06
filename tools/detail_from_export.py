@@ -54,6 +54,10 @@ def check_page(page, digits=3):
             tol = 1.0 if abs(exp) >= 1000 else 10 ** -digits * len(body) / 2 + 1e-9   # 1000 이상은 정수로 보인다
             if abs(got - exp) > tol:
                 problems.append(f"{c} 합 {got:.{digits}f} ≠ {exp}")
+    if "묶음" in body:   # v12.1 소표본 묶기 — 대표 동 코드(빈 칸 = 묶음 아님)
+        body["묶음"] = body["묶음"].astype(str).str.strip().replace({"": np.nan, "—": np.nan, "nan": np.nan})
+        if sum(int(c) for c in body["묶음"].dropna()) != int(str(tail["묶음"]).lstrip("Σ").replace(",", "") or 0):
+            problems.append("묶음 코드 합 불일치")
     for c in headline.DETAIL_FLOAT_COLS + headline.DETAIL_INT_COLS:
         if c in body:
             body[c] = _num(body[c])
@@ -105,6 +109,12 @@ def app_table(detail, access, master, cent, scale="percentile"):
                           "nearest_charger_km"]], on="bjd_code", how="left")
     out.insert(1, "법정동", out["bjd_code"].map(names))
     out["급증위험_정규화"] = SCALERS[scale](out["급증위험"])   # 가려진 동네를 뺀 근사(표시용)
+    if "묶음" in out:   # 묶음 구성원(G)은 대표 동의 안심구역 값을 쓴다(형평성은 자기 공개 값 그대로)
+        g = out["위험상태"].eq("G") & out["묶음"].notna()
+        head = out.set_index("bjd_code")
+        for col in headline.DETAIL_KEPCO_COLS + ["급증위험_정규화"]:
+            if col in out:
+                out.loc[g, col] = out.loc[g, "묶음"].map(head[col])
     out["권고(초안)"] = [headline.recommend(r, e) if pd.notna(r) and pd.notna(e) else "—"
                        for r, e in zip(out["급증위험_정규화"], out["equity_norm"])]
     c = cent.assign(bjd_code=cent["bjd_code"].astype(str)).set_index("bjd_code")

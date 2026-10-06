@@ -83,6 +83,9 @@ DEFAULT_PARAMS = {
         "max_missing_share": 0.2,
         # 날짜 행이 없는 동네·일을 사용량 0으로 채울지(센터에서 "행 없음 = 0" 확인 후 true). 기본 false — 결측과 0을 섞지 않음
         "fill_missing_days": False,
+        # v12.1 소표본 법정동(대표 고객호수 < min_cell_count)을 같은 행정동 안에서 묶어 값을 낸다(paths.hdong_bjd 필요).
+        # 1차 실데이터에서 서울 법정동 20%(주로 종로·중구 도심)가 가려졌다. 현장 실행기 run_full 은 켠다.
+        "merge_small": False,
     },
     "bjd": {"fail_warn_rate": 0.30},
     "activation": {
