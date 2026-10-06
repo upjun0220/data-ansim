@@ -158,9 +158,10 @@ def test_absent_days_are_reported_and_optionally_zero_filled(tmp_path):
 def test_updated_import_names_take_priority(tmp_path):
     """같은 이름은 다시 반입할 수 없어 2026까지 늘린 SMP·기온은 11.csv·12.csv — 있으면 5.csv·9.csv 대신 쓴다."""
     import fieldday1
-    for n in ("5.csv", "9.csv", "12.csv"):
+    for n in ("5.csv", "9.csv", "12.csv", "6.csv", "14.csv"):
         (tmp_path / n).write_text("x\n", encoding="utf-8")
     assert fieldday1._import_name(tmp_path, "weather") == "12.csv"
+    assert fieldday1._import_name(tmp_path, "access_stations") == "14.csv"   # 2026-10 공용 충전소가 2022-10 보다 먼저
     assert fieldday1._import_name(tmp_path, "smp") == "5.csv"                 # 11.csv 가 없으면 옛 이름
     assert fieldday1._import_name(tmp_path, "font") is None
 

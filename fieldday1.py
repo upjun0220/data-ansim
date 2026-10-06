@@ -29,7 +29,7 @@ IMPORT_FILES = {"bjd_crosswalk": "3.csv", "emd_centroids": "4.csv", "smp": "5.cs
                 "ev_history": "7.csv", "hdong_bjd": "8.csv", "weather": "9.csv", "font": "10.ttf",
                 "living_pop": "13.csv"}
 # 같은 이름으로 다시 반입할 수 없어 갱신본은 새 번호를 쓴다 — 있으면 옛 이름보다 먼저 쓴다(2026-10: 2026-05까지 연장).
-UPDATED_FILES = {"smp": ("11.csv",), "weather": ("12.csv",)}
+UPDATED_FILES = {"smp": ("11.csv",), "weather": ("12.csv",), "access_stations": ("14.csv",)}
 
 
 def _import_name(folder, key):

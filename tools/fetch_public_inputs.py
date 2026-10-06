@@ -4,6 +4,7 @@
 
 5.csv  전력거래소 EPSIS 시간별 SMP(육지). EPSIS 화면이 쓰는 공개 조회 주소를 월 단위로 부른다.
        EPSIS 의 "1시"는 00:00~01:00 구간이므로 시간 시작 시각(KST)으로 바꿔 timestamp,smp(원/kWh)로 저장한다.
+14.csv 서울 공용 충전소(환경공단 충전소 정보 API, 이용자 제한·삭제 제외) — python tools/fetch_public_inputs.py --chargers
 13.csv 서울 생활인구(OA-14991, 공공누리 1유형) 법정동·일 평균(0~6·9~17·18~23시) — python tools/fetch_public_inputs.py --living 2508-2605 --hdong 8.csv
 9.csv  Open-Meteo(무료·키 없음, CC BY 4.0) — 서울 ASOS 108 지점 좌표(37.5714, 126.9658) 한 점.
        temp_fcst_c  = ECMWF IFS 0.25° 예보모델(ecmwf_ifs025)이 대상 시각 48시간 전에 낸 예보(previous_day2), 빈 시각만
@@ -160,6 +161,51 @@ def living_population(zips, hdong_bjd):
     return out.sort_values(["date", "bjd_code"]).round(1), (lost / total if total else 0.0)
 
 
+CHARGER_URL = "https://apis.data.go.kr/B552584/EvCharger/getChargerInfo"
+
+
+def _data_go_kr_key():
+    """공공데이터포털 인증키 — 환경변수 DATA_GO_KR_KEY(Windows 는 setx 로 저장한 사용자 환경변수도 읽는다). 출력·저장하지 않는다."""
+    import os
+    import sys
+
+    k = os.environ.get("DATA_GO_KR_KEY")
+    if not k and sys.platform == "win32":
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as h:
+            try:
+                k = winreg.QueryValueEx(h, "DATA_GO_KR_KEY")[0]
+            except FileNotFoundError:
+                k = None
+    if not k:
+        raise SystemExit("DATA_GO_KR_KEY 없음 — 공공데이터포털 인증키를 환경변수로 저장할 것")
+    return k
+
+
+def fetch_chargers(zcode="11", rows=9999):
+    """한국환경공단 전기자동차 충전소 정보 API(공공데이터포털 15076352, 실시간 갱신) — 시도(zcode) 충전기 전체(충전기 한 줄)."""
+    key, items, page = _data_go_kr_key(), [], 1
+    while True:
+        q = urllib.parse.urlencode({"serviceKey": key, "pageNo": page, "numOfRows": rows, "zcode": zcode, "dataType": "JSON"})
+        body = json.loads(_get(CHARGER_URL + "?" + q, timeout=120))
+        got = body["items"]["item"] if body.get("items") else []
+        items += got
+        if not got or len(items) >= int(body.get("totalCount", 0)):
+            return pd.DataFrame(items)
+        page += 1
+
+
+def charger_stations(chargers, public_only=True):
+    """충전기 표 → 14.csv(6.csv 와 같은 열: 위도·경도·충전기수). 삭제된 충전기는 빼고, public_only 면 이용자 제한
+    충전기(아파트 입주민 전용 등, limitYn=Y)도 뺀다 — 2SFCA 는 누구나 쓸 수 있는 공용 충전기 접근성이다."""
+    c = chargers[chargers["delYn"].ne("Y")]
+    if public_only:
+        c = c[c["limitYn"].ne("Y")]
+    c = c.assign(lat=pd.to_numeric(c["lat"], errors="coerce"), lng=pd.to_numeric(c["lng"], errors="coerce")).dropna(subset=["lat", "lng"])
+    st = c.groupby("statId").agg(위도=("lat", "first"), 경도=("lng", "first"), 충전기수=("chgerId", "size")).reset_index(drop=True)
+    return st.round({"위도": 6, "경도": 6})
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("start", nargs="?")
@@ -167,7 +213,18 @@ def main():
     ap.add_argument("--out", default="dist/import")
     ap.add_argument("--living", help="생활인구 13.csv 만들기: 월 범위 YYMM-YYMM(예 2508-2605). --hdong 8.csv 필요")
     ap.add_argument("--hdong", help="행정동→법정동 대응표(8.csv)")
+    ap.add_argument("--chargers", action="store_true", help="서울 공용 충전소 14.csv(공공데이터포털 인증키 DATA_GO_KR_KEY)")
     a = ap.parse_args()
+    if a.chargers:
+        Path(a.out).mkdir(parents=True, exist_ok=True)
+        ch = fetch_chargers()
+        ch.to_csv(Path(a.out) / "chargers_raw_seoul.csv", index=False, encoding="utf-8-sig")   # 밖에서 검토용(반입 안 함)
+        st = charger_stations(ch)
+        st.to_csv(Path(a.out) / "14.csv", index=False, encoding="utf-8-sig")
+        live = ch["delYn"].ne("Y")
+        print(f"충전기 {int(live.sum()):,}기(삭제 제외) · 이용자 제한 {int((live & ch['limitYn'].eq('Y')).sum()):,}기 · "
+              f"14.csv 공용 {int(st['충전기수'].sum()):,}기 / {len(st):,}곳")
+        return
     if a.living:
         lo, hi = a.living.split("-")
         months = [m.strftime("%y%m") for m in pd.period_range(f"20{lo[:2]}-{lo[2:]}", f"20{hi[:2]}-{hi[2:]}", freq="M")]
