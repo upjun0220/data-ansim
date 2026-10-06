@@ -218,12 +218,12 @@ def story_table(head, sim=None, can_check=None, dem_check=None):
 
 # ================================================================ 동네 상세(전체 색칠 지도·웹 화면용 반출)
 
-DETAIL_KEPCO_COLS = ["순위", "결합점수", "급증위험", "강건상위", "AI적중일", "실제급증일"]   # 소표본이면 가리는 열
+DETAIL_KEPCO_COLS = ["순위", "결합점수", "급증위험", "강건상위", "AI적중일", "실제급증일", "충전유형"]   # 소표본이면 가리는 열
 DETAIL_FLOAT_COLS = ["결합점수", "급증위험", "원정충전비율", "경사보정접근성"]
-DETAIL_INT_COLS = ["순위", "강건상위", "AI적중일", "실제급증일"]
+DETAIL_INT_COLS = ["순위", "강건상위", "AI적중일", "실제급증일", "충전유형"]
 
 
-def detail_table(priority, risk=None, base_multiplier=1.2, away=None, slope=None, groups=None):
+def detail_table(priority, risk=None, base_multiplier=1.2, away=None, slope=None, groups=None, types=None):
     """모든 법정동의 안심구역 유래 값만 한 줄씩(법정동 코드 순). 공개자료로 다시 만들 수 있는 값(2SFCA·충전기 1기당 EV·
     최근접 거리·동네 이름)은 싣지 않는다 — 밖에서 equityaccess.public_access 로 같은 값을 다시 계산한다.
 
@@ -247,6 +247,8 @@ def detail_table(priority, risk=None, base_multiplier=1.2, away=None, slope=None
     if slope is not None and len(slope):
         out["경사보정접근성"] = out["bjd_code"].map(slope.assign(bjd_code=slope["bjd_code"].astype(str))
                                               .set_index("bjd_code")["access_2sfca"])
+    if types is not None and len(types):   # v12.1 8-A+ 충전 생활 유형 번호(s8a_plus_types 표의 유형)
+        out["충전유형"] = out["bjd_code"].map(types.rename(index=str)).astype("Int64")
     if groups:   # v12.1 소표본 묶기: 묶음 열 = 대표 동 코드(대표 자신 포함), 구성원은 위험상태 G(값은 대표 행에)
         heads = set(groups.values())
         out["묶음"] = out["bjd_code"].map(groups).where(~out["bjd_code"].isin(heads), out["bjd_code"])

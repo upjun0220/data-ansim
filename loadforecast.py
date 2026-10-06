@@ -359,6 +359,20 @@ def risk_summary(risk):
     return pd.DataFrame(rows)
 
 
+def ai_periods(params, matrices):
+    """(학습일, 검증일, 평가일) — 시간 순으로 겹치지 않는다. 8-A AI 와 8-A+ 가 같은 기간을 쓰도록 한 곳에서 정한다."""
+    start = pd.Timestamp(params["evaluation_start"]).normalize()
+    valid_start = start - pd.Timedelta(days=7 * int(params["holdout_weeks"]))
+    train_start = valid_start - pd.Timedelta(days=int(params["forecast"]["train_days"]))
+    first = min(m.index.min() for m in matrices.values())
+    train_days = pd.date_range(max(train_start, first + pd.Timedelta(days=7 * int(params["weeks"]))),
+                               valid_start - pd.Timedelta(days=1))
+    if len(train_days) < 14:
+        raise ValueError(f"AI 학습일 {len(train_days)}일 — 14일 미만(시간별 이력 부족)")
+    return (train_days, pd.date_range(valid_start, start - pd.Timedelta(days=1)),
+            pd.date_range(start, periods=int(params["evaluation_days"]), freq="D"))
+
+
 def run_ai_forecast(hourly, params, holidays=None, region_feats=None, weather=None, station_map=None,
                     weather_mode="none", cutoff="18:00"):
     """학습 → (평가 시작 전 holdout_weeks) 검증 → 평가일 예측. 세 기간은 시간 순으로 겹치지 않는다.
@@ -367,17 +381,8 @@ def run_ai_forecast(hourly, params, holidays=None, region_feats=None, weather=No
     학습해 지표만 나란히 낸다(발표 숫자·경보에는 쓰지 않음).
     """
     fp = params["forecast"]
-    start = pd.Timestamp(params["evaluation_start"]).normalize()
-    valid_start = start - pd.Timedelta(days=7 * int(params["holdout_weeks"]))
-    train_start = valid_start - pd.Timedelta(days=int(fp["train_days"]))
-    eval_days = pd.date_range(start, periods=int(params["evaluation_days"]), freq="D")
     matrices = _matrices(hourly)
-    first = min(m.index.min() for m in matrices.values())
-    train_days = pd.date_range(max(train_start, first + pd.Timedelta(days=7 * int(params["weeks"]))),
-                               valid_start - pd.Timedelta(days=1))
-    valid_days = pd.date_range(valid_start, start - pd.Timedelta(days=1))
-    if len(train_days) < 14:
-        raise ValueError(f"AI 학습일 {len(train_days)}일 — 14일 미만(시간별 이력 부족)")
+    train_days, valid_days, eval_days = ai_periods(params, matrices)
     feats = build_features(matrices, train_days.append(valid_days).append(eval_days), holidays, int(params["weeks"]))
     train_mask = feats["date"].isin(train_days)
     feats = feats.merge(feats[train_mask].groupby("bjd_code")["actual_kw"].mean().rename("train_mean_kw"),

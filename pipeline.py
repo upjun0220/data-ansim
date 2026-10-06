@@ -35,6 +35,7 @@ import headline
 import heterogeneity
 import identification
 import kep007loader
+import aiplus
 import kepcoloader
 import loadaxis
 import loadforecast
@@ -771,12 +772,57 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 writer.table(summary, "s8a_risk_summary", "8-A 급증 경보 정밀도·재현율(AI 대 기준 모델, 상한 배율별)",
                              png_df=loadforecast.risk_summary(risk[risk["bjd_code"].isin(visible)]), digits=3,
                              note="법정동·일 합산(micro). PNG는 소표본 법정동 제외. 기준 모델 실패일은 비교에서 제외(n_excluded_days)")
-                S.update(ai=ai, risk=risk, risk_summary=summary, calib_peak=calib_peak)
+                S.update(ai=ai, risk=risk, risk_summary=summary, calib_peak=calib_peak, ai_weather=(station_map, mode))
             runner.run("8-A", "AI 분위수 예측·급증 위험", stage8a_ai, ISOLATED)
             if runner.rows and runner.rows[-1]["이름"] == "AI 분위수 예측·급증 위험" and "ai" in S:
                 ok, why = loadforecast.ai_improvement(S["ai"]["metrics"], P["forecast"]["min_p90_coverage"])
                 runner.rows[-1]["비고"] = (f"사용 모델 {S['ai']['model_used']} · 기온 {S['ai']['weather_mode']} · "
                                           f"{'AI 개선' if ok else 'AI 개선 없음(킬 18)'}: {why}")
+
+            def stage8a_plus():
+                """v12.1 AI 강화 — 기존 AI 와 같은 기간·동네에서 어제값 위 보정·일피크·구/서울 합계·컨포멀·중요도·충전 유형을 비교."""
+                if "energy_input" not in S:
+                    raise RuntimeError("8-A 시간별 원자료 없음")
+                station_map, mode = S.get("ai_weather", (None, "none"))
+                temp = None
+                if mode == "forecast" and station_map is not None and S.get("weather") is not None:
+                    t = loadforecast.temperature_feature(S["weather"], mode, station_map, P["weather"]["fcst_cutoff"])
+                    temp = t.groupby(["date", "hour"], as_index=False)["temp_c"].mean()
+                v1 = (pd.concat([S["ai"]["valid"], S["ai"]["eval"]], ignore_index=True)
+                      if "ai" in S and S["ai"]["model_used"] in ("lightgbm", "sklearn") else None)
+                cm, min_count = S["energy_customer_min"], int(P["can"]["min_cell_count"])
+                visible = set(cm[cm >= min_count].index.astype(str))
+                res = aiplus.run_ai_plus(S["energy_input"][0], dict(P["energy"], forecast=P["forecast"],
+                                                                      forecast_plus=P["forecast_plus"],
+                                                                      min_calib_peak_kw=P["risk"]["min_calib_peak_kw"]),
+                                         v1, S.get("calib_peak"), temp, visible)
+                png = lambda d: d[d["범위"] == "PNG"]
+                note = ("mae = 평균 절대 오차(kW), skill = 어제값(persistence) 대비 오차 감소율(+ 가 좋음), p90cov = P90 적중률. "
+                        "같은 셀(모든 예측이 있는 곳)만 비교. PNG 는 소표본 법정동 제외")
+                writer.table(res["hourly"], "s8a_plus_hourly", "8-A+ 시간별 예측 — 어제값·기준 모델·기존 AI·AI+(어제값 위 보정)",
+                             png_df=png(res["hourly"]), digits=3, note=note)
+                writer.table(res["peak"], "s8a_plus_peak", "8-A+ 다음날 동네 최대부하(일피크) 예측",
+                             png_df=png(res["peak"]), digits=3, note=note)
+                if res["alerts"] is not None:
+                    writer.table(res["alerts"]["전체"], "s8a_plus_alerts",
+                                 "8-A+ 급증 경보 비교 — 하루 한 번 판단(일피크 P90·컨포멀 보정) 대 기존 방식",
+                                 png_df=res["alerts"]["PNG"], digits=3,
+                                 note="급증 = 그날 실측 피크 > 교정기간 최대 × 배율. 같은 법정동·일(모든 방법 예측과 24시간 실측이 있는 날)")
+                writer.table(res["agg"], "s8a_plus_agg", "8-A+ 구·서울 합계 예측 — 합친 부하에서의 AI 효과", digits=3,
+                             note="구 = 시군구 코드 5자리 합. 그 시각 행이 없는 동네는 0으로 더함(행 없음 = 사용 0 가정)")
+                writer.table(res["importance"], "s8a_plus_importance", "8-A+ 순열 중요도 — 무엇이 예측을 움직이나(검증기간)",
+                             digits=4, note="특성 하나를 섞었을 때 오차(규모로 나눈 잔차 MAE)가 늘어난 양")
+                writer.figure(plot_bar(res["importance"].head(12), "특성", "비중", "8-A+ 순열 중요도(상위 12)", "비중"),
+                              "s8a_plus_importance_bar")
+                if len(res["type_table"]):
+                    writer.table(res["type_table"], "s8a_plus_types", "8-A+ 충전 생활 유형(24시간 충전 모양 K-평균)", digits=3,
+                                 note=f"학습기간 평균 모양(합 1). 그림은 동네 {min_count}곳 이상인 유형만. 동네별 유형은 동네 상세(9-D) 충전유형 열")
+                    writer.figure(aiplus.plot_types(res["type_centers"], res["type_table"], min_count), "s8a_plus_types_plot")
+                S["ai_plus"], S["charge_types"] = res, res["types"]
+            if P["forecast_plus"].get("enabled", True):
+                runner.run("8-A+", "AI 강화(어제값 위 보정·일피크·합계·유형)", stage8a_plus, ISOLATED)
+                if runner.rows and runner.rows[-1]["단계"] == "8-A+" and "ai_plus" in S:
+                    runner.rows[-1]["비고"] = S["ai_plus"]["note"]
 
             def stage8b():
                 if "energy_input" not in S:
@@ -1071,7 +1117,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     raise RuntimeError("8-E 순위 또는 소표본 기준 없음")
                 detail = headline.detail_table(S["priority_score"], S.get("risk"), P["priority"]["base_multiplier"],
                                                S.get("can", {}).get("away_region_export"), S.get("access_slope"),
-                                               groups=S.get("merge_groups"))
+                                               groups=S.get("merge_groups"), types=S.get("charge_types"))
                 pages = headline.detail_pages(detail, S["energy_customer_min"], P["can"]["min_cell_count"],
                                               rows=int(P["outputs"]["png_max_rows"]) - 1)
                 for k, (page_csv, page_png) in enumerate(pages, 1):

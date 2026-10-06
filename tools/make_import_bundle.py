@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = ["bjdmapping", "canloader", "common", "config", "demloader", "diagnostics", "equityaccess", "essoptimizer", "headline",
+MODULES = ["aiplus", "bjdmapping", "canloader", "common", "config", "demloader", "diagnostics", "equityaccess", "essoptimizer", "headline",
            "heterogeneity", "identification", "kep007loader", "kepcoloader", "killcriteria", "loadaxis", "loadforecast",
            "outputs", "pipeline", "priorityscore", "weatherloader", "loadscenario"]
 # 원본 → 반입 이름(.txt). fieldtemplate.txt 는 flat_template() 이 한 폴더용으로 만든다.

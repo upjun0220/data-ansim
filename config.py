@@ -178,6 +178,10 @@ DEFAULT_PARAMS = {
     "forecast": {"model": "auto", "quantiles": [0.5, 0.9], "train_days": 182, "random_state": 42, "cv_folds": 3,
                  "max_iter": 100, "min_p90_coverage": 0.8,
                  "grid": {"learning_rate": [0.05, 0.1], "max_leaf_nodes": [15, 31], "min_samples_leaf": [20, 60]}},
+    # v12.1 8-A+ AI 강화(기존 8-A 와 나란히 비교): 어제값 위 잔차 보정·일피크 예측·구/서울 합계·컨포멀·순열 중요도·충전 유형 군집.
+    # 하이퍼파라미터는 고정(격자 탐색 없음 — 서울 규모 실행 시간). coverage = 컨포멀 P90 목표 적중률.
+    "forecast_plus": {"enabled": True, "max_iter": 200, "learning_rate": 0.05, "max_leaf_nodes": 31, "min_samples_leaf": 40,
+                      "coverage": 0.9, "importance_rows": 20000, "n_types": 4},
     # v11.3 급증 위험: 교정기간 최대 부하가 이 값(kW) 미만이면 not_assessed_low_load(배율 상한이 무의미하게 작음).
     "risk": {"min_calib_peak_kw": 1.0},
     # v11 9-H: 숫자 3(a) "현재 급증 위험 동네" 기준 — 평가일 중 경보일 비율이 이 값 이상(0.1 = 10일에 하루). 팀 확정 대상.
