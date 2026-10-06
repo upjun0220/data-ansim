@@ -90,3 +90,20 @@ def test_charging_flag_accepts_numeric_and_text_codes():
     tv = {"1", "Y", "TRUE", "충전중", "CONNECTED"}
     s = pd.Series(["1.0", "0.0", "1", "0", "Y", "N", "충전중", "", None, "2"])
     assert canloader.charging_flag(s, tv).tolist() == [True, False, True, False, True, False, True, False, False, True]
+
+
+def test_can_reads_random_vehicles_not_file_head_when_over_max_rows(tmp_path):
+    import copy
+    from config import DEFAULT_COLUMNS, DEFAULT_PARAMS
+    rows = [{"발생시간": f"2023-01-01 00:{m:02d}:00", "차종_식별번호": f"V{v:02d}", "충전중여부": 0,
+             "배터리상태_SOC": 50, "위도": 37.5, "경도": 127.0} for v in range(20) for m in range(10)]   # 차량 순 정렬
+    path = tmp_path / "can.csv"
+    pd.DataFrame(rows).to_csv(path, index=False, encoding="utf-8-sig")
+    params = copy.deepcopy(DEFAULT_PARAMS["can"]) | {"max_rows": 50, "chunksize": 37}
+    cols = {"can_m": {k: v[0] for k, v in canloader.CAN_COLUMN_ALIASES.items()}}
+    df = canloader.load_can_m(path, cols, params)
+    per = df.groupby("vehicle_id").size()
+    assert len(per) == 5 and (per == 10).all()                       # 차량 5대를 통째로(앞부분 50행이면 V00~V04)
+    assert "무작위 표본" in df.attrs["read_note"] and "5/20대" in df.attrs["read_note"]
+    head = canloader.load_can_m(path, cols, params | {"sample_by_vehicle": False})
+    assert head.attrs["read_note"].endswith("(앞부분 표본)") and len(head) == 50

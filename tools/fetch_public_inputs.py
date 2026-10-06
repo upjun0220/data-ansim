@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -62,6 +64,31 @@ def fetch_smp(start, end):
                                          "selKind": "land", "locale": ""}))
     df = pd.DataFrame(rows, columns=["timestamp", "smp"]).drop_duplicates("timestamp").sort_values("timestamp")
     return df
+
+
+ELEV_URL = "https://api.open-meteo.com/v1/elevation"
+
+
+def fetch_elevation(lat, lon, batch=100):
+    """Open-Meteo 표고(Copernicus DEM GLO-90, 약 90m 격자, CC BY 4.0) — 점마다 표고(m). 한 번에 100점.
+    v12.1: 지형 보정(8-C 경사 반영 2SFCA)은 공개 좌표만 쓰므로 센터 LX DEM 대신 센터 밖에서 이 값으로 계산한다."""
+    out = []
+    for i in range(0, len(lat), batch):
+        q = {"latitude": ",".join(f"{v:.5f}" for v in lat[i:i + batch]),
+             "longitude": ",".join(f"{v:.5f}" for v in lon[i:i + batch])}
+        if i:
+            time.sleep(11)   # 무료 API 는 좌표 하나를 호출 하나로 센다 — 분당 600개 이내로
+        for wait in (0, 61, 61, 121, 121):   # 그래도 호출 제한(429)이면 기다렸다 다시
+            time.sleep(wait)
+            try:
+                out += json.loads(_get(ELEV_URL + "?" + urllib.parse.urlencode(q)))["elevation"]
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429:
+                    raise
+        else:
+            raise RuntimeError("Open-Meteo 표고 호출 제한 — 잠시 뒤 다시(받은 만큼은 캐시에 남음)")
+    return out
 
 
 def fetch_weather(start, end, models=("ecmwf_ifs025", "jma_seamless")):

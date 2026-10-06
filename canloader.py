@@ -49,27 +49,59 @@ def charging_flag(values, true_values):
     return num.gt(0).where(num.notna(), s.str.upper().isin(true_values)).astype(bool)
 
 
+def _coords(chunk, params):
+    """위경도(범위 밖은 결측) + 분석 범위(keep_bbox) 밖 행 표시. 좌표 없는 행은 남긴다(SOC 연속성 판정에 쓰임)."""
+    lat, lon = to_num(chunk["lat"]), to_num(chunk["lon"])
+    bad = ~(lat.between(*params["lat_range"]) & lon.between(*params["lon_range"]))
+    lat, lon = lat.where(~bad), lon.where(~bad)
+    box = params.get("keep_bbox")
+    outside = (lat.notna() & ~(lat.between(box[0], box[1]) & lon.between(box[2], box[3]))) if box \
+        else pd.Series(False, index=chunk.index)
+    return lat, lon, outside
+
+
+def _vehicle_sample(path, columns, params, nrows=None):
+    """1차 읽기(식별번호·위경도 열만): 분석 범위 안 차량별 행 수 → max_rows 안에 들어가게 차량을 무작위로 고른다.
+    전부 들어가면 (None, 차량 수) — 표본 없이 전부 읽는다."""
+    cols = {k: columns["can_m"][k] for k in ("vehicle_id", "lat", "lon")}
+    counts = pd.Series(dtype="int64")
+    for chunk in read_columns(path, cols, "CAN_M", chunksize=params["chunksize"], nrows=nrows):
+        _, _, outside = _coords(chunk, params)
+        vc = chunk.loc[~outside, "vehicle_id"].fillna("").astype(str).str.strip().value_counts()
+        counts = counts.add(vc, fill_value=0)
+    counts = counts.drop("", errors="ignore")
+    if counts.sum() <= params["max_rows"]:
+        return None, len(counts)
+    order = counts.sample(frac=1, random_state=params.get("sample_seed", 0))
+    keep = order.index[order.cumsum() <= params["max_rows"]]   # ponytail: 앞에서 큰 차량이 걸리면 뒤의 작은 차량도 건너뜀(표본 수 약간 적어짐)
+    log.info("CAN: 차량 %d/%d대 무작위 표본(행 %s 이내 — 앞부분 표본 편향 방지)", len(keep), len(counts), f"{params['max_rows']:,}")
+    return set(keep), len(counts)
+
+
 def load_can_m(path, columns, params, nrows=None):
     """CAN 을 청크로 읽는다. 대용량(센터에서 통째로 열면 커널 종료)이라 메모리를 줄인다.
 
     - keep_bbox(기본 서울+여유) 밖 좌표 행은 읽으면서 버린다(좌표 없는 행은 남긴다 — SOC 연속성 판정에 쓰임).
     - 식별번호는 정수 코드(int32, 파일 안에서만 의미), SOC·위경도는 float32 로 둔다.
-    - max_rows 를 넘으면 그 자리에서 멈춘다(앞부분 표본). 읽은 범위는 df.attrs["read_note"] 로 결과표에 남긴다.
+    - max_rows 를 넘으면: sample_by_vehicle(기본)이면 먼저 식별번호 열만 훑어 차량별 행 수를 세고, 무작위(seed 고정)로 고른
+      차량의 행만 통째로 읽는다(파일이 차량 순으로 정렬돼 있으면 앞부분 표본에는 몇 대만 들어간다 — 1차 실데이터 킬 8번 “식별번호 5개”).
+      끄면 예전처럼 그 자리에서 멈춘다(앞부분 표본). 읽은 범위는 df.attrs["read_note"] 로 결과표에 남긴다.
     """
     path = resolve_csv_path(path, "CAN_M")
     true_values = {str(v).upper() for v in params["charging_true_values"]}
-    box, max_rows = params.get("keep_bbox"), params.get("max_rows")
+    max_rows = params.get("max_rows")
+    chosen, n_vehicles = (_vehicle_sample(path, columns, params, nrows)
+                          if max_rows and params.get("sample_by_vehicle", True) else (None, None))
     parts, codes, n_read, n_outside, n_kept, truncated = [], {}, 0, 0, 0, False
     for chunk in read_columns(path, columns["can_m"], "CAN_M", chunksize=params["chunksize"], nrows=nrows):
         n_read += len(chunk)
-        lat, lon = to_num(chunk["lat"]), to_num(chunk["lon"])
-        bad = ~(lat.between(*params["lat_range"]) & lon.between(*params["lon_range"]))
-        lat, lon = lat.where(~bad), lon.where(~bad)
-        if box:
-            outside = lat.notna() & ~(lat.between(box[0], box[1]) & lon.between(box[2], box[3]))
-            n_outside += int(outside.sum())
-            chunk, lat, lon = chunk[~outside], lat[~outside], lon[~outside]
-        if max_rows and n_kept + len(chunk) > max_rows:
+        lat, lon, outside = _coords(chunk, params)
+        n_outside += int(outside.sum())
+        chunk, lat, lon = chunk[~outside], lat[~outside], lon[~outside]
+        if chosen is not None:
+            pick = chunk["vehicle_id"].fillna("").astype(str).str.strip().isin(chosen)
+            chunk, lat, lon = chunk[pick], lat[pick], lon[pick]
+        elif max_rows and n_kept + len(chunk) > max_rows:
             keep = max_rows - n_kept
             chunk, lat, lon, truncated = chunk.iloc[:keep], lat.iloc[:keep], lon.iloc[:keep], True
         vid = chunk["vehicle_id"].fillna("").astype(str).str.strip()
@@ -93,7 +125,9 @@ def load_can_m(path, columns, params, nrows=None):
         log.warning("CAN: 시간/식별번호 결측 %d행 제외", int(bad_time.sum()))
     df = df[~bad_time].sort_values(["vehicle_id", "time"], kind="mergesort").reset_index(drop=True)
     df.attrs["read_note"] = (f"읽은 {n_read:,}행 · 분석 범위 밖 좌표 {n_outside:,}행 제외 · 사용 {len(df):,}행"
-                             + (f" · max_rows {max_rows:,} 에서 중단(앞부분 표본)" if truncated else ""))
+                             + (f" · max_rows {max_rows:,} 에서 중단(앞부분 표본)" if truncated else "")
+                             + (f" · 차량 {len(chosen):,}/{n_vehicles:,}대 무작위 표본(행 {max_rows:,} 이내)"
+                                if chosen is not None else ""))
     log.info("CAN M-Type: %s · 식별번호 %d · %s ~ %s · 충전중 %.1f%%", df.attrs["read_note"], df["vehicle_id"].nunique(),
              df["time"].min(), df["time"].max(), 100 * df["charging"].mean())
     return df

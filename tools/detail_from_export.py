@@ -8,7 +8,10 @@
    일차식이 아니고 순서만 보존된다. 어긋나면 옮겨 적기나 입력 파일·정규화 설정이 다르다.
 
 옮겨 적은 CSV 형식: PNG 와 같은 열 이름(bjd_code, 순위, 결합점수, …), 마지막 행이 Σ행, 빈 칸(—)은 비워 둔다.
-사용: python tools/detail_from_export.py --pages <쪽 CSV 폴더> --import-dir <2~9.csv 폴더> --out app_data.csv
+4) (v12.1) --terrain 표고캐시.csv: 공개 표고(Open-Meteo, Copernicus DEM 90m)로 경사 반영 2SFCA(센터 8-C DEM 단계와 같은 함수)를
+   계산해 경사보정접근성 열과 기본 대비 요약을 낸다. 표고는 캐시 파일에 저장해 다시 받지 않는다(첫 실행만 인터넷 필요).
+
+사용: python tools/detail_from_export.py --pages <쪽 CSV 폴더> --import-dir <2~9.csv 폴더> --out app_data.csv [--terrain elev.csv]
 """
 from __future__ import annotations
 
@@ -82,9 +85,34 @@ def public_values(import_dir, params=DEFAULT_PARAMS, columns=DEFAULT_COLUMNS, ev
     cent = keep_region(bjdmapping.load_emd_centroids(paths["emd_centroids"], columns["centroid"]), prefix)
     cent["bjd_code"] = bjdmapping.canonicalize(cent["bjd_code"], cw)
     cent = cent.drop_duplicates("bjd_code")
-    access, _, _ = equityaccess.public_access(paths, columns, params, cent, cw)
+    access, stations, points = equityaccess.public_access(paths, columns, params, cent, cw)
     master = keep_region(bjdmapping.load_bjd_master(paths["bjd_master"], columns["bjd"]), prefix)
-    return access.assign(bjd_code=access["bjd_code"].astype(str)), master, cent
+    return access.assign(bjd_code=access["bjd_code"].astype(str)), master, cent, stations, points
+
+
+def terrain_access(stations, points, cache, params=DEFAULT_PARAMS):
+    """공개 표고로 경사 반영 2SFCA → (법정동별 경사 반영 접근성, 기본 대비 요약표). 센터 8-C DEM 단계와 같은 함수·설정."""
+    from fetch_public_inputs import fetch_elevation
+
+    pts, st = points.reset_index(drop=True), stations.reset_index(drop=True)
+    # 표고 격자가 약 90m 라 좌표를 소수 셋째 자리(약 100m)로 묶어 묻는다(무료 API 분당·시간당 좌표 수 제한)
+    want = pd.concat([pts[["lat", "lon"]], st[["lat", "lon"]]]).astype(float).round(3).drop_duplicates()
+    have = pd.read_csv(cache) if Path(cache).is_file() else pd.DataFrame(columns=["lat", "lon", "elev"])
+    new = want.merge(have[["lat", "lon"]], how="left", indicator=True).query("_merge == 'left_only'")[["lat", "lon"]]
+    for i in range(0, len(new), 500):   # 500점마다 캐시에 저장(중간에 끊겨도 받은 만큼 남음)
+        part = new.iloc[i:i + 500]
+        have = pd.concat([have, part.assign(elev=fetch_elevation(part["lat"].tolist(), part["lon"].tolist()))])
+        have.to_csv(cache, index=False)
+    z = have.astype(float).set_index(["lat", "lon"])["elev"]
+    elev = lambda df: z.reindex(pd.MultiIndex.from_frame(df[["lat", "lon"]].astype(float).round(3))).to_numpy()
+    zp, zs = elev(pts), elev(st)
+    dp, pr = params["dem"], params["priority"]
+    slope, grades = equityaccess.slope_adjusted_2sfca(st, pts, zp, zs, pr["radii_m"], pr["default_radius_m"],
+                                                      dp["max_grade"], dp["min_dist_m"])
+    base = equityaccess.compute_2sfca(st, pts, pr["radii_m"], pr["default_radius_m"])
+    table = equityaccess.compare_slope(base, slope, grades, (int(np.isfinite(zp).sum()), len(zp)),
+                                       (int(np.isfinite(zs).sum()), len(zs)))
+    return slope.assign(bjd_code=slope["bjd_code"].astype(str)), table
 
 
 def cross_check(detail, access, weights=(0.5, 0.5), scale="percentile"):
@@ -99,7 +127,7 @@ def cross_check(detail, access, weights=(0.5, 0.5), scale="percentile"):
     return float(implied.corr(d["급증위험"], method="spearman")), len(d)
 
 
-def app_table(detail, access, master, cent, scale="percentile"):
+def app_table(detail, access, master, cent, scale="percentile", slope=None):
     """웹 화면 한 줄 = 법정동 하나: 반출 값 + 공개 값 + 권고 초안. 좌표는 공개 중심점."""
     from priorityscore import SCALERS
 
@@ -117,6 +145,8 @@ def app_table(detail, access, master, cent, scale="percentile"):
                 out.loc[g, col] = out.loc[g, "묶음"].map(head[col])
     out["권고(초안)"] = [headline.recommend(r, e) if pd.notna(r) and pd.notna(e) else "—"
                        for r, e in zip(out["급증위험_정규화"], out["equity_norm"])]
+    if slope is not None:   # 공개 표고로 밖에서 계산한 경사 반영 접근성(센터 DEM 대신)
+        out["경사보정접근성"] = out["bjd_code"].map(slope.set_index("bjd_code")["access_2sfca"])
     c = cent.assign(bjd_code=cent["bjd_code"].astype(str)).set_index("bjd_code")
     out["lat"], out["lon"] = out["bjd_code"].map(c["lat"]), out["bjd_code"].map(c["lon"])
     return out
@@ -127,13 +157,18 @@ def main():
     ap.add_argument("--pages", required=True)
     ap.add_argument("--import-dir", required=True)
     ap.add_argument("--out", default="app_data.csv")
+    ap.add_argument("--terrain", help="공개 표고 캐시 CSV(없으면 받아서 만든다)")
     args = ap.parse_args()
     detail, report = read_pages(args.pages)
     print(report.to_string(index=False))
-    access, master, cent = public_values(args.import_dir)
+    access, master, cent, stations, points = public_values(args.import_dir)
     r2, n = cross_check(detail, access)
     print(f"교차 검증: 결합점수 ↔ (급증위험, 공개 재계산 형평성) 순위 상관 = {r2:.5f} ({n}곳)")
-    app = app_table(detail, access, master, cent)
+    slope = None
+    if args.terrain:
+        slope, check = terrain_access(stations, points, args.terrain)
+        print(check.to_string(index=False))
+    app = app_table(detail, access, master, cent, slope=slope)
     app.to_csv(args.out, index=False, encoding="utf-8-sig")
     print(f"웹 화면 표: {args.out} · {len(app)}곳")
     if (report["문제"] != "없음").any() or not (np.isnan(r2) or r2 > 0.99):

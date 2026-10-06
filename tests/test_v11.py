@@ -216,7 +216,7 @@ def test_detail_pages_survive_transcription_and_rebuild_public_values(v11_env, v
     imp.mkdir()
     for src, dst in (("bjd_master.txt", "2.csv"), ("bjd_centroids.csv", "4.csv"), ("access_stations.csv", "6.csv")):
         shutil.copy(v11_env["data"] / src, imp / dst)
-    access, master, cent = dfe.public_values(imp, ev_registration=str(v11_env["data"] / "ev_registration.csv"))
+    access, master, cent, *_ = dfe.public_values(imp, ev_registration=str(v11_env["data"] / "ev_registration.csv"))
     center = st["access"].assign(bjd_code=st["access"]["bjd_code"].astype(str)).set_index("bjd_code")["access_2sfca"]
     assert np.allclose(access.set_index("bjd_code")["access_2sfca"].reindex(center.index), center, equal_nan=True)
     r2, n = dfe.cross_check(got, access)

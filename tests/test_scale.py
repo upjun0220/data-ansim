@@ -66,8 +66,11 @@ def test_can_loader_drops_far_rows_caps_rows_and_codes_ids(tmp_path):
     df = canloader.load_can_m(tmp_path / "can.csv", DEFAULT_COLUMNS, params)
     assert len(df) == 21 and df["vehicle_id"].dtype == "int32" and df["vehicle_id"].nunique() == 3
     assert df["lat"].dtype == "float32" and "범위 밖 좌표 10행 제외" in df.attrs["read_note"]
-    capped = canloader.load_can_m(tmp_path / "can.csv", DEFAULT_COLUMNS, dict(params, max_rows=12))
+    capped = canloader.load_can_m(tmp_path / "can.csv", DEFAULT_COLUMNS, dict(params, max_rows=12, sample_by_vehicle=False))
     assert len(capped) == 12 and "중단" in capped.attrs["read_note"]
+    sampled = canloader.load_can_m(tmp_path / "can.csv", DEFAULT_COLUMNS, dict(params, max_rows=12))   # 기본: 차량 통째로
+    assert len(sampled) <= 12 and "무작위 표본" in sampled.attrs["read_note"]
+    assert (sampled.groupby("vehicle_id").size().isin([10, 1])).all()
 
 
 def test_observed_dates_scan_is_reused_until_file_changes(tmp_path, monkeypatch):
@@ -190,3 +193,23 @@ def test_small_units_merge_within_hdong_and_detail_marks_members():
     assert png["위험상태"].tolist()[:4] == ["A", "G", "G", "S"]
     body, problems = check_page(png.astype(object).where(png.notna(), "—").astype(str))
     assert problems == [] and body["묶음"].tolist() == [codes[0], codes[0], codes[3], codes[3]]
+
+
+def test_terrain_access_uses_public_elevation_cache(tmp_path, monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import detail_from_export as dfe
+    import fetch_public_inputs
+
+    calls = []
+    def fake(lat, lon):                                  # 북쪽일수록 높다(언덕)
+        calls.append(len(lat))
+        return [(la - 37.5) * 2000 for la in lat]
+    monkeypatch.setattr(fetch_public_inputs, "fetch_elevation", fake)
+    pts = pd.DataFrame({"bjd_code": ["1", "2"], "lat": [37.500, 37.5040], "lon": [127.0, 127.0], "ev_count": [100.0, 100.0]})
+    st = pd.DataFrame({"lat": [37.5020], "lon": [127.0], "chargers": [10.0]})
+    cache = tmp_path / "elev.csv"
+    slope, table = dfe.terrain_access(st, pts, cache)
+    assert calls == [3] and cache.is_file() and len(table)
+    assert set(slope["bjd_code"]) == {"1", "2"}
+    dfe.terrain_access(st, pts, cache)
+    assert calls == [3]                                   # 두 번째는 캐시만 쓴다(다시 받지 않음)

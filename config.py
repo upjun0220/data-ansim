@@ -135,6 +135,8 @@ DEFAULT_PARAMS = {
         # 대용량 대비(현장 CAN 은 통째로 열면 커널이 죽었다): 분석 범위(서울 + 약 5km 여유) 밖 좌표 행은 읽으면서 버리고,
         # max_rows 를 넘으면 앞부분 표본으로 멈춘다(결과표에 기록). None 이면 제한 없음.
         "keep_bbox": [37.38, 37.75, 126.70, 127.32], "max_rows": 20_000_000,
+        # v12.1 max_rows 를 넘으면 앞부분이 아니라 무작위로 고른 차량의 행 전체를 읽는다(차량 순 정렬 파일의 앞부분 편향 방지)
+        "sample_by_vehicle": True, "sample_seed": 0,
         # verify_join_key
         "min_ids": 3,
         "min_rows_per_id": 20,
