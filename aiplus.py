@@ -390,3 +390,41 @@ def run_ai_plus(hourly, params, v1=None, calib_peak=None, temp=None, visible=Non
     return {"hourly": hourly_tbl, "peak": peak_tbl, "alerts": alerts, "agg": agg_tbl, "importance": importance,
             "types": types, "type_table": type_tbl, "type_centers": centers, "note": note,
             "conformal_offset": {"hourly": off, "peak": peak_off}}
+
+# ---------------------------------------------------------------- 사전 등록 대표 지표(결과를 보기 전에 고정, 2026-10-07)
+
+PREREG_KEEP = 0.05   # 대표 지표가 이 값 이상이면 "AI가 어제값보다 낫다"를 본문 주장으로 쓴다
+
+
+def preregistered(res, multiplier=1.2):
+    """발표 숫자 B 를 결과를 보기 전에 정해 둔 지표·판정 기준으로만 낸다(여러 비교표 중 잘 나온 것을 고르지 않기 위해).
+
+    대표: 평가기간 일피크 예측 오차(MAE)의 어제값 대비 감소율, 소표본 제외 법정동(PNG 범위).
+    판정: ≥ +5% → 본문 주장 유지 / 0~5% → 보조 근거로만 / < 0 → AI 주장 철회(제목을 '어디부터 볼까'로).
+    보조: 서울 합계 시간별 감소율, 일피크 P90 보정 후 적중률(목표 90%±5%p), 상한 1.2배 경보 재현율·정밀도."""
+    def row(tbl, **where):
+        t = tbl
+        for k, v in where.items():
+            t = t[t[k] == v]
+        return t.iloc[0] if len(t) else pd.Series(dtype=float)
+
+    peak = row(res["peak"], 기간="평가", 범위="PNG")
+    seoul = row(res["agg"], 단위="서울 합계", 기간="평가")
+    skill = float(peak.get("skill_ai_plus", np.nan))
+    verdict = ("판정 불가(값 없음)" if not np.isfinite(skill) else "본문 주장 유지" if skill >= PREREG_KEEP
+               else "보조 근거로만" if skill >= 0 else "AI 주장 철회 — 제목 변경")
+    cov = float(peak.get("p90cov_ai_plus_conformal", np.nan))
+    rows = [{"구분": "대표(숫자 B)", "지표": "평가기간 일피크 오차의 어제값 대비 감소율(AI+, 소표본 제외)", "값": skill,
+             "비교": float(peak.get("skill_ai_v1", np.nan)), "판정 기준": "≥ +5% 유지 · 0~5% 보조 · < 0 철회", "판정": verdict},
+            {"구분": "보조", "지표": "평가기간 서울 합계 시간별 오차의 어제값 대비 감소율(AI+)", "값": float(seoul.get("skill_ai_plus", np.nan)),
+             "비교": np.nan, "판정 기준": "보고만", "판정": "—"},
+            {"구분": "보조", "지표": "평가기간 일피크 P90 보정 후 적중률(AI+)", "값": cov, "비교": float(peak.get("p90cov_ai_v1", np.nan)),
+             "판정 기준": "85~95%면 보정 성공", "판정": "—" if not np.isfinite(cov) else "보정 성공" if 0.85 <= cov <= 0.95 else "보정 실패"}]
+    if res.get("alerts") is not None:
+        a = res["alerts"]["PNG"]
+        a = a[np.isclose(a["multiplier"].astype(float), multiplier)].set_index("방법")
+        for name in ("AI+(일피크 P90·보정)", "기준 모델"):
+            if name in a.index:
+                rows.append({"구분": "보조", "지표": f"상한 {multiplier}배 경보 재현율 — {name}", "값": float(a.loc[name, "recall"]),
+                             "비교": float(a.loc[name, "precision"]), "판정 기준": "보고만(비교 = 정밀도)", "판정": "—"})
+    return pd.DataFrame(rows)

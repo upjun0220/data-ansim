@@ -819,6 +819,9 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     writer.table(res["type_table"], "s8a_plus_types", "8-A+ 충전 생활 유형(24시간 충전 모양 K-평균)", digits=3,
                                  note=f"학습기간 평균 모양(합 1). 그림은 동네 {min_count}곳 이상인 유형만. 동네별 유형은 동네 상세(9-D) 충전유형 열")
                     writer.figure(aiplus.plot_types(res["type_centers"], res["type_table"], min_count), "s8a_plus_types_plot")
+                writer.table(aiplus.preregistered(res, float(P["priority"]["base_multiplier"])), "s8a_plus_headline",
+                             "8-A+ 사전 등록 대표 지표 — 발표 숫자 B(결과를 보기 전 2026-10-07에 고정)", digits=3,
+                             note="대표 지표·판정 기준은 결과와 무관하게 정해 두었다. 결과가 나빠도 이 판정 그대로 보고한다")
                 S["ai_plus"], S["charge_types"] = res, res["types"]
             if P["forecast_plus"].get("enabled", True):
                 runner.run("8-A+", "AI 강화(어제값 위 보정·일피크·합계·유형)", stage8a_plus, ISOLATED)

@@ -46,6 +46,8 @@ def test_ai_plus_runs_and_calibrates_p90():
     assert len(res["importance"]) == len(aiplus.FEATURES) - 1 - len(aiplus.LIVING)   # 기온·생활인구 입력 없음 → 그 특성만 빠짐
     assert abs(res["importance"]["비중"].sum() - 1) < 1e-6
     assert len(res["type_table"]) == 4 and res["types"].between(1, 4).all()
+    pre = aiplus.preregistered(res)
+    assert pre.iloc[0]["구분"] == "대표(숫자 B)" and pre.iloc[0]["판정"] in ("본문 주장 유지", "보조 근거로만", "AI 주장 철회 — 제목 변경")
 
 
 def test_panel_features_use_only_previous_days():
