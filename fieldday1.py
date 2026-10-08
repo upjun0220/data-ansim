@@ -124,8 +124,9 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
     bjd = resolve_csv_path(bjd_path or folder / "2.csv", "법정동 마스터")
     kepco = resolve_csv_path(kepco_001_path, "KEPCO_001")
     can = resolve_csv_path(can_path, "TB_TBE_TERMINAL_LOGMOCEAN") if can_path else None
-    here = Path(__file__).resolve().parent   # 번들: day1code/holidays.yaml · 저장소: config/holidays.yaml
-    holidays = next((p for p in (here / "holidays.yaml", here / "config" / "holidays.yaml") if p.is_file()), None)
+    here = Path(__file__).resolve().parent   # 개별 반입: holidaysN.txt · 번들: day1code/holidays.yaml · 저장소: config/holidays.yaml
+    holidays = next((p for p in (*sorted(here.glob("holidays*.txt"), reverse=True), here / "holidays.yaml",
+                                 here / "config" / "holidays.yaml") if p.is_file()), None)
 
     bjd_columns = detect_columns(bjd, BJD_COLUMN_ALIASES, "법정동 마스터", required={"code"})
     columns, can_note = {"bjd": bjd_columns}, "센터 CAN"
@@ -163,7 +164,7 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
 
     used = pd.DataFrame([{"입력": key, "반입 이름": found[key].name if key in found else IMPORT_FILES[key], "사용": key in found}
                          for key in IMPORT_FILES] +
-                        [{"입력": "holidays", "반입 이름": "번들 내장", "사용": paths["holidays"] is not None},
+                        [{"입력": "holidays", "반입 이름": holidays.name if holidays else "없음", "사용": paths["holidays"] is not None},
                          {"입력": "can_m", "반입 이름": can_note, "사용": can is not None},
                          {"입력": "dem", "반입 이름": "센터 LX DEM", "사용": paths["dem"] is not None},
                          {"입력": "evaluation_start", "사용": daily,

@@ -126,7 +126,7 @@ def test_filter_sido_code_keeps_only_listed_prefixes():
 def test_import_bundle_accepts_py_csv_txt_font_but_not_zip_json_md(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import check, collect
-    (tmp_path / "pipeline.py").write_text("x = 1\n", encoding="utf-8")        # v11: 모듈은 원래 이름, 데이터는 숫자
+    (tmp_path / "pipeline10.py").write_text("x = 1\n", encoding="utf-8")      # v12.1: 모듈 이름 끝에 버전 번호, 데이터는 숫자
     for name in ("11.csv", "13.txt"):                                       # 2~10 은 이미 반입한 이름
         (tmp_path / name).write_text("a,b\n1,2\n", encoding="utf-8")
     (tmp_path / "14.ttf").write_bytes(b"x")
@@ -140,13 +140,13 @@ def test_import_bundle_rejects_previous_import_names(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from check_import_bundle import PREVIOUS_NAMES, SAFE_NAME, check, collect
     from make_import_bundle import IMPORT_NAMES
-    (tmp_path / "pipeline.py").write_text("x = 1\n", encoding="utf-8")
-    for old in ("dataansimbundle.py", "bjdmaster.csv", "koreanfont.ttf"):
+    (tmp_path / "pipeline10.py").write_text("x = 1\n", encoding="utf-8")
+    for old in ("dataansimbundle.py", "bjdmaster.csv", "pipeline.py"):          # pipeline.py = 9/22 원래 이름 반입
         (tmp_path / old).write_bytes(b"x = 1\n")
     assert sum("이전 반입 파일명과 중복" in p for p in check(collect([tmp_path]))[1]) == 3
     assert all(SAFE_NAME.match(n) for n in IMPORT_NAMES)
     assert {"2.csv", "9.csv", "10.ttf", "ansim9.py"} <= PREVIOUS_NAMES                 # 이미 반입 → 재사용 불가
-    assert {"11.csv", "12.csv", "ansim10.py"}.isdisjoint(PREVIOUS_NAMES)             # 이번 반입
+    assert {"11.csv", "12.csv", "field10.py", "pipeline10.py"}.isdisjoint(PREVIOUS_NAMES)   # 이번 반입(개별 파일)
 
 
 def test_import_bundle_rejects_unsafe_names_count_and_broken_python(tmp_path):
@@ -210,6 +210,24 @@ def test_import_folder_has_separate_modules_and_checksums(tmp_path):
     from make_import_bundle import MODULES, build, verify_checksums
     folder, names = build(tmp_path / "imp")
     assert {f"{m}.py" for m in MODULES} <= set(names) and "fieldtemplate.txt" in names and "holidays.txt" in names
-    assert verify_checksums(folder) == [] and check(collect([folder]))[1] == []
+    assert verify_checksums(folder) == []
+    # 원래 이름 구성(v11)은 9/22 에 이미 반입해 다시 쓸 수 없다 — 이름 중복 말고 다른 문제는 없어야 한다
+    assert all("이전 반입 파일명과 중복" in p for p in check(collect([folder]))[1])
     (folder / "pipeline.py").write_text("x = 2\n", encoding="utf-8")     # 한 파일만 바뀌면 잡는다
     assert any("해시 불일치" in p for p in check(collect([folder]))[1])
+
+
+def test_split_bundle_renames_only_our_imports_and_avoids_previous_names(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from check_import_bundle import PREVIOUS_NAMES
+    from make_split_bundle import build, names, rename_imports, verify
+
+    new = {"common": "common10", "config": "config10"}
+    src = "import common\nimport configparser\nfrom config import X\n    from common import log\nimport common as c\n"
+    assert rename_imports(src, new) == ("import common10 as common\nimport configparser\nfrom config10 import X\n"
+                                        "    from common10 import log\nimport common10 as c\n")
+    out, mapping = build(tmp_path / "split", 10)
+    verify(out, mapping)                                                   # 원래 이름 모듈 없이 진입점 불러오기
+    files = {p.name.lower() for p in out.iterdir()}
+    assert "field10.py" in files and "holidays10.txt" in files
+    assert files.isdisjoint({n.lower() for n in PREVIOUS_NAMES})            # 9/22 반입한 원래 이름과 겹치지 않음

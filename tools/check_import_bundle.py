@@ -25,7 +25,18 @@ PREVIOUS_NAMES = {"dataansimbundle.py", "dataansimcodev10.zip", "bjdmaster.csv",
                   "bjdcentroids.csv", "smp.csv", "evstations.csv", "evregistration.csv", "koreanfont.ttf",
                   # 9/22 데이터 반입, 이후 코드 반입·신청(같은 이름 재사용 불가)
                   *(f"{i}.csv" for i in range(2, 10)), "10.ttf", "day1bundle.py",
-                  *(f"day1bundle{i}.py" for i in range(2, 9)), "ansim9.py"}
+                  *(f"day1bundle{i}.py" for i in range(2, 9)), "ansim9.py", "ansim10.py",
+                  # 9/22·9/23 반입 zip 안의 코드·설정 파일(모듈 원래 이름 — 그래서 v12.1 개별 반입은 이름 끝에 버전 번호)
+                  "bjdmapping.py", "canloader.py", "common.py", "config.py", "diagnostics.py", "equityaccess.py",
+                  "essoptimizer.py", "headline.py", "heterogeneity.py", "identification.py", "kep007loader.py",
+                  "kepcoloader.py", "killcriteria.py", "loadaxis.py", "loadforecast.py", "loadscenario.py", "outputs.py",
+                  "pipeline.py", "priorityscore.py", "weatherloader.py", "holidays.txt", "checksums.txt", "fieldtemplate.txt",
+                  "requirements.txt", "README.txt", "README1.txt", "BjdMapping.py", "CanLoader.py", "Common.py", "Config.py",
+                  "Diagnostics.py", "EssOptimizer.py", "Heterogeneity.py", "Identification.py", "Kep007Loader.py",
+                  "KepcoLoader.py", "KillCriteria.py", "LoadAxis.py", "LoadForecast.py", "Outputs.py", "Pipeline.py",
+                  "FieldTemplate.txt", "FileNameMap.txt", "IndustryCodesTemplate.txt", "ReferenceGuide.txt",
+                  "Requirements.txt", "SHA256SUMS.txt", "BjdMaster20260729.txt", "BjdCrosswalk20251231.csv",
+                  "CentroidMasterCheck.csv", "EmdCentroids20230729.csv"}
 
 
 def collect(paths):
@@ -52,7 +63,7 @@ def check(files):
         problems.append("파이썬(.py) 파일이 없음")
     problems += [f"허용되지 않는 형식(.py·.csv·.txt·폰트만 가능): {n}" for n, k, _ in rows if k == "other"]
     problems += [f"파일명 규칙 위반(영문·숫자만): {n}" for n, _, _ in rows if not SAFE_NAME.match(n)]
-    problems += [f"이전 반입 파일명과 중복: {n}" for n, _, _ in rows if n.lower() in PREVIOUS_NAMES]
+    problems += [f"이전 반입 파일명과 중복: {n}" for n, _, _ in rows if n.lower() in {p.lower() for p in PREVIOUS_NAMES}]
     for f in files:
         if kind(f) == "code":
             try:
