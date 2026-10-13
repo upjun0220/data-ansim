@@ -24,6 +24,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_import_bundle import MODULES, ROOT  # noqa: E402
 
 
+# 센터에서 실행되지 않는 단계 전용 모듈(상권 분석·KEP_007·센터 DEM) — 그 단계 함수 안에서만 불러오므로 반입하지 않는다.
+CENTER_SKIP = {"demloader", "diagnostics", "heterogeneity", "identification", "kep007loader"}
+
+
 def names(v):
     """원래 모듈 이름 → 반입 이름(확장자 없음)."""
     out = {m: f"{m}{v}" for m in MODULES}
@@ -45,6 +49,8 @@ def build(out, v=10):
     new = names(v)
     files = {}
     for old, name in new.items():
+        if old in CENTER_SKIP:
+            continue
         text = rename_imports((ROOT / f"{old}.py").read_text(encoding="utf-8").replace("\r\n", "\n"), new)
         ast.parse(text, filename=name)
         files[f"{name}.py"] = text
@@ -60,6 +66,11 @@ def verify(out, new):
                 if re.match(rf"\s*(import|from)\s+({'|'.join(map(re.escape, new))})\b(?!\d)", line)]
     if leftover:
         raise SystemExit("원래 이름 import 가 남음: " + "; ".join(leftover[:5]))
+    skipped = "|".join(new[m] for m in CENTER_SKIP)
+    top = [f"{p.name}: {line}" for p in Path(out).glob("*.py") for line in p.read_text(encoding="utf-8").splitlines()
+           if re.match(rf"(import|from) ({skipped})\b", line)]   # 맨 위에서 부르면 그 파일 없이 시작조차 못 한다
+    if top:
+        raise SystemExit("반입 제외 모듈을 맨 위에서 불러옴: " + "; ".join(top))
     with tempfile.TemporaryDirectory() as tmp:
         code = (f"import sys; sys.path.insert(0, {str(Path(out).resolve())!r}); "
                 f"from {new['fieldday1']} import run_first_visit, run_full; print('불러오기 확인')")

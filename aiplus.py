@@ -345,6 +345,19 @@ def run_ai_plus(hourly, params, v1=None, calib_peak=None, temp=None, visible=Non
                                      float(params.get("min_calib_peak_kw", 1.0)))
                   for scope, f in (("전체", ev), ("PNG", ev if visible is None else ev[ev["bjd_code"].isin(visible)]))}
 
+    # 5) 동네별 예측 피크비율 — 우선순위 위험 축에 AI+ 예측을 연결하는 입력(평가기간 AI+ 예측 일피크 최대 ÷ 교정기간 최대).
+    #    관측 피크비율(평가기간 실측 최대 ÷ 교정기간 최대)의 예측판이다. 24시간이 다 있는 날만 쓴다.
+    forecast_risk = None
+    if calib_peak is not None:
+        evp = peaks[peaks["date"].isin(eval_days)].assign(calib=lambda d: d["bjd_code"].map(calib_peak))
+        evp = evp[evp["calib"] >= float(params.get("min_calib_peak_kw", 1.0))].dropna(subset=["peak_q50", "peak_q90c"])
+        if len(evp):
+            grp = evp.groupby("bjd_code")
+            forecast_risk = pd.DataFrame({
+                "ai_peak_ratio": grp["peak_q90c"].max() / grp["calib"].first(),
+                "ai_peak_ratio_p50": grp["peak_q50"].max() / grp["calib"].first(),
+                "ai_days": grp.size()}).reset_index()
+
     # 6) 구·서울 합계
     agg = aggregate_matrices(hourly)
     gpanel, _, _, _ = _hourly_plus(agg, days, params, temp, lambda c: "11", fp,
@@ -389,7 +402,7 @@ def run_ai_plus(hourly, params, v1=None, calib_peak=None, temp=None, visible=Non
     log.info("8-A+ %s", note)
     return {"hourly": hourly_tbl, "peak": peak_tbl, "alerts": alerts, "agg": agg_tbl, "importance": importance,
             "types": types, "type_table": type_tbl, "type_centers": centers, "note": note,
-            "conformal_offset": {"hourly": off, "peak": peak_off}}
+            "conformal_offset": {"hourly": off, "peak": peak_off}, "forecast_risk": forecast_risk}
 
 # ---------------------------------------------------------------- 사전 등록 대표 지표(결과를 보기 전에 고정, 2026-10-07)
 

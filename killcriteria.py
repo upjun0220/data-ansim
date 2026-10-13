@@ -23,7 +23,6 @@ import pandas as pd
 import bjdmapping
 import canloader
 import equityaccess
-import identification
 import kepcoloader
 import loadforecast
 import loadscenario
@@ -125,6 +124,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
     shc_state = {}
 
     def load_shc():
+        import identification  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
         scan = identification.scan_shc002(paths["shc002"], C, ind, P["shc"], nrows=K["sample_rows"], extra_stats=True)
         shc_state.update(scan=scan, stats=scan["stats"])
 
@@ -229,6 +229,7 @@ def run_checks(config_path, params_override=None, paths_override=None, write=Tru
 
     # 10. 실제 처치 수 기준 검출 가능 최소효과
     def check10():
+        import identification  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
         if "scan" not in shc_state:
             load_shc()
         # R4(2026-09-19): 본 분석(pipeline)은 P["kepco"]["source"]의 원천을 쓰는데, 이 항목은

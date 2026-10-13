@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 
 from common import log, mi_to_ym, ym_to_mi
-from heterogeneity import assert_no_load_features
 
 KEPCO_COLUMNS = {"bjd_code", "mi", "hour", "kwh", "n_days"}
 
@@ -90,6 +89,7 @@ def _cut(values, rule):
 
 def classify_quadrants(cate, concentration, params, reserved=None):
     """(CATE, 부하 집중도) → 4사분면. reserved: {bjd_code: 사유} — 유보 지역은 표시만 하고 제외하지 않는다."""
+    from heterogeneity import assert_no_load_features  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
     assert_no_load_features(cate.attrs.get("feature_names", []))
     df = cate[["bjd_code", "cate", "W", "method"]].merge(concentration, on="bjd_code", how="inner")
     lost = set(cate["bjd_code"]) - set(df["bjd_code"])

@@ -204,6 +204,9 @@ DEFAULT_PARAMS = {
                  # 비교 모드(legacy_weights·legacy_min_axes·ahp_matrix 는 이때만 쓴다).
                  # risk_metric: auto(순위 대상 50% 이상이 surge_risk=0 이면 peak_ratio) | surge_risk | peak_ratio.
                  "axes": ["risk", "equity"], "weights": {"risk": 0.5, "equity": 0.5}, "risk_metric": "auto",
+                 # v12.2 risk_source: observed(기본, 관측 피크비율·급증위험) | ai_plus(8-A+ 예측 피크비율을 위험 축에 사용,
+                 # 8-A+ 가 없으면 관측으로 되돌리고 비고에 적는다). 현장 run_full 은 ai_plus 로 켠다.
+                 "risk_source": "observed",
                  "legacy_weights": [1 / 3, 1 / 3, 1 / 3], "legacy_min_axes": 3, "ahp_matrix": None,
                  "base_multiplier": 1.2, "scenario_new_chargers": 3, "multipliers": [1.1, 1.2, 1.3],
                  "weight_delta": 0.15, "top_share": 0.20, "robust_share": 0.90,

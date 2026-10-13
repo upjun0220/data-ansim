@@ -243,8 +243,8 @@ def risk_axis(risk, multiplier):
     r = risk[np.isclose(risk["multiplier"].astype(float), float(multiplier))].copy()
     if r.empty:
         raise ValueError(f"8-A 급증 위험에 상한 배율 {multiplier} 결과 없음")
-    keep = ["bjd_code", "status", "surge_risk", "peak_ratio", "precision_ai", "recall_ai"] + \
-        [c for c in r if c.startswith("surge_risk_with_new_")]
+    keep = ["bjd_code", "status", "surge_risk", "peak_ratio", "precision_ai", "recall_ai",
+            "ai_plus_peak_ratio", "ai_plus_missing"] + [c for c in r if c.startswith("surge_risk_with_new_")]
     r = r[[c for c in keep if c in r]].rename(columns={"status": "risk_status"})
     r["bjd_code"] = r["bjd_code"].astype(str)
     return r
@@ -252,8 +252,10 @@ def risk_axis(risk, multiplier):
 
 def choose_risk_metric(axis, metric="auto", pool=None, zero_share=0.5):
     """auto: 순위 대상(pool) 중 zero_share 이상에서 surge_risk=0 이면 peak_ratio 로 바꾼다(킬 21번)."""
-    if metric not in ("auto", "surge_risk", "peak_ratio"):
-        raise ValueError(f"priority.risk_metric 은 auto|surge_risk|peak_ratio — 받은 값: {metric!r}")
+    if metric not in ("auto", "surge_risk", "peak_ratio", "ai_plus_peak_ratio"):
+        raise ValueError(f"priority.risk_metric 은 auto|surge_risk|peak_ratio|ai_plus_peak_ratio — 받은 값: {metric!r}")
+    if metric == "ai_plus_peak_ratio" and "ai_plus_peak_ratio" not in axis:
+        raise ValueError("risk_metric=ai_plus_peak_ratio 인데 위험 표에 AI+ 예측 열이 없음(with_ai_plus_risk 로 붙인다)")
     a = axis[axis["risk_status"] == "assessed"]
     if pool is not None:
         a = a[a["bjd_code"].isin(pool)]
@@ -261,6 +263,38 @@ def choose_risk_metric(axis, metric="auto", pool=None, zero_share=0.5):
     if metric != "auto":
         return metric, share
     return ("peak_ratio" if np.isfinite(share) and share >= zero_share else "surge_risk"), share
+
+
+def with_ai_plus_risk(risk, forecast_risk):
+    """위험 표에 AI+ 예측 피크비율 열을 붙인다. AI+ 예측이 없는 동네는 관측 피크비율로 채우고 ai_plus_missing 으로 표시한다.
+    (같은 동네는 상한 배율과 무관하게 같은 값 — 피크비율은 배율에 의존하지 않는다.)"""
+    r = risk.assign(bjd_code=risk["bjd_code"].astype(str)).drop(columns=["ai_plus_peak_ratio", "ai_plus_missing"], errors="ignore")
+    fr = forecast_risk.assign(bjd_code=forecast_risk["bjd_code"].astype(str))[["bjd_code", "ai_peak_ratio"]]
+    r = r.merge(fr, on="bjd_code", how="left")
+    r["ai_plus_missing"] = r["ai_peak_ratio"].isna()
+    r["ai_plus_peak_ratio"] = r["ai_peak_ratio"].fillna(pd.to_numeric(r["peak_ratio"], errors="coerce"))
+    return r.drop(columns="ai_peak_ratio")
+
+
+def risk_source_check(risk, access, params, top_n=20):
+    """관측 피크비율 순위와 AI+ 예측 피크비율 순위의 비교(상위 top_n 겹침·스피어만). risk 에 ai_plus_peak_ratio 열이 있어야 한다."""
+    axis = risk_axis(risk, params["base_multiplier"])
+    obs = combine_two_axes(axis, access, params["weights"], "peak_ratio", int(params["min_axes"]),
+                           scale=params.get("scale", "percentile"))
+    ai = combine_two_axes(axis, access, params["weights"], "ai_plus_peak_ratio", int(params["min_axes"]),
+                          scale=params.get("scale", "percentile"))
+    both = obs.loc[obs["rank_eligible"], ["bjd_code", "PriorityScore"]].merge(
+        ai.loc[ai["rank_eligible"], ["bjd_code", "PriorityScore"]], on="bjd_code", suffixes=("_관측", "_AI+"))
+    top = lambda col: set(both.nlargest(top_n, col)["bjd_code"])   # noqa: E731
+    pool = axis.loc[axis["risk_status"] == "assessed"]
+    return pd.DataFrame([
+        {"항목": "비교 대상 수(두 방식 모두 순위 대상)", "값": len(both)},
+        {"항목": f"상위 {top_n}곳 겹침(관측 피크비율 대 AI+ 예측 피크비율)", "값": len(top("PriorityScore_관측") & top("PriorityScore_AI+")) if len(both) else np.nan},
+        {"항목": "결합점수 순위 상관(스피어만)", "값": float(both["PriorityScore_관측"].corr(both["PriorityScore_AI+"], method="spearman")) if len(both) > 2 else np.nan},
+        {"항목": "AI+ 예측이 없어 관측값으로 채운 동네 수", "값": int(pool["ai_plus_missing"].sum()) if "ai_plus_missing" in pool else np.nan},
+        {"항목": "위험 축 지표(관측 피크비율)와 AI+ 예측 피크비율의 순위 상관(스피어만)",
+         "값": float(pool["peak_ratio"].corr(pool["ai_plus_peak_ratio"], method="spearman")) if len(pool) > 2 else np.nan},
+    ])
 
 
 def combine_two_axes(axis, access, weights, metric, min_axes=2, forecast_metrics=None, scale="percentile"):

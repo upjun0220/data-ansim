@@ -223,3 +223,19 @@ def test_detail_pages_survive_transcription_and_rebuild_public_values(v11_env, v
     assert n >= 5 and r2 > 0.99                                              # 반출 점수 = 밖에서 다시 만든 형평성과 같은 순서
     app = dfe.app_table(got, access, master, cent)
     assert app["법정동"].notna().all() and app[["lat", "lon"]].notna().all().all()
+
+
+def test_ai_plus_risk_source_end_to_end(v11_env, tmp_path):
+    """v12.2: priority.risk_source=ai_plus 이면 위험 축이 AI+ 예측 피크비율이고, 관측 대비 비교표가 나온다."""
+    cfg = json.loads(v11_env["config"].read_text(encoding="utf-8"))
+    cfg["paths"]["out_dir"] = str(tmp_path / "out")
+    cfg["params"]["priority"]["risk_source"] = "ai_plus"
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    res = run(path)
+    csv = Path(res["out_dir"]) / "csv"
+    pr = pd.read_csv(csv / "s8e_priority.csv", encoding="utf-8-sig")
+    assert pr["risk_metric"].iloc[0] == "ai_plus_peak_ratio" and len(pr) > 5
+    chk = pd.read_csv(csv / "s8e_risk_source_check.csv", encoding="utf-8-sig").set_index("항목")["값"]
+    assert chk["비교 대상 수(두 방식 모두 순위 대상)"] > 5
+    assert (Path(res["out_dir"]) / "png" / "s8e_risk_source_check.png").exists()

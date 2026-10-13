@@ -28,13 +28,8 @@ import pandas as pd
 
 import bjdmapping
 import canloader
-import demloader
-import diagnostics
 import equityaccess
 import headline
-import heterogeneity
-import identification
-import kep007loader
 import aiplus
 import kepcoloader
 import loadaxis
@@ -351,6 +346,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
         def stage3_kep007():
             if not paths["kep007"]:
                 raise FileNotFoundError("paths.kep007 없음")
+            import kep007loader  # 센터 미실행 단계 전용 — 자료가 있을 때만 불러옴(반입 파일에서 제외)
             st = kep007loader.load_kep007(paths["kep007"], C, P["kep007"], S.get("centroids"),
                                            P["can"]["centroid_max_km"], P["can"]["lat_range"], P["can"]["lon_range"])
             stock = kep007loader.region_stock(st)
@@ -412,6 +408,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
 
         # ------------------------------------------------ 4단계
         def stage4():
+            import identification  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
             scan = identification.scan_shc002(paths["shc002"], C, ind, P["shc"],
                                               snapshot_months=P["heterogeneity"]["snapshot_months"],
                                               crosswalk=S.get("crosswalk"))
@@ -434,6 +431,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
 
         # ------------------------------------------------ 4.5단계 (격리)
         def stage45():
+            import identification  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
             mp = P["mde"]
             mde = identification.estimate_mde(
                 S["panel"], S["activation"], P["identification"], mp["repetitions"], mp["seed"],
@@ -446,6 +444,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
 
         # ------------------------------------------------ 5단계
         def stage5():
+            import identification  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
             panel = S["panel"]
             units = set(panel.loc[panel["y_main"].notna(), "bjd_code"]) & set(panel.loc[panel["y_placebo"].notna(), "bjd_code"])
             ip = P["identification"]
@@ -480,6 +479,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
 
         # ------------------------------------------------ 6단계
         def stage6():
+            import identification  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
             main = S["main"]
             ip = dict(P["identification"])
             ip["estimator"] = "cs" if main["estimator"].startswith("Callaway") else "regression"
@@ -500,6 +500,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
 
         # ------------------------------------------------ 6.5단계 (격리)
         def stage65():
+            import diagnostics  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
             if not paths["shc001"]:
                 raise FileNotFoundError("paths.shc001 없음")
             m = diagnostics.load_shc001_monthly(paths["shc001"], C, ind["shc001"], P["shc"]["chunksize"],
@@ -515,6 +516,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
 
         # ------------------------------------------------ 7단계 (격리)
         def stage7():
+            import heterogeneity  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
             hp = P["heterogeneity"]
             can_feats = S["can"]["features"] if "can" in S else None
             feats = heterogeneity.build_features(S["scan"]["snapshot"], S.get("shc001m"), can_feats, S.get("infra_stock"),
@@ -604,6 +606,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
 
             def stage8c_dem():
                 """LX DEM(안심구역) 표고로 도보 경사를 반영해도 접근성 하위 동네가 유지되는지 본다(민감도)."""
+                import demloader  # 센터 미실행 단계 전용 — 필요할 때만 불러옴(반입 파일에서 제외)
                 if "access_inputs" not in S:
                     raise RuntimeError("8-C 접근성 입력 없음")
                 stations, points = S["access_inputs"]
@@ -928,7 +931,18 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                             S["mh"], "cust_min", P["kepco"].get("suppress_basis", "max")).rename(index=str))
                     if list(pp["axes"]) != list(priorityscore.AXES_V11):
                         raise ValueError(f"priority.axes 는 {list(priorityscore.AXES_V11)} 또는 레거시 {priorityscore.LEGACY_AXES}")
-                    result = priorityscore.build_priority_v11(S["risk"], S["access"], pp, S.get("energy_results"),
+                    risk_in, ai_note = S["risk"], ""
+                    if pp.get("risk_source") == "ai_plus":
+                        # v12.2: 위험 축에 8-A+ 예측 피크비율을 쓴다(없으면 관측 피크비율 그대로 — 아래 비고에 이유를 적는다).
+                        fr = S.get("ai_plus", {}).get("forecast_risk") if S.get("risk_source") != "monthly" else None
+                        if fr is not None and len(fr):
+                            risk_in = priorityscore.with_ai_plus_risk(S["risk"], fr)
+                            pp = dict(pp, risk_metric="ai_plus_peak_ratio")
+                            S["risk_ai_plus"] = risk_in
+                        else:
+                            ai_note = "priority.risk_source=ai_plus 이나 8-A+ 예측 피크비율이 없어 관측 피크비율 기준으로 계산"
+                            log.warning("8-E %s", ai_note)
+                    result = priorityscore.build_priority_v11(risk_in, S["access"], pp, S.get("energy_results"),
                                                               S["ai"]["metrics"] if "ai" in S else None)
                 attrs = dict(result.attrs)   # merge 뒤에는 attrs가 사라지므로 먼저 꺼낸다
                 corr = attrs.get("axes_correlation", {})
@@ -955,6 +969,8 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 if not legacy and attrs.get("risk_metric_used") == "peak_ratio" and pp["risk_metric"] == "auto":
                     note = (f"순위 대상 {attrs['share_zero_surge_risk']:.0%}에서 급증위험 0 → 위험 축을 피크비율로 대체(킬 21번)")
                     log.warning("8-E %s", note)
+                if not legacy and ai_note:
+                    note = ai_note + (f" · {note}" if note else "")
                 if S.get("risk_source") == "monthly":
                     why = "월별 자료(일자 없음)" if not P["energy"]["enabled"] else "8-A 결과 없음"
                     note = (f"플랜 B — {why}: 위험 축 = 최근 6개월 월 피크가 직전 12개월 최대 × 배율을 넘은 달 비율"
@@ -1002,6 +1018,11 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     {"항목": "정규화 민감도 — 결합점수 순위 상관(스피어만)", "값": attrs.get("scale_check", {}).get("spearman")},
                 ]))
                 writer.table(summary, "s8e_priority_summary", "8-E 순위 풀·축 상관 요약")
+                if not legacy and "risk_ai_plus" in S:
+                    writer.table(priorityscore.risk_source_check(S["risk_ai_plus"], S["access"], pp), "s8e_risk_source_check",
+                                 "8-E 위험 축 비교 — 관측 피크비율 대 AI+ 예측 피크비율",
+                                 note="두 방식으로 각각 순위를 매겨 비교한 값(점수에는 AI+ 예측 기준만 쓴다). 상위 20곳 겹침이 작으면 "
+                                      "AI+ 예측이 순위를 실제로 바꾸는 것이다")
                 S.update(priority_score=result, season_coverage=coverage, priority_note=note, priority_attrs=attrs)
             runner.run("8-E", "투자 검토 결합점수", stage8e, ISOLATED)
             if runner.rows and runner.rows[-1]["단계"] == "8-E" and runner.rows[-1]["상태"] == "완료":

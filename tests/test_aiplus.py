@@ -46,6 +46,9 @@ def test_ai_plus_runs_and_calibrates_p90():
     assert len(res["importance"]) == len(aiplus.FEATURES) - 1 - len(aiplus.LIVING)   # 기온·생활인구 입력 없음 → 그 특성만 빠짐
     assert abs(res["importance"]["비중"].sum() - 1) < 1e-6
     assert len(res["type_table"]) == 4 and res["types"].between(1, 4).all()
+    fr = res["forecast_risk"]                                                 # v12.2: 동네별 AI+ 예측 피크비율
+    assert fr is not None and {"bjd_code", "ai_peak_ratio", "ai_peak_ratio_p50", "ai_days"} <= set(fr)
+    assert (fr["ai_peak_ratio"] >= fr["ai_peak_ratio_p50"]).mean() > 0.9 and fr["ai_days"].min() >= 1
     pre = aiplus.preregistered(res)
     assert pre.iloc[0]["구분"] == "대표(숫자 B)" and pre.iloc[0]["판정"] in ("본문 주장 유지", "보조 근거로만", "AI 주장 철회 — 제목 변경")
 

@@ -156,7 +156,7 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
             "stages": {"commerce": False},
             "kepco": {"source": "001", "merge_small": True},
             "energy": {"enabled": daily, **({"evaluation_start": start} if daily else {})},
-            "priority": {"enabled": True},
+            "priority": {"enabled": True, "risk_source": "ai_plus" if daily else "observed"},
             "kill": {"kepco_max_chunks": 3},
         },
     }

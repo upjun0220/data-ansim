@@ -116,3 +116,24 @@ def test_percentile_scale_keeps_equity_axis_alive_under_outlier():
     out = ps.build_priority_v11(risk, _access(codes, acc), _params())
     assert out.attrs["scale"] == "percentile" and out.attrs["scale_check"]["alt_scale"] == "minmax"
     assert 0 <= out.attrs["scale_check"]["top20_overlap"] <= 20
+
+
+def test_ai_plus_risk_axis_changes_ranking_and_falls_back_for_missing():
+    """v12.2: 위험 축에 AI+ 예측 피크비율을 쓰면 순위가 그 값을 따르고, 예측이 없는 동네는 관측값으로 채워 표시한다."""
+    codes = ["A", "B", "C", "D"]
+    peak = [1.0, 0.9, 0.8, 0.7]                     # 관측: A 가 가장 위험
+    risk = _risk([0.0] * 4, peak=peak, codes=codes)
+    fr = pd.DataFrame({"bjd_code": ["A", "B", "C"], "ai_peak_ratio": [0.5, 0.6, 2.0], "ai_peak_ratio_p50": 1.0, "ai_days": 20})
+    r2 = ps.with_ai_plus_risk(risk, fr)
+    d = r2[np.isclose(r2["multiplier"], 1.2)].set_index("bjd_code")
+    assert list(d["ai_plus_missing"]) == [False, False, False, True]
+    assert d.at["D", "ai_plus_peak_ratio"] == pytest.approx(0.7)       # 예측 없음 → 관측 피크비율
+    access = _access(codes, [0.3, 0.3, 0.3, 0.3])                      # 형평성은 같게 → 위험 축만 순위를 가른다
+    obs = ps.build_priority_v11(r2, access, _params(risk_metric="peak_ratio")).set_index("bjd_code")
+    ai = ps.build_priority_v11(r2, access, _params(risk_metric="ai_plus_peak_ratio")).set_index("bjd_code")
+    assert obs["rank"].idxmin() == "A" and ai["rank"].idxmin() == "C"  # AI+ 예측이 순위를 바꾼다
+    assert ai.attrs["risk_metric_used"] == "ai_plus_peak_ratio"
+    chk = ps.risk_source_check(r2, access, _params()).set_index("항목")["값"]
+    assert chk["AI+ 예측이 없어 관측값으로 채운 동네 수"] == 1
+    with pytest.raises(ValueError):                                    # AI+ 열 없이 요청하면 조용히 넘어가지 않는다
+        ps.build_priority_v11(risk, access, _params(risk_metric="ai_plus_peak_ratio"))
