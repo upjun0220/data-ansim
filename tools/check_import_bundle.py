@@ -36,7 +36,13 @@ PREVIOUS_NAMES = {"dataansimbundle.py", "dataansimcodev10.zip", "bjdmaster.csv",
                   "KepcoLoader.py", "KillCriteria.py", "LoadAxis.py", "LoadForecast.py", "Outputs.py", "Pipeline.py",
                   "FieldTemplate.txt", "FileNameMap.txt", "IndustryCodesTemplate.txt", "ReferenceGuide.txt",
                   "Requirements.txt", "SHA256SUMS.txt", "BjdMaster20260729.txt", "BjdCrosswalk20251231.csv",
-                  "CentroidMasterCheck.csv", "EmdCentroids20230729.csv"}
+                  "CentroidMasterCheck.csv", "EmdCentroids20230729.csv",
+                  # 10/8 개별 반입(2차 방문에 사용) — 다음 개별 반입은 이름 끝 11
+                  *(f"{m}10.py" for m in ("aiplus", "bjdmapping", "canloader", "common", "config", "demloader", "diagnostics",
+                                          "equityaccess", "essoptimizer", "headline", "heterogeneity", "identification",
+                                          "kep007loader", "kepcoloader", "killcriteria", "loadaxis", "loadforecast", "outputs",
+                                          "pipeline", "priorityscore", "weatherloader", "loadscenario", "field")),
+                  "holidays10.txt", "11.csv", "12.csv", "13.csv", "14.csv"}
 
 
 def collect(paths):

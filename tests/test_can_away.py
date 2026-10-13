@@ -107,3 +107,12 @@ def test_can_reads_random_vehicles_not_file_head_when_over_max_rows(tmp_path):
     assert "무작위 표본" in df.attrs["read_note"] and "5/20대" in df.attrs["read_note"]
     head = canloader.load_can_m(path, cols, params | {"sample_by_vehicle": False})
     assert head.attrs["read_note"].endswith("(앞부분 표본)") and len(head) == 50
+
+
+def test_can_times_with_timezone_or_digits_become_naive_seoul_time(tmp_path):
+    t = canloader.parse_time(pd.Series(["2023-01-01 10:00:00+09:00", "2023-01-01T01:00:00Z"]))
+    assert str(t.dtype) == "datetime64[ns]" and t.tolist() == [pd.Timestamp("2023-01-01 10:00"), pd.Timestamp("2023-01-01 10:00")]
+    assert canloader.parse_time(pd.Series(["20230101100000"])).iloc[0] == pd.Timestamp("2023-01-01 10:00")
+    mixed = canloader.parse_time(pd.Series(["2023-01-01 10:00:00+09:00", "2023-01-01 11:00:00"]))
+    assert mixed.tolist() == [pd.Timestamp("2023-01-01 10:00"), pd.Timestamp("2023-01-01 11:00")]
+    assert (canloader.parse_time(pd.Series(["2023-01-01 10:00:00+09:00"])) < pd.Timestamp("2025-03-01")).all()  # 2차 TypeError 지점

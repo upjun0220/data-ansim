@@ -49,6 +49,30 @@ def charging_flag(values, true_values):
     return num.gt(0).where(num.notna(), s.str.upper().isin(true_values)).astype(bool)
 
 
+def parse_time(values):
+    """CAN 발생시간 → 시간대 없는 서울 시각(datetime64[ns]).
+
+    2차 실데이터(2026-10-13)에서 CAN 단계가 '세션 시작 < 기준월' 비교에서 TypeError 로 멈췄다 — 시각에 +09:00 같은
+    시간대 표기가 붙으면 pandas 가 시간대 있는 시각으로 읽어 시간대 없는 날짜와 비교할 수 없다. 시간대가 다르면 밤 주차
+    위치(거주지 추정)도 틀어지므로 읽을 때 맞춘다: 시간대 표기 → 서울 시각, 표기가 섞이면 줄마다, 14자리 숫자 → YYYYMMDDHHMMSS.
+    """
+    s = values.astype(str).str.strip()
+    if len(s) and s.str.fullmatch(r"\d{14}").all():
+        return pd.to_datetime(s, format="%Y%m%d%H%M%S", errors="coerce").astype("datetime64[ns]")
+    t = pd.to_datetime(s, errors="coerce")
+    blank = s.isin(["", "nan", "NaT", "None"])
+    tz_aware = isinstance(t.dtype, pd.DatetimeTZDtype)
+    if tz_aware and not (t.isna() & ~blank).any():
+        return t.dt.tz_convert("Asia/Seoul").dt.tz_localize(None).astype("datetime64[ns]")
+    if tz_aware or t.dtype == object:   # 시간대 있는 표기와 없는 표기가 섞임(pandas 는 없는 쪽을 조용히 결측 처리) — 줄마다
+        tz = s.str.contains(r"(?:Z|[+-]\d{2}:?\d{2})$", regex=True)
+        out = pd.Series(pd.NaT, index=s.index, dtype="datetime64[ns]")
+        out[~tz] = pd.to_datetime(s[~tz], errors="coerce")
+        out[tz] = pd.to_datetime(s[tz], errors="coerce", utc=True, format="ISO8601").dt.tz_convert("Asia/Seoul").dt.tz_localize(None)
+        return out
+    return t.astype("datetime64[ns]")
+
+
 def _coords(chunk, params):
     """위경도(범위 밖은 결측) + 분석 범위(keep_bbox) 밖 행 표시. 좌표 없는 행은 남긴다(SOC 연속성 판정에 쓰임)."""
     lat, lon = to_num(chunk["lat"]), to_num(chunk["lon"])
@@ -110,7 +134,7 @@ def load_can_m(path, columns, params, nrows=None):
                 codes[v] = len(codes)
         parts.append(pd.DataFrame({
             "vehicle_id": vid.map(codes).fillna(-1).astype("int32"),
-            "time": pd.to_datetime(chunk["time"], errors="coerce"),
+            "time": parse_time(chunk["time"]),
             "charging": charging_flag(chunk["charging"], true_values),
             "soc": to_num(chunk["soc"]).astype("float32"),
             "lat": lat.astype("float32"), "lon": lon.astype("float32"),
@@ -438,17 +462,26 @@ def peak_hours_from(kepco_mh, n=4):
     return sorted(int(h) for h in kepco_mh.groupby("hour")["kwh"].sum().nlargest(n).index)
 
 
-def run_can_stage(path, columns, params, centroids, stations, activation, feature_before, kepco_mh=None):
+def run_can_stage(path, columns, params, centroids, stations, activation, feature_before, kepco_mh=None, progress=None):
     """3단계 전체. 반환 dict 의 표는 전부 법정동 집계(좌표 없음).
 
     activation=None(v11 상권 단계 비활성): 처치 정제(treated_excl_base)와 변화점 신뢰도 표시를 만들지 않는다.
     세션 시간대 모양 u(t)(charging_shape)과 반복 충전 위치 비율(공간 반복성 참고)은 그대로 낸다.
     """
+    prog = progress if progress is not None else {}   # 실패해도 어디까지 갔는지 남기는 집계값(반출 가능 — 원본 행·좌표 없음)
+    prog["마지막 통과 단계"] = "읽기 시작"
     can = load_can_m(path, columns, params)
+    prog.update({"읽기 범위": can.attrs.get("read_note", ""), "사용 행": f"{len(can):,}",
+                 "식별번호 수": f"{can['vehicle_id'].nunique():,}", "시각 형식": str(can["time"].dtype),
+                 "기간(월)": f"{can['time'].min():%Y-%m}~{can['time'].max():%Y-%m}" if len(can) else "—",
+                 "충전중 비율": f"{can['charging'].mean():.1%}" if len(can) else "—",
+                 "좌표 있는 행 비율": f"{can['lat'].notna().mean():.1%}" if len(can) else "—",
+                 "마지막 통과 단계": "읽기"})
     if not can["charging"].any():
         raise ValueError(f"CAN 충전중 레코드 0건 — 충전중여부 표기가 설정({params['charging_true_values']})과 다름. "
                          "센터에서 이 열의 값 종류만 확인할 것(원본 행은 적지 않음)")
     verdict, evidence = verify_join_key(can, params)
+    prog.update({"판정": verdict, "마지막 통과 단계": "식별번호 판정"})
     evidence = pd.concat([evidence, pd.DataFrame([{"항목": "읽기 범위", "값": can.attrs.get("read_note", "")}])],
                          ignore_index=True)
     path_label = "A(개별 차량)" if verdict == "individual" else "B(법정동 밀집도, 정황상 보조 근거)"
@@ -457,6 +490,8 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
         raise ValueError("CAN 좌표를 법정동으로 보내려면 paths.emd_centroids 가 필요")
     codes, _ = nearest_region(sessions["lat"], sessions["lon"], centroids, params["centroid_max_km"])
     sessions["bjd_code"] = codes
+    prog.update({"세션 수": f"{len(sessions):,}", "법정동 배정 세션 비율": f"{sessions['bjd_code'].notna().mean():.1%}" if len(sessions) else "—",
+                 "마지막 통과 단계": "세션·법정동 배정"})
     dist_table, dist_summary = duration_distribution(sessions, path_label)
     min_n = params["min_cell_count"]
     before = pd.Timestamp(mi_to_ym(ym_to_mi(feature_before)) + "-01")
@@ -467,12 +502,14 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
         out["kepco_shape"], out["kepco_check"] = kepco_cross_check(sessions, kepco_mh, min_n)
     peak = params["peak_hours"] or peak_hours_from(kepco_mh)
     out["flex_bands"], out["flex_summary"] = soc_flexibility(sessions, peak, params["flex_soc"], min_n)
+    prog["마지막 통과 단계"] = "KEPCO 교차·시간 이동 여지"
     if verdict == "individual":   # 거주지 추정은 식별번호가 개별 차량일 때만 의미가 있다
         out["away_region"], out["away_region_export"], out["away_summary"] = \
             away_charging(sessions, infer_home(can, params), centroids, params, min_n)
     else:
         out["away_region"], out["away_region_export"] = None, None
         out["away_summary"] = pd.DataFrame([{"항목": "원정 충전 분석", "값": f"생략 — 식별번호 판정 {verdict}(개별 차량 아님)"}])
+    prog["마지막 통과 단계"] = "원정 충전"
 
     if verdict == "individual":
         sessions = mark_base_sessions(sessions, params)
@@ -519,6 +556,7 @@ def run_can_stage(path, columns, params, centroids, stations, activation, featur
                                     f"KEP_007 {params['station_match_m']:.0f}m 이내 비율": agree,
                                     "비고": "KEP_007 은 2019 기준 — 이후 설치분은 불일치로 잡힘"}])
     log.info("3단계 CAN 완료: 경로 %s · 공간 일치율 %s", path_label, f"{agree:.1%}" if np.isfinite(agree) else "—")
+    prog["마지막 통과 단계"] = "완료"
     return out
 
 

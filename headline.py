@@ -149,12 +149,13 @@ def _pick(head, contains):
     return (float(rows["값"].iloc[0]), float(rows["비교"].iloc[0])) if len(rows) else (np.nan, np.nan)
 
 
-def story_table(head, sim=None, can_check=None, dem_check=None):
+def story_table(head, sim=None, can_check=None, dem_check=None, plus=None):
     """s9_story — 발표 본문의 '발견 한 문장'과 새 3숫자(격차·예측·개입). ESS·2030 은 s9_headline(부록)에 남긴다.
 
     head: headline_table_v11 결과. sim: 8-G 충전기 추가 실험 표(첫 행 = 우선순위 전략, 둘째 = 비교 전략).
     can_check: 8-C CAN 원정 충전 검증 표(attrs low·high·rho) — 있으면 '고유 데이터 발견' 행을 더한다.
     dem_check: 8-C DEM 경사 보정 비교 표(attrs keep·n_low·rho) — '지형 강건성' 행.
+    plus: 8-A+ 사전 등록 표(aiplus.preregistered) — 있으면 발견 문장·숫자 B 를 그 대표 지표로 쓴다(경보 재현율은 보조).
     문구는 초안이며 팀이 확정한다. 값이 없으면 '미산출'로 적고 지어내지 않는다.
     """
     gap = head.loc[head["번호"] == "숫자 1", "값"]
@@ -173,6 +174,12 @@ def story_table(head, sim=None, can_check=None, dem_check=None):
                     "(플랜 B)")
     else:
         sentence = "AI 경보 재현율 미산출 — 평가기간에 실제 급증일이 없거나 8-A 미실행(s8a_risk 확인)"
+    rep = plus.iloc[0] if plus is not None and len(plus) else None
+    skill = float(rep["값"]) if rep is not None and np.isfinite(rep["값"]) else np.nan
+    if np.isfinite(skill):   # v12.1 사전 등록 대표 지표(2026-10-07 고정)가 있으면 그것으로 말한다
+        sentence = (f"전날 AI가 다음날 동네 최대부하 예측 오차를 어제 값 그대로보다 {skill:.0%} 줄였다"
+                    f"(사전 등록 판정: {rep['판정']})" if skill >= 0 else
+                    f"AI가 다음날 동네 최대부하 예측에서 어제 값 그대로를 넘지 못했다({skill:+.0%}) — 사전 등록대로 그대로 보고")
     col = [c for c in (sim.columns if sim is not None else []) if c.endswith("개선율") and c.startswith("하위")]
     gain = gain_b = np.nan
     if col and len(sim) >= 1:
@@ -188,6 +195,9 @@ def story_table(head, sim=None, can_check=None, dem_check=None):
     rows.append({"구분": "발견 문장(초안)", "내용": sentence, "값": np.nan, "비교": np.nan})
     rows.append({"구분": "숫자 A 격차", "내용": "충전기 1기당 전기차 수 — 상위 10% 동네가 하위 10%의 몇 배",
                  "값": gap, "비교": np.nan})
+    if np.isfinite(skill):
+        rows.append({"구분": "숫자 B 예측(사전 등록)", "내용": f"{rep['지표']}(값) 대 기존 AI(비교) — 판정 {rep['판정']}",
+                     "값": skill, "비교": rep["비교"]})
     rows.append({"구분": "숫자 B 예측", "내용": "전날 AI 급증 경보 재현율(값) 대 기준 모델(비교)", "값": r_ai, "비교": r_b})
     rows.append({"구분": "숫자 B 예측", "내용": "전날 AI 급증 경보 정밀도(값) 대 기준 모델(비교)", "값": p_ai, "비교": p_b})
     if sim is not None and len(sim):
@@ -211,7 +221,7 @@ def story_table(head, sim=None, can_check=None, dem_check=None):
                      "내용": f"도보 경사를 반영해도 접근성 하위 {k['n_low']}곳 중 남은 비율(값) · 기본 대비 순위 상관(비교)",
                      "값": k["keep"] / k["n_low"] if k["n_low"] else np.nan, "비교": k["rho"]})
     else:
-        rows.append({"구분": "지형 강건성(DEM)", "내용": "경사 보정 미산출 — DEM 경로·rasterio/GDAL 필요(8-C)",
+        rows.append({"구분": "지형 강건성(DEM)", "내용": "센터에서는 계산 안 함 — 센터 밖 공개 표고(Copernicus DEM 90m)로 같은 함수 계산(tools/detail_from_export.py --terrain)",
                      "값": np.nan, "비교": np.nan})
     return pd.DataFrame(rows)
 

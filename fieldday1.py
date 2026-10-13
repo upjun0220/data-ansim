@@ -125,8 +125,10 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
     kepco = resolve_csv_path(kepco_001_path, "KEPCO_001")
     can = resolve_csv_path(can_path, "TB_TBE_TERMINAL_LOGMOCEAN") if can_path else None
     here = Path(__file__).resolve().parent   # 개별 반입: holidaysN.txt · 번들: day1code/holidays.yaml · 저장소: config/holidays.yaml
-    holidays = next((p for p in (*sorted(here.glob("holidays*.txt"), reverse=True), here / "holidays.yaml",
-                                 here / "config" / "holidays.yaml") if p.is_file()), None)
+    # 2차 실데이터: holidays10.txt 를 못 찾아 공휴일 미보정으로 돌았다 — 센터가 .txt 를 코드 폴더가 아닌 데이터 폴더에 둔 것으로
+    # 보여, 코드 폴더 → 반입 데이터 폴더 → 작업 폴더 순서로 찾는다(같은 폴더 안에서는 번호가 큰 것부터).
+    found_txt = [p for d in (here, folder, Path.cwd()) for p in sorted(d.glob("holidays*.txt"), reverse=True)]
+    holidays = next((p for p in (*found_txt, here / "holidays.yaml", here / "config" / "holidays.yaml") if p.is_file()), None)
 
     bjd_columns = detect_columns(bjd, BJD_COLUMN_ALIASES, "법정동 마스터", required={"code"})
     columns, can_note = {"bjd": bjd_columns}, "센터 CAN"
@@ -180,6 +182,13 @@ def run_full(kepco_001_path, import_dir, can_path=None, bjd_path=None, evaluatio
         "반출후보": [str(output / "kill_criteria" / "png" / "k_kill_criteria.png")] + pngs,
         "내부전용": [str(output / "csv"), str(output / "pipeline.log"), str(config_path)],
     }
+
+
+def run_can_only(kepco_001_path, import_dir, can_path, bjd_path=None, out_dir="canout"):
+    """CAN 부분만 — 나머지 결과를 이미 반출했을 때(2026-10 2차 방문 뒤). KEPCO 월별 집계(교차 검증용) → 3단계 CAN →
+    8-C 접근성·원정 충전 검증. AI 예측·ESS·2030·순위·지도·동네 상세는 건너뛴다. 반환은 run_full 과 같다."""
+    return run_full(kepco_001_path, import_dir, can_path, bjd_path, out_dir=out_dir,
+                    extra_params={"stages": {"can_only": True}})
 
 
 def season_windows(last_start, n_windows=4, step_months=3):

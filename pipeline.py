@@ -195,6 +195,11 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
     if paths_override:
         cfg["paths"].update({k: (str(Path(v).resolve()) if v else None) for k, v in paths_override.items()})
     P, C, paths, ind = cfg["params"], cfg["columns"], cfg["paths"], cfg["industry"]
+    # v12.1 can_only: 나머지 결과를 이미 반출했을 때 CAN 부분만(0·1 KEPCO 월별 집계 → 3단계 CAN → 8-C 접근성·원정 충전 검증).
+    # 8-A·8-A+·ESS·2030·순위·지도·동네 상세는 건너뛴다(센터 실행 시간을 줄이고, 결과가 다른 PNG 가 섞이지 않게).
+    can_only = bool(P["stages"].get("can_only"))
+    if can_only:
+        P["energy"]["enabled"] = False
     commerce = bool(P["stages"]["commerce"])
     prefix = P["region"]["sido_prefix"]
     out_dir = Path(paths["out_dir"])
@@ -359,9 +364,14 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
             # 교차검증용 KEPCO 는 s1 PNG 와 같은 기준으로 소표본 법정동×월을 뺀다.
             kepco_visible = _exclude_small_cells(S["mh"], S["cell_rep"], P["can"]["min_cell_count"], "s3_can_kepco") \
                 if "mh" in S else None
-            res = canloader.run_can_stage(paths["can_m"], C, P["can"], S.get("centroids"), S.get("stations"),
-                                           S.get("activation"), P["heterogeneity"]["can_feature_before"],
-                                           kepco_mh=kepco_visible)
+            progress = {}
+            try:
+                res = canloader.run_can_stage(paths["can_m"], C, P["can"], S.get("centroids"), S.get("stations"),
+                                               S.get("activation"), P["heterogeneity"]["can_feature_before"],
+                                               kepco_mh=kepco_visible, progress=progress)
+            finally:   # 실패해도 어디까지 갔는지(집계값만) 남긴다 — 다음 방문 전 원인 파악용(2차 실데이터 TypeError)
+                writer.table(pd.DataFrame(list(progress.items()), columns=["항목", "값"]), "s3_can_progress",
+                             "3단계 CAN 진행 기록 — 실패해도 남김", note="집계값만(원본 행·좌표·식별번호 없음)")
             writer.table(res["evidence"], "s3_can_join_key", f"3단계 CAN 식별번호 검증 → {res['verdict']} · 경로 {res['path']}")
             writer.table(res["duration_summary"], "s3_can_session_summary", "3단계 충전 세션 길이 요약 (20~40분 체류 전제 검증)")
             writer.table(res["duration_table"], "s3_can_session_dist", "3단계 충전 세션 길이 분포")
@@ -819,7 +829,8 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     writer.table(res["type_table"], "s8a_plus_types", "8-A+ 충전 생활 유형(24시간 충전 모양 K-평균)", digits=3,
                                  note=f"학습기간 평균 모양(합 1). 그림은 동네 {min_count}곳 이상인 유형만. 동네별 유형은 동네 상세(9-D) 충전유형 열")
                     writer.figure(aiplus.plot_types(res["type_centers"], res["type_table"], min_count), "s8a_plus_types_plot")
-                writer.table(aiplus.preregistered(res, float(P["priority"]["base_multiplier"])), "s8a_plus_headline",
+                S["ai_plus_headline"] = aiplus.preregistered(res, float(P["priority"]["base_multiplier"]))
+                writer.table(S["ai_plus_headline"], "s8a_plus_headline",
                              "8-A+ 사전 등록 대표 지표 — 발표 숫자 B(결과를 보기 전 2026-10-07에 고정)", digits=3,
                              note="대표 지표·판정 기준은 결과와 무관하게 정해 두었다. 결과가 나빠도 이 판정 그대로 보고한다")
                 S["ai_plus"], S["charge_types"] = res, res["types"]
@@ -894,7 +905,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                     runner.rows[-1]["비고"] = S["ess_cap_note"]
 
         # ------------------------------------------------ 8-E단계 (격리)
-        if P["priority"]["enabled"]:
+        if P["priority"]["enabled"] and not can_only:
             def stage8e():
                 pp = P["priority"]
                 legacy = list(pp["axes"]) == priorityscore.LEGACY_AXES
@@ -1059,7 +1070,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
             runner.run("8-F", "충전 부하 시나리오(확장안)", stage8f, ISOLATED)
 
         # ------------------------------------------------ 9-H단계 (격리): 발표 3숫자
-        if P["priority"]["enabled"] or P["energy"]["enabled"]:
+        if (P["priority"]["enabled"] or P["energy"]["enabled"]) and not can_only:
             def stage9h():
                 access, results = S.get("access"), S.get("energy_results")
                 cm = S.get("energy_customer_min")
@@ -1090,9 +1101,9 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
                 if list(P["priority"]["axes"]) != priorityscore.LEGACY_AXES:
                     sim = S.get("charger_sim")
                     can_check, dem_check = S.get("can_away_check"), S.get("dem_check")
-                    story = headline.story_table(table, sim, can_check, dem_check)
+                    story = headline.story_table(table, sim, can_check, dem_check, S.get("ai_plus_headline"))
                     writer.table(story, "s9_story", "9단계 발표 본문 — 발견 문장(초안)과 새 3숫자 (ESS·2030은 s9_headline 부록)",
-                                 digits=3, png_df=headline.story_table(png, sim, can_check, dem_check) if len(png) else story.iloc[0:0],
+                                 digits=3, png_df=headline.story_table(png, sim, can_check, dem_check, S.get("ai_plus_headline")) if len(png) else story.iloc[0:0],
                                  note="문구는 팀이 확정. PNG 는 소표본 법정동 기여분 제외")
                     if "priority_score" in S:
                         card_args = (S["priority_score"], S.get("risk"), access, S.get("master"), P["priority"])
@@ -1103,7 +1114,7 @@ def run(config_path, params_override=None, paths_override=None, stop_after_stage
             runner.run("9-H", "발표 3숫자", stage9h, ISOLATED)
 
         # ------------------------------------------------ 9-M단계 (격리): 우선순위 지도 PNG(“1지도”)
-        if P["priority"]["enabled"]:
+        if P["priority"]["enabled"] and not can_only:
             def stage9m():
                 if "priority_score" not in S or "centroids" not in S:
                     raise RuntimeError("8-E 순위 또는 법정동 중심점 없음")
