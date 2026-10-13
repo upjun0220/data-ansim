@@ -42,7 +42,13 @@ PREVIOUS_NAMES = {"dataansimbundle.py", "dataansimcodev10.zip", "bjdmaster.csv",
                                           "equityaccess", "essoptimizer", "headline", "heterogeneity", "identification",
                                           "kep007loader", "kepcoloader", "killcriteria", "loadaxis", "loadforecast", "outputs",
                                           "pipeline", "priorityscore", "weatherloader", "loadscenario", "field")),
-                  "holidays10.txt", "11.csv", "12.csv", "13.csv", "14.csv"}
+                  "holidays10.txt", "11.csv", "12.csv", "13.csv", "14.csv",
+                  # 10/13 개별 반입 신청(3차 방문용, 센터 미실행 모듈 5개 제외 19개)
+                  *(f"{m}11.py" for m in ("aiplus", "bjdmapping", "canloader", "common", "config", "equityaccess",
+                                          "essoptimizer", "headline", "kepcoloader", "killcriteria", "loadaxis",
+                                          "loadforecast", "outputs", "pipeline", "priorityscore", "weatherloader",
+                                          "loadscenario", "field")),
+                  "holidays11.txt"}
 
 
 def collect(paths):

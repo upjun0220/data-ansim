@@ -60,6 +60,16 @@ def build(out, v=10):
     return out, new
 
 
+def build_extra(out, module, name, v):
+    """이미 반입한 버전 v(…v.py)를 쓰는 추가 파일 하나만 만든다(같은 이름 재반입 불가 — 2026-10-13 field12 = fieldgo)."""
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    text = rename_imports((ROOT / f"{module}.py").read_text(encoding="utf-8").replace("\r\n", "\n"), names(v))
+    ast.parse(text, filename=name)
+    (out / f"{name}.py").write_bytes(text.encode("utf-8"))
+    return out / f"{name}.py"
+
+
 def verify(out, new):
     """원래 이름 모듈이 없는 빈 폴더에서 진입점을 불러 본다(이름을 하나라도 덜 바꿨으면 ImportError)."""
     leftover = [f"{p.name}: {line.strip()}" for p in Path(out).glob("*.py") for line in p.read_text(encoding="utf-8").splitlines()
@@ -78,6 +88,10 @@ def verify(out, new):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 3 and sys.argv[3] == "--extra":   # 예: make_split_bundle.py <폴더> 11 --extra fieldgo field12
+        f = build_extra(sys.argv[1], sys.argv[4], sys.argv[5], int(sys.argv[2]))
+        print(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}")
+        sys.exit()
     folder, mapping = build(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 10)
     verify(folder, mapping)
     for p in sorted(folder.iterdir()):

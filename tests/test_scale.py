@@ -214,3 +214,29 @@ def test_terrain_access_uses_public_elevation_cache(tmp_path, monkeypatch):
     assert set(slope["bjd_code"]) == {"1", "2"}
     dfe.terrain_access(st, pts, cache)
     assert calls == [3]                                   # 두 번째는 캐시만 쓴다(다시 받지 않음)
+
+
+def test_go_prints_verdict_export_list_and_runs_seasons(tmp_path, monkeypatch, capsys):
+    import fieldgo
+    can = tmp_path / "can.csv"
+    pd.DataFrame({"발생시간": ["2023-01-01T10:00:00+09:00"] * 3, "차종_식별번호": ["A"] * 3, "충전중여부": ["1"] * 3,
+                  "배터리상태_SOC": [50] * 3, "위도": [37.5] * 3, "경도": [127.0] * 3}).to_csv(can, index=False)
+    out = tmp_path / "canout"
+    (out / "csv").mkdir(parents=True)
+    (out / "png").mkdir()
+    pd.DataFrame({"항목": ["마지막 통과 단계", "판정"], "값": ["완료", "individual"]}).to_csv(out / "csv" / "s3_can_progress.csv", index=False)
+    pd.DataFrame({"항목": ["비교 법정동 수", "순위 상관(원정 충전 세션 비율 vs 2SFCA, 스피어만)"],
+                  "값": ["41", "-0.315 (음수면 접근성 낮을수록 높음)"]}).to_csv(out / "csv" / "s8c_can_away_check.csv", index=False)
+    for n in ("s3_can_join_key", "s8c_can_away_check"):
+        (out / "png" / f"{n}.png").write_bytes(b"x")
+    stages = pd.DataFrame({"단계": ["3"], "이름": ["CAN"], "상태": ["완료"], "비고": [""]})
+    monkeypatch.setattr(fieldgo, "run_full", lambda *a, **k: {"stages": stages, "out_dir": str(out)})
+    sea = tmp_path / "seasonout"
+    (sea / "window_2026-05-04" / "png").mkdir(parents=True)
+    (sea / "window_2026-05-04" / "png" / "s8a_plus_headline.png").write_bytes(b"x")
+    monkeypatch.setattr(fieldgo, "run_seasons", lambda *a, **k: {"robustness": pd.DataFrame({"x": [1]}), "out_dir": str(sea)})
+    fieldgo.go("k.csv", "d", can, seasons=True)
+    text = capsys.readouterr().out
+    assert "−0.2" in text and "충족 — 발표 본문" in text                       # 사전 기준 판정
+    assert "s3_can_join_key, s8c_can_away_check" in text                        # 실제로 있는 PNG 만
+    assert "window_2026-05-04/s8a_plus_headline" in text and "[5] 계절 강건성" in text
